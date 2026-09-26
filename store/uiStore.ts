@@ -33,7 +33,11 @@ interface UiState {
   /** Card export: recompress the picture. */
   exportCompression: 'off' | 'lossless' | 'palette';
   setExportImage: (patch: { exportMaxSize?: number; exportCompression?: 'off' | 'lossless' | 'palette' }) => void;
+  personaSort: PersonaSort;
+  setPersonaSort: (s: PersonaSort) => void;
 }
+
+export type PersonaSort = 'name' | 'name-desc' | 'newest' | 'oldest';
 
 export const useUiStore = create<UiState>()(
   persist(
@@ -58,6 +62,8 @@ export const useUiStore = create<UiState>()(
       exportMaxSize: 0,
       exportCompression: 'off',
       setExportImage: (patch) => set(patch),
+      personaSort: 'name',
+      setPersonaSort: (personaSort) => set({ personaSort }),
     }),
     { name: 'uccb-ui', storage: createJSONStorage(() => localStorage) },
   ),

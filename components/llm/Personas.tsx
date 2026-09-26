@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
-import { usePersonaStore } from '@/store/personaStore';
+import { useEffect, useState } from 'react';
+import { sortPersonas, usePersonaStore } from '@/store/personaStore';
+import { toast, useUiStore, type PersonaSort } from '@/store/uiStore';
 import { useLlmStore } from '@/store/llmStore';
 import { useChatStore } from '@/store/chatStore';
-import { toast } from '@/store/uiStore';
 import { api } from '@/lib/api';
 import type { Persona } from '@/types/project';
 import { AutoTextarea, Button, IconButton, TokenBadge, confirmDialog, cx, inputClass, pickFiles } from '@/components/ui';
@@ -83,9 +83,13 @@ export function PersonaAvatar({ persona, size = 36 }: { persona?: Persona | null
 export function PersonaManager() {
   const { personas, loaded, load, add, update, remove, setAvatar, clearAvatar } = usePersonaStore();
   const { chatSettings, setChatSettings } = useLlmStore();
+  const { personaSort, setPersonaSort } = useUiStore();
+  const [filter, setFilter] = useState('');
   useEffect(() => {
     if (!loaded) void load();
   }, [loaded, load]);
+  const q = filter.trim().toLowerCase();
+  const shown = sortPersonas(personas, personaSort).filter((p) => !q || p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q));
 
   const pickAvatar = async (p: Persona) => {
     const [file] = await pickFiles('image/*');
@@ -102,7 +106,14 @@ export function PersonaManager() {
       <p className="text-xs text-slate-500">
         Who you are in test chats: the name {'{{user}}'} becomes, a description sent as your persona, and a picture for your messages. The active one is used by every chat unless a chat has one locked, and by the writing assistant.
       </p>
-      {personas.map((p) => {
+      {personas.length > 1 && (
+        <div className="flex items-center gap-2">
+          {personas.length > 6 && <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search personas…" className={cx(inputClass, 'py-1 text-xs')} />}
+          <PersonaSortSelect value={personaSort} onChange={setPersonaSort} className={personas.length > 6 ? 'w-40' : 'ml-auto w-40'} />
+        </div>
+      )}
+      {q && shown.length === 0 && <p className="text-xs text-slate-500">No persona matches “{filter}”.</p>}
+      {shown.map((p) => {
         const active = chatSettings.personaId === p.id;
         return (
           <div key={p.id} className={cx('flex gap-3 rounded-md border p-3', active ? 'border-violet-500/50 bg-violet-500/5' : 'border-slate-800')}>
@@ -153,12 +164,32 @@ export function PersonaManager() {
   );
 }
 
+const SORTS: { value: PersonaSort; label: string }[] = [
+  { value: 'name', label: 'Name A–Z' },
+  { value: 'name-desc', label: 'Name Z–A' },
+  { value: 'newest', label: 'Newest added' },
+  { value: 'oldest', label: 'Oldest added' },
+];
+
+function PersonaSortSelect({ value, onChange, className }: { value: PersonaSort; onChange: (s: PersonaSort) => void; className?: string }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value as PersonaSort)} title="Sort personas" className={cx(inputClass, 'py-1 text-xs', className)}>
+      {SORTS.map((s) => (
+        <option key={s.value} value={s.value}>
+          Sort: {s.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 /** The chat toolbar's persona picker, with the per-chat lock. */
 export function PersonaPicker({ onManage }: { onManage: () => void }) {
   const { personas, loaded, load } = usePersonaStore();
   const { chatSettings, setChatSettings } = useLlmStore();
   const chat = useChatStore((s) => s.chat);
   const setPersonaLock = useChatStore((s) => s.setPersonaLock);
+  const personaSort = useUiStore((s) => s.personaSort);
   useEffect(() => {
     if (!loaded) void load();
   }, [loaded, load]);
@@ -176,7 +207,7 @@ export function PersonaPicker({ onManage }: { onManage: () => void }) {
       <PersonaAvatar persona={persona} size={22} />
       <select value={current} onChange={(e) => (e.target.value === '__manage' ? onManage() : choose(e.target.value))} title={locked ? 'Locked to this chat' : 'Your persona in every chat'} className={cx(inputClass, 'max-w-32 py-0.5 text-xs')}>
         <option value="">{chatSettings.userName || 'User'} (no persona)</option>
-        {personas.map((p) => (
+        {sortPersonas(personas, personaSort).map((p) => (
           <option key={p.id} value={p.id}>
             {p.name || 'Unnamed'}
           </option>

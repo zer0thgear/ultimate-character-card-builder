@@ -81,3 +81,19 @@ export function resolvePersona(personas: Persona[], settings: { personaId: strin
   if (!p) return { persona: null, name: settings.userName || 'User', description: settings.persona, avatarUrl: null, locked: false };
   return { persona: p, name: p.name || 'User', description: p.description, avatarUrl: api.personaAvatarUrl(p), locked: !!lockedTo };
 }
+
+/** Personas in the chosen order. They're kept in the order they were
+ *  added, which is what "newest" and "oldest" go by. */
+export function sortPersonas(list: Persona[], sort: 'name' | 'name-desc' | 'newest' | 'oldest'): Persona[] {
+  const byName = (a: Persona, b: Persona) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
+  switch (sort) {
+    case 'name':
+      return [...list].sort(byName);
+    case 'name-desc':
+      return [...list].sort((a, b) => byName(b, a));
+    case 'newest':
+      return [...list].reverse();
+    default:
+      return list;
+  }
+}
