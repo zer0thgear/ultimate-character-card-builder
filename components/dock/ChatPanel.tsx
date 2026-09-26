@@ -14,6 +14,10 @@ import { describeEntry } from '@/lib/lorebookScan';
 import { AutoTextarea, Button, IconButton, Modal, TokenBadge, Toggle, confirmDialog, cx, inputClass } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { PresetPicker } from '@/components/llm/PresetManager';
+import { PersonaAvatar, PersonaPicker } from '@/components/llm/Personas';
+import { resolvePersona, usePersonaStore } from '@/store/personaStore';
+import { openSettings } from '@/components/SettingsDialog';
+import type { Persona } from '@/types/project';
 import { useTextTokens, formatTokens } from '@/lib/textTokens';
 import type { CardData } from '@/types/card';
 import type { ChatMessage } from '@/types/project';
@@ -26,6 +30,7 @@ export function ChatPanel() {
   const project = useProjectStore((s) => s.project);
   const { chat, list, loadFor, newChat, openChat, deleteChat, rename, setGreeting, setMessages } = useChatStore();
   const { connections, chatConnectionId, setChatConnection, chatSettings, presets } = useLlmStore();
+  const personas = usePersonaStore((s) => s.personas);
   const connection = connections.find((c) => c.id === chatConnectionId) ?? null;
   const pending = useBridgeStore((s) => s.chatGreeting);
   const clearPending = useBridgeStore((s) => s.clearChat);
@@ -62,13 +67,17 @@ export function ChatPanel() {
     return g.trim() ? [{ ...newMessage('assistant', g), id: 'greeting' }, ...messages] : messages;
   };
 
+  // Who {{user}} is in this chat: its locked persona, the active one, or
+  // the plain name and description.
+  const me = resolvePersona(personas, chatSettings, chat);
+  const settings = { ...chatSettings, userName: me.name, persona: me.description };
   const preset = chatSettings.presetId ? (presets.find((p) => p.id === chatSettings.presetId) ?? null) : null;
   const overrides = preset && chatSettings.presetSamplers && connection ? presetParams(preset, connection.kind) : {};
 
   /** The prompt for `messages` (greeting added), through the preset if one is on. */
   const build = (messages: ChatMessage[], opts: BuildOptions = {}): BuiltPrompt => {
     const full = { model: connection?.model, kind: connection?.kind, maxTokens: overrides.max_tokens ?? connection?.params.max_tokens, ...opts };
-    return preset ? buildPresetPrompt(card, history(messages), chatSettings, preset, full) : buildChatPrompt(card, history(messages), chatSettings, full);
+    return preset ? buildPresetPrompt(card, history(messages), settings, preset, full) : buildChatPrompt(card, history(messages), settings, full);
   };
 
   /** Streams a completion for `built`, calling `onText` with the reply so far. */
@@ -185,6 +194,7 @@ export function ChatPanel() {
         <IconButton title="Show the prompt the next reply would send" onClick={preview}>
           🔍
         </IconButton>
+        <PersonaPicker onManage={() => openSettings('personas')} />
         <button
           type="button"
           onClick={() => setShowSettings(true)}
@@ -211,13 +221,14 @@ export function ChatPanel() {
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            <GreetingBubble card={card} index={chat.greeting} count={greetingCount} onSwipe={setGreeting} userName={chatSettings.userName} />
+            <GreetingBubble card={card} index={chat.greeting} count={greetingCount} onSwipe={setGreeting} userName={me.name} />
             {chat.messages.map((m, i) => (
               <Bubble
                 key={m.id}
                 card={card}
                 message={m}
-                userName={chatSettings.userName}
+                userName={me.name}
+                persona={me.persona}
                 streaming={streamingId === m.id}
                 streamReasoning={streamingId === m.id ? streamReasoning : ''}
                 isLast={i === chat.messages.length - 1}
@@ -247,7 +258,7 @@ export function ChatPanel() {
             }}
             minRows={2}
             maxRows={10}
-            placeholder={`Message as ${chatSettings.userName || 'User'}… (Enter sends, Shift+Enter for a new line; empty Enter asks for a reply)`}
+            placeholder={`Message as ${me.name}… (Enter sends, Shift+Enter for a new line; empty Enter asks for a reply)`}
           />
           <div className="mt-1.5 flex items-center gap-1.5">
             {running ? (
@@ -301,10 +312,10 @@ function Formatted({ text }: { text: string }) {
   );
 }
 
-function Avatar({ role }: { role: 'user' | 'assistant' | 'system' }) {
+function Avatar({ role, persona }: { role: 'user' | 'assistant' | 'system'; persona?: Persona | null }) {
   const project = useProjectStore((s) => s.project);
   const url = project?.avatar ? `/api/projects/${project.id}/avatar?v=${project.avatar.version}` : null;
-  if (role === 'user') return <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-sky-500/20 text-xs text-sky-300">You</div>;
+  if (role === 'user') return <PersonaAvatar persona={persona} />;
   return (
     <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-full bg-slate-800">
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -346,6 +357,7 @@ function Bubble({
   card,
   message: m,
   userName,
+  persona,
   streaming,
   streamReasoning,
   isLast,
@@ -358,6 +370,7 @@ function Bubble({
   card: CardData;
   message: ChatMessage;
   userName: string;
+  persona: Persona | null;
   streaming: boolean;
   streamReasoning: string;
   isLast: boolean;
@@ -374,7 +387,7 @@ function Bubble({
   const isUser = m.role === 'user';
   return (
     <div className={cx('group flex gap-2', isUser && 'flex-row-reverse')}>
-      <Avatar role={m.role} />
+      <Avatar role={m.role} persona={persona} />
       <div className={cx('min-w-0 flex-1 rounded-lg px-3 py-2', isUser ? 'bg-sky-500/10' : 'bg-slate-900')}>
         <div className={cx('mb-1 flex items-center gap-2 text-xs', isUser && 'flex-row-reverse')}>
           <span className="font-semibold text-slate-200">{isUser ? userName || 'User' : card.nickname || card.name || 'Character'}</span>
@@ -454,6 +467,9 @@ function Bubble({
 function ChatSettings({ onClose }: { onClose: () => void }) {
   const { chatSettings: s, setChatSettings, chatConnectionId, setChatConnection } = useLlmStore();
   const usingPreset = !!s.presetId;
+  const personas = usePersonaStore((st) => st.personas);
+  const chat = useChatStore((st) => st.chat);
+  const usingPersona = !!resolvePersona(personas, s, chat).persona;
   return (
     <div className="flex max-h-[55%] flex-shrink-0 flex-col gap-3 overflow-y-auto border-b border-slate-800 bg-slate-950 p-3">
       <div className="flex items-center justify-between">
@@ -464,16 +480,30 @@ function ChatSettings({ onClose }: { onClose: () => void }) {
       </div>
       <ConnectionPicker value={chatConnectionId} onChange={setChatConnection} label="Model" />
       <PresetPicker />
-      <div className="grid gap-2 sm:grid-cols-[1fr_2fr]">
-        <label className="flex flex-col gap-1 text-xs text-slate-400">
-          Your name ({'{{user}}'})
-          <input value={s.userName} onChange={(e) => setChatSettings({ userName: e.target.value })} className={inputClass} />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-slate-400">
-          Your persona
-          <input value={s.persona} onChange={(e) => setChatSettings({ persona: e.target.value })} placeholder="Optional: who you are in the chat" className={inputClass} />
-        </label>
-      </div>
+      {usingPersona ? (
+        <div className="flex items-center justify-between rounded-md border border-slate-800 px-2 py-1.5 text-xs text-slate-400">
+          You&apos;re chatting as a persona; its name and description apply.
+          <button type="button" className="text-violet-300 hover:underline" onClick={() => openSettings('personas')}>
+            Edit personas
+          </button>
+        </div>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-[1fr_2fr]">
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
+            Your name ({'{{user}}'})
+            <input value={s.userName} onChange={(e) => setChatSettings({ userName: e.target.value })} className={inputClass} />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
+            <span>
+              Your description{' '}
+              <button type="button" className="text-violet-300 hover:underline" onClick={() => openSettings('personas')}>
+                or save personas
+              </button>
+            </span>
+            <input value={s.persona} onChange={(e) => setChatSettings({ persona: e.target.value })} placeholder="Optional: who you are in the chat" className={inputClass} />
+          </label>
+        </div>
+      )}
       {!usingPreset && (
         <>
           <label className="flex flex-col gap-1 text-xs text-slate-400">

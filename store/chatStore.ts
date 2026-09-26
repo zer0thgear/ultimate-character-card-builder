@@ -20,6 +20,8 @@ interface ChatState {
   deleteChat: (id: string) => Promise<void>;
   rename: (name: string) => void;
   setGreeting: (greeting: number) => void;
+  /** Lock a persona to this chat (undefined unlocks it). */
+  setPersonaLock: (personaId: string | undefined) => void;
   setMessages: (change: (m: ChatMessage[]) => ChatMessage[]) => void;
   flush: () => Promise<void>;
 }
@@ -88,6 +90,7 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     rename: (name) => updateChat((c) => ({ ...c, name })),
     setGreeting: (greeting) => updateChat((c) => ({ ...c, greeting })),
+    setPersonaLock: (personaId) => updateChat((c) => ({ ...c, personaId })),
     setMessages: (change) => updateChat((c) => ({ ...c, messages: change(c.messages) })),
 
     flush: async () => {

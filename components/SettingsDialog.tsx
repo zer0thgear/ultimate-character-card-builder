@@ -10,8 +10,9 @@ import { api, streamLlm } from '@/lib/api';
 import { Button, IconButton, Modal, NumberInput, Tabs, Toggle, cx, inputClass } from '@/components/ui';
 import { AssistPresetPicker, PresetPicker } from '@/components/llm/PresetManager';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
+import { PersonaManager } from '@/components/llm/Personas';
 
-type SettingsTab = 'general' | 'folders' | 'llm' | 'chat' | 'assist';
+type SettingsTab = 'general' | 'folders' | 'llm' | 'chat' | 'assist' | 'personas';
 
 const useSettingsDialog = create<{ tab: SettingsTab | null; set: (t: SettingsTab | null) => void }>((set) => ({ tab: null, set: (tab) => set({ tab }) }));
 export const openSettings = (tab: SettingsTab = 'general') => useSettingsDialog.getState().set(tab);
@@ -31,12 +32,14 @@ export function SettingsDialog() {
           { value: 'llm', label: 'LLM connections' },
           { value: 'chat', label: 'Chat preset' },
           { value: 'assist', label: 'Assistant' },
+          { value: 'personas', label: 'Personas' },
         ]}
       />
       {tab === 'general' && <GeneralTab />}
       {tab === 'folders' && <FoldersTab />}
       {tab === 'llm' && <LlmTab />}
       {tab === 'assist' && <AssistTab />}
+      {tab === 'personas' && <PersonaManager />}
       {tab === 'chat' && (
         <div className="flex flex-col gap-3">
           <p className="text-xs text-slate-500">

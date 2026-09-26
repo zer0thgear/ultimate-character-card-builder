@@ -2,7 +2,7 @@ import 'server-only';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { AppConfig, CardProject, ChatSession, ChatSummary, ProjectSummary } from '@/types/project';
+import type { AppConfig, CardProject, ChatSession, ChatSummary, Persona, ProjectSummary } from '@/types/project';
 import { DEFAULT_CONFIG } from '@/types/project';
 import { newCard } from '@/lib/cardSpec';
 import { normalizeCard } from '@/lib/cardSpec';
@@ -209,3 +209,31 @@ export async function saveChat(projectId: string, chat: ChatSession): Promise<Ch
 export async function deleteChat(projectId: string, chatId: string) {
   await fs.rm(chatPath(projectId, chatId), { force: true });
 }
+
+// ─── Personas ────────────────────────────────────────────────────────────────
+//   data/personas/personas.json   Persona[]
+//   data/personas/<id>.png        avatars
+
+const PERSONAS = path.join(DATA_DIR, 'personas');
+
+export async function listPersonas(): Promise<Persona[]> {
+  return (await readJson<Persona[]>(path.join(PERSONAS, 'personas.json'))) ?? [];
+}
+
+export async function savePersonas(list: Persona[]): Promise<Persona[]> {
+  const clean = list.filter((p) => ID_RE.test(p.id)).map((p) => ({ id: p.id, name: String(p.name ?? ''), description: String(p.description ?? ''), avatar: p.avatar }));
+  await writeFileAtomic(path.join(PERSONAS, 'personas.json'), JSON.stringify(clean, null, 2));
+  return clean;
+}
+
+let personaLock: Promise<unknown> = Promise.resolve();
+
+/** Reads, changes and saves the persona list with no other change in
+ *  between (the list and the avatars are written by different routes). */
+export function updatePersonas(change: (list: Persona[]) => Persona[] | Promise<Persona[]>): Promise<Persona[]> {
+  const next = personaLock.catch(() => {}).then(async () => savePersonas(await change(await listPersonas())));
+  personaLock = next;
+  return next;
+}
+
+export const personaAvatarPath = (id: string) => path.join(PERSONAS, `${checkId(id)}.png`);

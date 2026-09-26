@@ -5,6 +5,7 @@ import type { LlmConnection, LlmMessage, SamplerParams } from '@/types/llm';
 import { streamLlm } from '@/lib/api';
 import { requestConnection, useLlmStore } from '@/store/llmStore';
 import { useProjectStore } from '@/store/projectStore';
+import { resolvePersona, usePersonaStore } from '@/store/personaStore';
 import { presetParams } from '@/lib/stPreset';
 import { wrapWithPreset } from '@/lib/assistPreset';
 
@@ -87,11 +88,12 @@ export function useLlmStream() {
       const connection = connections.find((c) => c.id === assistConnectionId) ?? null;
       const preset = a.presetId ? presets.find((p) => p.id === a.presetId) : undefined;
       if (!preset || !connection) return run(connection, messages, onText);
+      const me = resolvePersona(usePersonaStore.getState().personas, chatSettings);
       const wrapped = a.prompts
         ? wrapWithPreset(messages, preset, {
             card: useProjectStore.getState().project?.card.data,
-            userName: chatSettings.userName,
-            persona: chatSettings.persona,
+            userName: me.name,
+            persona: me.description,
             excluded: a.excluded[preset.id] ?? [],
           })
         : messages;

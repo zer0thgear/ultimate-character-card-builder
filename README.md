@@ -39,6 +39,7 @@ data/projects/<id>/project.json      the card, its image prompts, notes
 data/projects/<id>/avatar.png        the card's picture
 data/projects/<id>/gallery/          gens you kept with the card
 data/projects/<id>/chats/            test chats
+data/personas/                       your chat personas and their pictures
 data/trash/                          deleted cards (recover by moving them back)
 data/library-index.json, thumbs/     the gen library's cache (safe to delete)
 ```

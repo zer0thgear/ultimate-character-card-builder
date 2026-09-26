@@ -24,6 +24,9 @@ export interface ChatPromptSettings {
   useCardPostHistory: boolean;
   includeExamples: boolean;
   useLorebook: boolean;
+  /** The active persona (see store/personaStore.ts); null uses userName
+   *  and persona above. */
+  personaId: string | null;
   /** A SillyTavern preset to build the prompt from instead, or null. */
   presetId: string | null;
   /** Use the preset's samplers (temperature and so on) over the connection's. */
@@ -40,6 +43,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatPromptSettings = {
   useCardPostHistory: true,
   includeExamples: true,
   useLorebook: true,
+  personaId: null,
   presetId: null,
   presetSamplers: true,
 };

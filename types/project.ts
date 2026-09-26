@@ -85,8 +85,18 @@ export interface ChatSession {
    *  -1 for none. */
   greeting: number;
   messages: ChatMessage[];
+  /** A persona locked to this chat, used instead of the active one. */
+  personaId?: string;
   createdAt: number;
   updatedAt: number;
+}
+
+/** Who you are in test chats: {{user}}'s name, description and picture. */
+export interface Persona {
+  id: string;
+  name: string;
+  description: string;
+  avatar?: AvatarInfo;
 }
 
 export type ChatSummary = Pick<ChatSession, 'id' | 'name' | 'createdAt' | 'updatedAt'> & { messageCount: number };

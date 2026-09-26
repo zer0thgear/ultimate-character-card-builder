@@ -1,4 +1,4 @@
-import type { AppConfig, CardProject, ChatSession, ChatSummary, KeptImage, ProjectSummary, AvatarInfo } from '@/types/project';
+import type { AppConfig, CardProject, ChatSession, ChatSummary, KeptImage, Persona, ProjectSummary, AvatarInfo } from '@/types/project';
 import type { LlmEvent, LlmRequest } from '@/types/llm';
 import type { LibraryItem } from '@/lib/librarySearch';
 
@@ -44,6 +44,12 @@ export const api = {
   getChat: (id: string, chatId: string) => call<ChatSession>(`/api/projects/${id}/chats/${chatId}`),
   saveChat: (id: string, chat: ChatSession) => call<ChatSession>(`/api/projects/${id}/chats/${chat.id}`, json('PUT', chat)),
   deleteChat: (id: string, chatId: string) => call<{ ok: true }>(`/api/projects/${id}/chats/${chatId}`, { method: 'DELETE' }),
+
+  listPersonas: () => call<Persona[]>('/api/personas'),
+  savePersonas: (list: Persona[]) => call<Persona[]>('/api/personas', json('PUT', list)),
+  personaAvatarUrl: (p: Persona) => (p.avatar ? `/api/personas/${p.id}/avatar?v=${p.avatar.version}` : null),
+  setPersonaAvatar: (id: string, image: Blob) => call<AvatarInfo>(`/api/personas/${id}/avatar`, { method: 'PUT', body: image }),
+  clearPersonaAvatar: (id: string) => call<{ ok: true }>(`/api/personas/${id}/avatar`, { method: 'DELETE' }),
 
   getConfig: () => call<AppConfig>('/api/config'),
   setConfig: (patch: Partial<AppConfig>) => call<AppConfig>('/api/config', json('PUT', patch)),

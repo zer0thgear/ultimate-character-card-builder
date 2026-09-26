@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '@/store/projectStore';
 import { useUiStore, useConfigStore, useToastStore, toast } from '@/store/uiStore';
 import { useSessionStore } from '@/store/sessionStore';
+import { usePersonaStore } from '@/store/personaStore';
 import { api } from '@/lib/api';
 import { exportCharx, exportJson, exportPng, importAsProject } from '@/lib/cardExport';
 import { importCardFile, CardImportError } from '@/lib/cardFile';
@@ -24,6 +25,7 @@ export function Shell() {
     // the attribute again, so it's set from the store once more here.
     document.documentElement.dataset.theme = useUiStore.getState().theme;
     void useConfigStore.getState().load();
+    void usePersonaStore.getState().load();
     const store = useProjectStore.getState();
     void store.refreshList().then(() => {
       let last: string | null = null;
