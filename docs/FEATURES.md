@@ -59,7 +59,7 @@ Search is GenBrowser's: comma-separated terms, all required; `-term` excludes; `
 
 ### SillyTavern presets
 
-⚙ in the chat → **Prompt preset → Import…** takes SillyTavern chat-completion presets (the JSON "Export preset" writes). With one picked, the prompt is built by its prompt manager, as SillyTavern would:
+**Settings → Chat preset** (or ⚙ in the chat) → **Import…** takes SillyTavern chat-completion presets (the JSON "Export preset" writes). The picked preset is global: every chat on every card uses it until you pick another, and the chat's toolbar shows which one is on. With one picked, the prompt is built by its prompt manager, as SillyTavern would:
 
 - Its prompts, in its order, only the ones switched on; markers (description, personality, scenario, persona, world info before/after, examples, chat history) filled from the card, using its personality/scenario/world-info formats and its new-chat and example-chat separators.
 - The card's system prompt and post-history instructions replace **Main Prompt** and **Post-History Instructions** (with `{{original}}`), unless the preset forbids overrides or you turn that off.

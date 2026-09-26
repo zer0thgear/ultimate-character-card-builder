@@ -8,8 +8,9 @@ import { useLlmStore, requestConnection } from '@/store/llmStore';
 import type { LlmConnection, ProviderKind, SamplerParams } from '@/types/llm';
 import { api, streamLlm } from '@/lib/api';
 import { Button, IconButton, Modal, NumberInput, Tabs, Toggle, cx, inputClass } from '@/components/ui';
+import { PresetPicker } from '@/components/llm/PresetManager';
 
-type SettingsTab = 'general' | 'folders' | 'llm';
+type SettingsTab = 'general' | 'folders' | 'llm' | 'chat';
 
 const useSettingsDialog = create<{ tab: SettingsTab | null; set: (t: SettingsTab | null) => void }>((set) => ({ tab: null, set: (tab) => set({ tab }) }));
 export const openSettings = (tab: SettingsTab = 'general') => useSettingsDialog.getState().set(tab);
@@ -27,11 +28,20 @@ export function SettingsDialog() {
           { value: 'general', label: 'General' },
           { value: 'folders', label: 'Folders' },
           { value: 'llm', label: 'LLM connections' },
+          { value: 'chat', label: 'Chat preset' },
         ]}
       />
       {tab === 'general' && <GeneralTab />}
       {tab === 'folders' && <FoldersTab />}
       {tab === 'llm' && <LlmTab />}
+      {tab === 'chat' && (
+        <div className="flex flex-col gap-3">
+          <p className="text-xs text-slate-500">
+            The SillyTavern chat-completion preset the test chat builds its prompt from. It applies to every chat on every card, and stays picked until you change it. The same picker is in the chat&apos;s ⚙ panel.
+          </p>
+          <PresetPicker />
+        </div>
+      )}
     </Modal>
   );
 }

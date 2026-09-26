@@ -185,6 +185,14 @@ export function ChatPanel() {
         <IconButton title="Show the prompt the next reply would send" onClick={preview}>
           🔍
         </IconButton>
+        <button
+          type="button"
+          onClick={() => setShowSettings(true)}
+          title={preset ? `Every chat uses the "${preset.name}" preset. Click to change it.` : 'No preset: the built-in prompt. Click to import or pick a SillyTavern preset.'}
+          className={cx('max-w-28 truncate rounded px-1.5 py-0.5 text-[10px]', preset ? 'bg-violet-500/15 text-violet-300' : 'bg-slate-800 text-slate-500')}
+        >
+          {preset ? preset.name : 'Built-in prompt'}
+        </button>
         <IconButton title="Chat settings: connection, persona, prompt" onClick={() => setShowSettings(!showSettings)}>
           ⚙
         </IconButton>

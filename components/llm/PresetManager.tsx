@@ -32,9 +32,9 @@ export function PresetPicker() {
   return (
     <div className="flex flex-col gap-2 rounded-md border border-slate-800 p-2">
       <div className="flex items-center gap-1.5">
-        <span className="text-xs whitespace-nowrap text-slate-400">Prompt preset</span>
+        <span className="text-xs whitespace-nowrap text-slate-400" title="Applies to every chat on every card">Prompt preset (all chats)</span>
         <select value={chatSettings.presetId ?? ''} onChange={(e) => setChatSettings({ presetId: e.target.value || null })} className={cx(inputClass, 'py-1 text-xs')}>
-          <option value="">Built-in (the settings below)</option>
+          <option value="">Built-in prompt (set in the chat&apos;s ⚙)</option>
           {presets.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
