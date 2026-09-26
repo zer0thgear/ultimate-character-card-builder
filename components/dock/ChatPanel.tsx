@@ -11,12 +11,13 @@ import { buildChatPrompt, displayText, greetingText, messageText, newMessage, ty
 import { buildPresetPrompt } from '@/lib/presetPrompt';
 import { presetParams } from '@/lib/stPreset';
 import { describeEntry } from '@/lib/lorebookScan';
-import { AutoTextarea, Button, IconButton, Modal, TokenBadge, Toggle, confirmDialog, cx, inputClass } from '@/components/ui';
+import { AutoTextarea, Button, IconButton, Modal, TokenBadge, Toggle, confirmDialog, cx, downloadBlob, inputClass } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { PresetPicker } from '@/components/llm/PresetManager';
 import { PersonaAvatar, PersonaPicker } from '@/components/llm/Personas';
 import { resolvePersona, usePersonaStore } from '@/store/personaStore';
 import { openSettings } from '@/components/SettingsDialog';
+import { chatFileName, chatToStJsonl, chatToText } from '@/lib/chatExport';
 import type { Persona } from '@/types/project';
 import { useTextTokens, formatTokens } from '@/lib/textTokens';
 import type { CardData } from '@/types/card';
@@ -40,6 +41,7 @@ export function ChatPanel() {
   const [inspect, setInspect] = useState<BuiltPrompt | null>(null);
   const [lastPrompt, setLastPrompt] = useState<BuiltPrompt | null>(null);
   const [streamingId, setStreamingId] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -180,6 +182,33 @@ export function ChatPanel() {
             >
               ✎
             </IconButton>
+            <div className="relative">
+              <IconButton title="Export this chat for SillyTavern or Chub" onClick={() => setExportOpen(!exportOpen)}>
+                ⬇
+              </IconButton>
+              {exportOpen && (
+                <div className="absolute right-0 z-30 mt-1 w-64 rounded-md border border-slate-700 bg-slate-900 p-1 shadow-xl" onMouseLeave={() => setExportOpen(false)}>
+                  {[
+                    { label: 'SillyTavern / Chub (.jsonl)', hint: 'Import it in SillyTavern (Manage chat files → Import) or Chub', run: () => downloadBlob(chatToStJsonl(chat, card, me.name), `${chatFileName(chat, card)}.jsonl`, 'application/jsonl') },
+                    { label: 'Plain text (.txt)', hint: 'For reading or sharing', run: () => downloadBlob(chatToText(chat, card, me.name), `${chatFileName(chat, card)}.txt`, 'text/plain') },
+                  ].map((o) => (
+                    <button
+                      key={o.label}
+                      type="button"
+                      title={o.hint}
+                      className="block w-full rounded px-3 py-1.5 text-left text-sm text-slate-200 hover:bg-slate-800"
+                      onClick={async () => {
+                        setExportOpen(false);
+                        await useChatStore.getState().flush();
+                        o.run();
+                      }}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <IconButton
               title="Delete this chat"
               tone="danger"

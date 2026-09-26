@@ -57,6 +57,7 @@ Search is GenBrowser's: comma-separated terms, all required; `-term` excludes; `
 - **🔍 Prompt inspector**: every part of the prompt, labelled, with tokens, and which lorebook entries fired and why (or were dropped over budget).
 - **⚙ Chat settings**: your name and persona, the main prompt, default post-history instructions, and whether to use the card's system prompt, post-history instructions, examples and lorebook.
 - Chats are saved per card; start as many as you like.
+- **⬇ Export** a chat as a SillyTavern chat file (`.jsonl`, which Chub imports too): the greeting first with every greeting as its swipes, your persona's name on your messages, swipes, reasoning and the model kept, `{{char}}`/`{{user}}` filled in. Or as plain text.
 
 ### SillyTavern presets
 
