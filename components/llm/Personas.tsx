@@ -8,6 +8,59 @@ import { toast } from '@/store/uiStore';
 import { api } from '@/lib/api';
 import type { Persona } from '@/types/project';
 import { AutoTextarea, Button, IconButton, TokenBadge, confirmDialog, cx, inputClass, pickFiles } from '@/components/ui';
+import { parseStPersonas, samePersona, PersonaImportError } from '@/lib/stPersonas';
+
+/** SillyTavern personas from a settings.json or persona backup, with any
+ *  avatar images picked alongside it matched by file name. */
+async function importFromFiles() {
+  const files = await pickFiles('.json,image/*', true);
+  const jsons = files.filter((f) => f.name.toLowerCase().endsWith('.json'));
+  if (!jsons.length) {
+    if (files.length) toast('Pick SillyTavern’s settings.json or a persona backup (.json), plus any avatar images.', 'error');
+    return;
+  }
+  const images = new Map(files.filter((f) => f.type.startsWith('image/')).map((f) => [f.name.toLowerCase(), f]));
+  const store = usePersonaStore.getState();
+  let added = 0;
+  let skipped = 0;
+  let pictures = 0;
+  for (const file of jsons) {
+    let found;
+    try {
+      found = parseStPersonas(JSON.parse(await file.text()));
+    } catch (err) {
+      toast(err instanceof PersonaImportError ? `${file.name}: ${err.message}` : `Couldn't read ${file.name}.`, 'error');
+      continue;
+    }
+    for (const st of found) {
+      if (usePersonaStore.getState().personas.some((p) => samePersona(p, st))) {
+        skipped++;
+        continue;
+      }
+      const p = store.add({ name: st.name, description: st.description });
+      added++;
+      const image = images.get(st.file.toLowerCase());
+      if (image) {
+        await store.setAvatar(p.id, image).then(() => pictures++, () => {});
+      }
+    }
+  }
+  if (added || skipped) toast(`Imported ${added} persona${added === 1 ? '' : 's'}${pictures ? ` (${pictures} with pictures)` : ''}${skipped ? `; ${skipped} already here` : ''}.`, 'success');
+}
+
+/** Everything from a SillyTavern install, pictures included. */
+async function importFromFolder() {
+  const picked = await api.pickFolder('', 'Your SillyTavern folder (or its data\default-user)');
+  if (picked.unsupported) return toast('No folder picker on this system; use Import file instead.', 'error');
+  if (!picked.path) return;
+  try {
+    const r = await api.importStPersonas(picked.path);
+    await usePersonaStore.getState().load();
+    toast(`Imported ${r.added} persona${r.added === 1 ? '' : 's'} (${r.pictures} with pictures)${r.skipped ? `; ${r.skipped} already here` : ''}.`, 'success');
+  } catch (err) {
+    toast((err as Error).message, 'error');
+  }
+}
 
 // Personas for test chats: who {{user}} is, with a picture. Managed in
 // Settings → Personas; picked (and optionally locked to a chat) from the
@@ -87,9 +140,15 @@ export function PersonaManager() {
           </div>
         );
       })}
-      <Button className="self-start" onClick={() => add()}>
-        + New persona
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => add()}>+ New persona</Button>
+        <Button onClick={() => void importFromFolder()} title="Browse to your SillyTavern folder: its personas and their pictures come across">
+          Import from SillyTavern folder…
+        </Button>
+        <Button onClick={() => void importFromFiles()} title="SillyTavern's settings.json or a persona backup, plus any avatar images (select them together)">
+          Import file…
+        </Button>
+      </div>
     </div>
   );
 }

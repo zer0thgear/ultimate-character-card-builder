@@ -51,6 +51,9 @@ export const api = {
   setPersonaAvatar: (id: string, image: Blob) => call<AvatarInfo>(`/api/personas/${id}/avatar`, { method: 'PUT', body: image }),
   clearPersonaAvatar: (id: string) => call<{ ok: true }>(`/api/personas/${id}/avatar`, { method: 'DELETE' }),
 
+  importStPersonas: (folder: string) =>
+    call<{ added: number; skipped: number; pictures: number; from: string; defaultName: string | null }>('/api/personas/import-st', json('POST', { folder })),
+
   getConfig: () => call<AppConfig>('/api/config'),
   setConfig: (patch: Partial<AppConfig>) => call<AppConfig>('/api/config', json('PUT', patch)),
   pickFolder: (initial = '', title?: string) => call<{ path: string; unsupported?: boolean }>('/api/pick-folder', json('POST', { initial, title })),
