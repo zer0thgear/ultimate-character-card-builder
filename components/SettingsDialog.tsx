@@ -50,7 +50,7 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
 
 function GeneralTab() {
   const { apiKey, setApiKey } = useSessionStore();
-  const { theme, setTheme, exportKeepsMetadata, setExportKeepsMetadata } = useUiStore();
+  const { theme, setTheme, exportKeepsMetadata, setExportKeepsMetadata, exportMaxSize, exportCompression, setExportImage } = useUiStore();
   const [show, setShow] = useState(false);
   return (
     <div className="flex flex-col gap-5">
@@ -75,6 +75,32 @@ function GeneralTab() {
       </Row>
       <Row label="Card PNG export" hint="NovelAI writes the prompt and settings into every image it makes.">
         <Toggle checked={exportKeepsMetadata} onChange={setExportKeepsMetadata} label="Keep the avatar's generation metadata in exported cards" />
+      </Row>
+      <Row label="Card picture on export" hint="The avatar kept in UCCB stays full size and quality; this only shapes exported PNG and CHARX cards.">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+          Longest edge at most
+          <select value={exportMaxSize} onChange={(e) => setExportImage({ exportMaxSize: Number(e.target.value) })} className={cx(inputClass, 'w-32 py-1')}>
+            <option value={0}>as it is</option>
+            {[512, 768, 1024, 1216, 1536, 2048].map((n) => (
+              <option key={n} value={n}>
+                {n} px
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              ['off', 'No recompression', 'The picture as it is'],
+              ['lossless', 'Lossless', 'Repacked tighter, pixel for pixel the same'],
+              ['palette', 'Small (256 colours)', 'Usually a third of the size or less; fine for most anime-style art'],
+            ] as const
+          ).map(([value, label, hint]) => (
+            <Button key={value} size="sm" variant={exportCompression === value ? 'primary' : 'secondary'} title={hint} onClick={() => setExportImage({ exportCompression: value })}>
+              {label}
+            </Button>
+          ))}
+        </div>
       </Row>
     </div>
   );

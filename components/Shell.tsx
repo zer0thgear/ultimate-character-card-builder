@@ -146,7 +146,8 @@ function SaveStatus() {
 function Header() {
   const project = useProjectStore((s) => s.project);
   const { past, future, undo, redo, replaceCard } = useProjectStore();
-  const { sidebarOpen, setSidebarOpen, theme, setTheme, showAvatar, setShowAvatar, exportKeepsMetadata } = useUiStore();
+  const { sidebarOpen, setSidebarOpen, theme, setTheme, showAvatar, setShowAvatar, exportKeepsMetadata, exportMaxSize, exportCompression } = useUiStore();
+  const imageOpts = { keepMetadata: exportKeepsMetadata, maxSize: exportMaxSize, compression: exportCompression };
   const apiKey = useSessionStore((s) => s.apiKey);
   const [exportOpen, setExportOpen] = useState(false);
 
@@ -205,9 +206,9 @@ function Header() {
               {exportOpen && (
                 <div className="absolute right-0 z-30 mt-1 w-56 rounded-md border border-slate-700 bg-slate-900 p-1 shadow-xl" onMouseLeave={() => setExportOpen(false)}>
                   {[
-                    { label: 'PNG card (V3 + V2)', run: () => exportPng(project, { keepMetadata: exportKeepsMetadata }) },
+                    { label: 'PNG card (V3 + V2)', run: async () => toast(`Exported the PNG card (${await exportPng(project, imageOpts)}).`, 'success') },
                     { label: 'JSON (V3)', run: async () => exportJson(project) },
-                    { label: 'CHARX', run: () => exportCharx(project) },
+                    { label: 'CHARX', run: () => exportCharx(project, imageOpts) },
                   ].map((o) => (
                     <button
                       key={o.label}

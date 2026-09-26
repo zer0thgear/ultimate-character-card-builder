@@ -28,6 +28,11 @@ interface UiState {
   /** Keep NovelAI's generation metadata in exported card PNGs. */
   exportKeepsMetadata: boolean;
   setExportKeepsMetadata: (v: boolean) => void;
+  /** Card export: the picture's longest edge at most this (0 = as is). */
+  exportMaxSize: number;
+  /** Card export: recompress the picture. */
+  exportCompression: 'off' | 'lossless' | 'palette';
+  setExportImage: (patch: { exportMaxSize?: number; exportCompression?: 'off' | 'lossless' | 'palette' }) => void;
 }
 
 export const useUiStore = create<UiState>()(
@@ -50,6 +55,9 @@ export const useUiStore = create<UiState>()(
       setShowAvatar: (showAvatar) => set({ showAvatar }),
       exportKeepsMetadata: false,
       setExportKeepsMetadata: (exportKeepsMetadata) => set({ exportKeepsMetadata }),
+      exportMaxSize: 0,
+      exportCompression: 'off',
+      setExportImage: (patch) => set(patch),
     }),
     { name: 'uccb-ui', storage: createJSONStorage(() => localStorage) },
   ),
