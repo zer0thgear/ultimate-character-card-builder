@@ -137,6 +137,7 @@ function KeptViewer({ projectId, item, onClose }: { projectId: string; item: Kep
           <Button onClick={async () => downloadBlob(await blob(), `${item.label || item.id}.png`, 'image/png')}>Download</Button>
           <Button onClick={async () => void saveToFolder(await blob(), `${item.label || item.id}.png`)}>Save to folder</Button>
           <Button onClick={async () => { sendToImg2Img(await blob()); onClose(); }}>Img2Img base</Button>
+          <Button onClick={async () => { sendToImg2Img(await blob(), 'mask'); onClose(); }}>Inpaint</Button>
           <Button onClick={async () => { await reusePrompt(await blob()); onClose(); }}>Reuse prompt</Button>
           <Button variant="primary" onClick={async () => { await setAsAvatar(await blob()); onClose(); }}>
             Set as avatar

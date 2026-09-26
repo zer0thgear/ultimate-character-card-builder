@@ -8,7 +8,8 @@ A tour of what UCCB does. For setup, see the [README](../README.md).
 - **Autosave.** Every change is saved to disk a moment later (Ctrl+S saves at once). The header shows Saved / Unsaved / Saving….
 - **Undo and redo** for the whole card (↶ ↷ in the header, or Ctrl+Z / Ctrl+Y when you're not typing in a box; text boxes keep their own undo). Quick typing in one field is one step; every button action (delete, promote, macro, overwrite) is its own step.
 - **Overwrite…** replaces the card's text with a card or JSON file and keeps the picture, gens and chats, like tavern-card-editor's "Overwrite with JSON".
-- **Export**: PNG card (V3 in `ccv3` and V2 in `chara`, so V2-only frontends like Chub still read it), JSON (V3) or CHARX. A card with no picture gets a plain placeholder. The avatar's NovelAI generation metadata is stripped unless you ask to keep it (Settings → General).
+- **Export**: PNG card (V3 in `ccv3` and V2 in `chara`, so V2-only frontends like Chub still read it), JSON (V3) or CHARX. A card with no picture gets a plain placeholder. The avatar's NovelAI generation metadata is stripped unless you ask to keep it (Settings → General), including the copy NovelAI hides in the picture's alpha channel.
+- **Smaller card pictures** (Settings → General): exported cards can resize the picture to a longest edge and recompress it, losslessly or to a 256-colour palette (often a third of the size). The avatar kept in UCCB stays full quality. The export message says how big the card came out.
 - **Nothing is lost on import.** Unknown fields and extensions from other frontends ride along untouched. V1 cards, V2, V3, SillyTavern's own world files and standalone `lorebook_v3` files are all read.
 
 ### The editor tabs
@@ -34,7 +35,8 @@ The dock on the right starts on **🎨 Image**. Model, size, sampler and the oth
 - **Scene** (the base prompt) and **Characters** (V4+, one prompt each, with a per-character negative and optional positions), with NovelAI's live tag suggestions, `{}`/`[]` emphasis on Ctrl+↑/↓, and NovelAI's own token meters.
 - **✨ From description** writes the character's appearance prompt from the card. **✨ From greeting** (or 🎨 on any greeting in the editor) writes a scene prompt that illustrates that greeting.
 - **Generate** (Ctrl+Enter from the form) with a cost estimate from NovelAI's own formulas and your Anlas balance; **Copies** makes several in a row. Quality tags, UC presets, Variety+, SMEA, transparency (V5), live streaming preview, and **Img2Img** (⎘ on any image) are all there.
-- On each gen: **Set as avatar**, **☆ Keep** (saved with the card, shown in Gallery), **Save to folder**, download, use its seed, ♻ load its prompt back, remove.
+- On each gen: **Set as avatar**, **☆ Keep** (saved with the card, shown in Gallery), **Save to folder**, download, ⎘ Img2Img base, 🖌 inpaint, use its seed, ♻ load its prompt back, remove.
+- **Edit image and Inpaint**, NovelFrontEnd's canvas: paint over the base (draw, erase, fill, smudge, blur, colour pick, pen pressure) or mark what to regenerate on NovelAI's 8-pixel mask grid. Saving brings you back with the base updated; Generate then does an Image2Image or an inpaint (on the model's inpainting model, with its strength), and the result is pasted over the original through NovelAI's feathered edge. Paint and mask stay editable. Any gen, kept gen or library image can start one.
 - **🖼 Gallery**: gens kept with this card (label them, e.g. "avatar v2", "angry"), and this session's gens, for this card or all of them.
 
 ## The gen library
@@ -47,12 +49,28 @@ Search is GenBrowser's: comma-separated terms, all required; `-term` excludes; `
 
 **💬 Test chat** chats with the card through your chosen connection, building the prompt the way SillyTavern does: main prompt (or the card's system prompt, with `{{original}}`), lorebook entries before and after the character, description, personality, scenario, your persona, example messages, the chat, then post-history instructions. Macros (`{{char}}`, `{{user}}`, `{{random:…}}`, `{{roll:…}}`, `{{time}}`…) are expanded.
 
+- **🎭 Impersonate** writes your next message for you, into the box.
 - The **greeting is read live from the card**: edit it and the chat shows the edit. Swipe ‹ › through every greeting.
 - **Swipes** on the last reply (› generates another), **Regenerate**, **Continue**, edit or delete any message, or cut the chat after one.
 - Reasoning from thinking models is shown folded, apart from the reply.
 - **🔍 Prompt inspector**: every part of the prompt, labelled, with tokens, and which lorebook entries fired and why (or were dropped over budget).
 - **⚙ Chat settings**: your name and persona, the main prompt, default post-history instructions, and whether to use the card's system prompt, post-history instructions, examples and lorebook.
 - Chats are saved per card; start as many as you like.
+
+### SillyTavern presets
+
+⚙ in the chat → **Prompt preset → Import…** takes SillyTavern chat-completion presets (the JSON "Export preset" writes). With one picked, the prompt is built by its prompt manager, as SillyTavern would:
+
+- Its prompts, in its order, only the ones switched on; markers (description, personality, scenario, persona, world info before/after, examples, chat history) filled from the card, using its personality/scenario/world-info formats and its new-chat and example-chat separators.
+- The card's system prompt and post-history instructions replace **Main Prompt** and **Post-History Instructions** (with `{{original}}`), unless the preset forbids overrides or you turn that off.
+- In-chat prompts go in at their depth, as do the card's own note (`depth_prompt`) and lorebook entries placed at a depth.
+- The history is trimmed to the preset's context size, oldest first (the inspector says how many were left out).
+- **Continue** uses its continue nudge, or prefills when it says to; **🎭 Impersonate** uses its impersonation prompt and puts the result in your message box; **send if empty**, **squash system messages**, names in content, and the assistant prefill (Claude only, as in SillyTavern) are honoured.
+- Macros include SillyTavern's variables (`{{setvar}}`, `{{getvar}}`, `{{addvar}}`, `{{incvar}}`…) and card fields (`{{description}}`, `{{lastUserMessage}}`…), shared across the whole prompt.
+- **Use the preset's samplers** puts its temperature, top P/K/A, min P, penalties, max tokens and seed over the connection's (for Claude, only length and reasoning effort, since current models refuse the rest).
+- **Prompts** opens its prompt manager: switch prompts on and off, drag to reorder, edit text, role and depth. Changes apply to UCCB's copy.
+
+Text-completion (instruct/context) presets aren't supported yet.
 
 ## Brainstorm
 

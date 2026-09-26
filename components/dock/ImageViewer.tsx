@@ -3,11 +3,13 @@
 import { useSessionStore, type SessionImage } from '@/store/sessionStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useBridgeStore } from '@/store/bridgeStore';
+import type { EditorMode } from '@/lib/editorResult';
 import { setAsAvatar, keepImage, saveSessionImage, reusePrompt, genFileName } from '@/lib/imageActions';
 import { downloadBlob, IconButton, Button, cx } from '@/components/ui';
 
-/** Makes this picture the image panel's Img2Img base. */
-export const sendToImg2Img = (blob: Blob) => useBridgeStore.getState().sendToImg2Img(blob);
+/** Makes this picture the image panel's Img2Img base, optionally opening
+ *  the Edit Image or Inpaint canvas on it. */
+export const sendToImg2Img = (blob: Blob, open?: EditorMode) => useBridgeStore.getState().sendToImg2Img(blob, open);
 
 export function ImageViewer({ image, preview, generating }: { image?: SessionImage; preview: string | null; generating: boolean }) {
   const removeImages = useSessionStore((s) => s.removeImages);
@@ -41,6 +43,9 @@ export function ImageViewer({ image, preview, generating }: { image?: SessionIma
             </IconButton>
             <IconButton title="Use as the Img2Img base" onClick={() => sendToImg2Img(image.blob)}>
               ⎘
+            </IconButton>
+            <IconButton title="Inpaint: mark part of it to regenerate" onClick={() => sendToImg2Img(image.blob, 'mask')}>
+              🖌
             </IconButton>
             <IconButton title={`Use this seed (${image.seed})`} onClick={() => set('seed', image.seed)}>
               🌱

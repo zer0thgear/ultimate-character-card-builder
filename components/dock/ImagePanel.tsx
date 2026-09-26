@@ -16,6 +16,9 @@ import { SAMPLERS } from '@/lib/samplers';
 import { getAvailableQualityLevels, getAvailableUcLevels, QUALITY_LEVEL_LABELS, UC_LEVEL_LABELS } from '@/lib/naiPresets';
 import { isV3Model, promptSource, randomSeed } from '@/lib/imageRequest';
 import { buildGenerateRequest, POSITIONS, SIZE_PRESETS, type Img2ImgBase } from '@/lib/genRequest';
+import { applyEditorResult, type EditorMode, type Img2ImgSource } from '@/lib/editorResult';
+import { hasInpaintStrength, toInpaintingModel } from '@/lib/inpaint';
+import { CanvasEditor } from '@/components/CanvasEditor';
 import { calculateAnlasCost, opusStatus, MAX_GENERATION_PIXELS } from '@/lib/anlasCost';
 import { hasVariety } from '@/lib/variety';
 import { blobToBase64, getImageDimensions } from '@/lib/imageUtils';
@@ -91,15 +94,39 @@ function PromptForm() {
   const config = useConfigStore((s) => s.config);
   const counts = useTokenCounts(form);
   const [advanced, setAdvanced] = useState(false);
-  const [base, setBase] = useState<(Img2ImgBase & { url: string }) | null>(null);
+  // The Image2Image base, with any paint (Edit Image) or mask (Inpaint).
+  const [source, setSource] = useState<Img2ImgSource | null>(null);
+  const [strength, setStrength] = useState(0.6);
+  const [noise, setNoise] = useState(0);
+  const [inpaintStrength, setInpaintStrength] = useState(1);
+  const [canvas, setCanvas] = useState<EditorMode | null>(null);
+  const inpainting = !!source?.mask;
   const stopRef = useRef(false);
 
   const isV3 = isV3Model(form.model);
   const basePrompt = form.basePrompts.find((p) => p.selected) ?? form.basePrompts[0];
   const setBasePrompt = (text: string) => set('basePrompts', form.basePrompts.map((p) => (p.id === basePrompt?.id ? { ...p, text } : p)));
 
-  const cost = calculateAnlasCost({ model: form.model, width: base?.width ?? form.width, height: base?.height ?? form.height, steps: form.steps, smea: form.smea, smeaDyn: form.smeaDyn, strength: base?.strength, ...opusStatus(subscription) });
-  const tooBig = form.width * form.height > MAX_GENERATION_PIXELS;
+  const cost = calculateAnlasCost({
+    model: inpainting ? toInpaintingModel(form.model) : form.model,
+    width: source?.width ?? form.width,
+    height: source?.height ?? form.height,
+    steps: form.steps,
+    smea: form.smea,
+    smeaDyn: form.smeaDyn,
+    strength: !source ? 1 : inpainting ? (hasInpaintStrength(form.model) ? inpaintStrength : 1) : strength,
+    ...opusStatus(subscription),
+  });
+  const tooBig = (source?.width ?? form.width) * (source?.height ?? form.height) > MAX_GENERATION_PIXELS;
+
+  /** The base as sent: stealth marks erased as NovelAI's canvas does, and
+   *  the mask when inpainting. */
+  const baseForRequest = async (): Promise<Img2ImgBase | undefined> => {
+    if (!source) return undefined;
+    const image = await blobToBase64(await eraseStealthMarks(source.blob));
+    const mask = source.mask ? await blobToBase64(source.mask.full) : undefined;
+    return { image, mask, width: source.width, height: source.height, strength, noise, inpaintStrength };
+  };
   const hasPrompt = !!basePrompt?.text.trim() || form.characters.some((c) => c.enabled && c.prompt.trim());
 
   const run = async () => {
@@ -109,9 +136,10 @@ function PromptForm() {
     stopRef.current = false;
     setGenerating(1);
     try {
+      const base = await baseForRequest();
       for (let i = 0; i < form.copies && !stopRef.current; i++) {
         const seed = form.seed === 0 ? randomSeed() : form.seed + i;
-        const { request, resolved } = buildGenerateRequest(useSettingsStore.getState(), seed, base ?? undefined);
+        const { request, resolved } = buildGenerateRequest(useSettingsStore.getState(), seed, base);
         const made = await generate(request, { projectId, source: promptSource(form, resolved), wildcardPicks: resolved.picks, forceStandard: !!base });
         if (!made) break;
         if (useConfigStore.getState().config.autoSaveGens) for (const img of made) void saveSessionImage(img, true);
@@ -139,10 +167,12 @@ function PromptForm() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, []);
 
-  const setAsBase = async (blob: Blob) => {
+  /** A new base; the request keeps its size (rounded to NovelAI's grid as
+   *  it's sent, lib/requestImage.ts). */
+  const setAsBase = async (blob: Blob, open?: EditorMode) => {
     const { width, height } = await getImageDimensions(blob);
-    const image = await blobToBase64(await eraseStealthMarks(blob));
-    setBase({ image, width: Math.round(width / 64) * 64 || 64, height: Math.round(height / 64) * 64 || 64, strength: 0.6, noise: 0, url: URL.createObjectURL(blob) });
+    setSource({ blob, url: URL.createObjectURL(blob), width, height });
+    setCanvas(open ?? null);
   };
   // "Img2Img base" from a viewer, gallery or the library lands here, even
   // if it was sent before this panel mounted.
@@ -151,10 +181,10 @@ function PromptForm() {
     setAsBaseRef.current = setAsBase;
   });
   useEffect(() => {
-    const take = (image: Blob | null) => {
-      if (!image) return;
+    const take = (req: { image: Blob; open?: EditorMode } | null) => {
+      if (!req) return;
       useBridgeStore.getState().clearImg2Img();
-      void setAsBaseRef.current(image);
+      void setAsBaseRef.current(req.image, req.open);
     };
     take(useBridgeStore.getState().img2img);
     return useBridgeStore.subscribe((s) => take(s.img2img));
@@ -190,29 +220,78 @@ function PromptForm() {
       {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
       {tooBig && <div className="text-xs text-red-400">That size is past NovelAI&apos;s limit of about 3.1 megapixels.</div>}
 
-      {base && (
-        <div className="flex gap-3 rounded-md border border-sky-500/30 bg-sky-500/5 p-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={base.url} alt="Img2Img base" className="h-20 w-16 rounded object-cover" />
-          <div className="flex flex-1 flex-col gap-1 text-xs text-slate-300">
-            <div className="flex items-center justify-between">
-              <span className="font-medium">Img2Img base ({base.width}×{base.height})</span>
-              <IconButton title="Stop using this base" onClick={() => setBase(null)}>
+      {source && (
+        <div className={cx('flex gap-3 rounded-md border p-2', inpainting ? 'border-pink-500/30 bg-pink-500/5' : 'border-sky-500/30 bg-sky-500/5')}>
+          <button type="button" className="checker relative h-24 w-16 flex-shrink-0 overflow-hidden rounded" onClick={() => setCanvas(inpainting ? 'mask' : 'paint')} title={inpainting ? 'Edit the mask' : 'Edit the image'}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={source.url} alt="Base" className="h-full w-full object-cover" />
+            {source.mask && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={source.mask.url} alt="Mask" className="absolute inset-0 h-full w-full object-cover opacity-60" style={{ imageRendering: 'pixelated' }} />
+            )}
+          </button>
+          <div className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-slate-300">
+            <div className="flex items-center justify-between gap-1">
+              <span className="font-medium">
+                {inpainting ? 'Inpainting' : 'Img2Img base'} <span className="font-normal text-slate-500">{source.width}×{source.height}, the output keeps this size</span>
+              </span>
+              <IconButton title="Stop using this base" onClick={() => setSource(null)}>
                 ✕
               </IconButton>
             </div>
-            <label className="flex items-center gap-2">
-              Strength
-              <input type="range" min={0.01} max={0.99} step={0.01} value={base.strength} onChange={(e) => setBase({ ...base, strength: Number(e.target.value) })} className="flex-1 accent-violet-500" />
-              <span className="w-8 tabular-nums">{base.strength.toFixed(2)}</span>
-            </label>
-            <label className="flex items-center gap-2">
-              Noise
-              <input type="range" min={0} max={0.99} step={0.01} value={base.noise} onChange={(e) => setBase({ ...base, noise: Number(e.target.value) })} className="flex-1 accent-violet-500" />
-              <span className="w-8 tabular-nums">{base.noise.toFixed(2)}</span>
-            </label>
+            <div className="flex flex-wrap gap-1">
+              <Button size="sm" onClick={() => setCanvas('paint')} title="Paint over the picture, then generate from it">
+                {source.paint ? 'Edit paint' : 'Edit image'}
+              </Button>
+              <Button size="sm" onClick={() => setCanvas('mask')} title="Mark what to regenerate">
+                {source.mask ? 'Edit mask' : 'Inpaint'}
+              </Button>
+              {source.mask && (
+                <Button size="sm" variant="ghost" onClick={() => setSource({ ...source, mask: undefined })}>
+                  Clear mask
+                </Button>
+              )}
+            </div>
+            {inpainting ? (
+              hasInpaintStrength(form.model) ? (
+                <label className="flex items-center gap-2" title="1 repaints the masked area from scratch; lower keeps more of what was there">
+                  Strength
+                  <input type="range" min={0.01} max={1} step={0.01} value={inpaintStrength} onChange={(e) => setInpaintStrength(Number(e.target.value))} className="flex-1 accent-pink-500" />
+                  <span className="w-8 tabular-nums">{inpaintStrength.toFixed(2)}</span>
+                </label>
+              ) : (
+                <span className="text-slate-500">V3 repaints the masked area from scratch.</span>
+              )
+            ) : (
+              <>
+                <label className="flex items-center gap-2">
+                  Strength
+                  <input type="range" min={0.01} max={0.99} step={0.01} value={strength} onChange={(e) => setStrength(Number(e.target.value))} className="flex-1 accent-violet-500" />
+                  <span className="w-8 tabular-nums">{strength.toFixed(2)}</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  Noise
+                  <input type="range" min={0} max={0.99} step={0.01} value={noise} onChange={(e) => setNoise(Number(e.target.value))} className="flex-1 accent-violet-500" />
+                  <span className="w-8 tabular-nums">{noise.toFixed(2)}</span>
+                </label>
+              </>
+            )}
           </div>
         </div>
+      )}
+      {source && canvas && (
+        <CanvasEditor
+          mode={canvas}
+          image={canvas === 'paint' ? (source.original ?? source.blob) : source.blob}
+          width={source.width}
+          height={source.height}
+          initialLayer={canvas === 'paint' ? source.paint : source.mask?.layer}
+          onSave={(result) => {
+            setSource(applyEditorResult(source, canvas, result));
+            setCanvas(null);
+          }}
+          onCancel={() => setCanvas(null)}
+        />
       )}
 
       <SceneSection
