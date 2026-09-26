@@ -1,5 +1,5 @@
-import { Shell } from '@/components/Shell';
+import { ClientShell } from '@/components/ClientShell';
 
 export default function Home() {
-  return <Shell />;
+  return <ClientShell />;
 }
