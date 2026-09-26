@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import type { LlmConnection, LlmMessage } from '@/types/llm';
+import type { LlmConnection, LlmMessage, SamplerParams } from '@/types/llm';
 import { streamLlm } from '@/lib/api';
 import { requestConnection } from '@/store/llmStore';
 
@@ -20,7 +20,14 @@ export function useLlmStream() {
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const run = useCallback(async (connection: LlmConnection | null, messages: LlmMessage[], onText?: (full: string) => void): Promise<StreamResult> => {
+  const run = useCallback(async (
+    connection: LlmConnection | null,
+    messages: LlmMessage[],
+    onText?: (full: string) => void,
+    /** `prefill`: the last message starts the reply. `params` override the
+     *  connection's (a preset's samplers). */
+    opts: { prefill?: boolean; params?: Partial<SamplerParams> } = {},
+  ): Promise<StreamResult> => {
     abortRef.current?.abort();
     setText('');
     setReasoning('');
@@ -41,7 +48,7 @@ export function useLlmStream() {
     const result: StreamResult = { text: '', reasoning: '' };
     try {
       await streamLlm(
-        { connection: requestConnection(connection), messages },
+        { connection: { ...requestConnection(connection), params: { ...connection.params, ...opts.params } }, messages, prefill: opts.prefill },
         (e) => {
           if (e.type === 'text') {
             result.text += e.text;

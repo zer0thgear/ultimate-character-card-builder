@@ -12,6 +12,9 @@ export interface SamplerParams {
   min_p?: number;
   frequency_penalty?: number;
   presence_penalty?: number;
+  top_a?: number;
+  repetition_penalty?: number;
+  seed?: number;
   stop?: string[];
   /** NovelAI: its models' reasoning mode (`enable_thinking`). */
   enable_thinking?: boolean;
@@ -56,6 +59,9 @@ export type LlmEvent =
 export interface LlmRequest {
   connection: Pick<LlmConnection, 'kind' | 'baseUrl' | 'apiKey' | 'model' | 'params'>;
   messages: LlmMessage[];
+  /** The last message is the start of the reply (a prefill) and must stay
+   *  last, rather than being answered by a new user turn. */
+  prefill?: boolean;
 }
 
 export const NOVELAI_TEXT_BASE = 'https://text.novelai.net/oa/v1';

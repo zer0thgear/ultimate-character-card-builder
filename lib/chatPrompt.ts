@@ -1,13 +1,14 @@
-import type { CardData } from '@/types/card';
-import type { LlmMessage } from '@/types/llm';
+import type { CardData, LorebookEntry } from '@/types/card';
+import type { LlmMessage, ProviderKind } from '@/types/llm';
 import type { ChatMessage } from '@/types/project';
-import { expandMacros } from '@/lib/macros';
-import { scanLorebook, describeEntry, type ScanResult } from '@/lib/lorebookScan';
+import { expandMacros, type MacroContext } from '@/lib/macros';
+import { scanLorebook, describeEntry, type ScanResult, type ActivatedEntry } from '@/lib/lorebookScan';
 
 // Builds the prompt a test chat sends, the way a SillyTavern-style frontend
 // builds it from a card, so testing here tells you how the card will play
 // there. Each part is labelled so the prompt inspector can show what came
-// from where.
+// from where. With a SillyTavern preset active, lib/presetPrompt.ts builds
+// it instead, from the preset's prompt manager; the helpers here are shared.
 
 export interface ChatPromptSettings {
   userName: string;
@@ -23,6 +24,10 @@ export interface ChatPromptSettings {
   useCardPostHistory: boolean;
   includeExamples: boolean;
   useLorebook: boolean;
+  /** A SillyTavern preset to build the prompt from instead, or null. */
+  presetId: string | null;
+  /** Use the preset's samplers (temperature and so on) over the connection's. */
+  presetSamplers: boolean;
 }
 
 export const DEFAULT_CHAT_SETTINGS: ChatPromptSettings = {
@@ -35,7 +40,12 @@ export const DEFAULT_CHAT_SETTINGS: ChatPromptSettings = {
   useCardPostHistory: true,
   includeExamples: true,
   useLorebook: true,
+  presetId: null,
+  presetSamplers: true,
 };
+
+export const DEFAULT_IMPERSONATION =
+  "[Write your next reply from the point of view of {{user}}, using the chat history so far as a guideline for the writing style of {{user}}. Don't write as {{char}} or system. Don't describe actions of {{char}}.]";
 
 export interface PromptPart {
   label: string;
@@ -43,16 +53,36 @@ export interface PromptPart {
   content: string;
 }
 
+export interface BuildOptions {
+  /** A reply (default), a continuation of the last reply, or the user's turn. */
+  mode?: 'reply' | 'continue' | 'impersonate';
+  /** The last reply's text, in continue mode. */
+  continueText?: string;
+  /** The user sent nothing (a preset's send_if_empty applies). */
+  emptySend?: boolean;
+  model?: string;
+  kind?: ProviderKind;
+  /** The reply's max tokens, for fitting a preset's context size. */
+  maxTokens?: number;
+  now?: Date;
+  random?: () => number;
+}
+
 export interface BuiltPrompt {
   parts: PromptPart[];
   messages: LlmMessage[];
   lore: ScanResult;
+  /** Text sent as the start of the reply (continuing, or a preset's
+   *  prefill); the model writes on from it. */
+  prefill?: string;
+  /** Oldest chat messages left out to fit the context size. */
+  droppedHistory: number;
 }
 
 /** A message's current text. */
 export const messageText = (m: ChatMessage) => m.swipes[m.swipe] ?? '';
 
-/** The example dialogue split at each <START>, macros expanded. */
+/** The example dialogue split at each <START>. */
 export function exampleBlocks(mesExample: string): string[] {
   return mesExample
     .split(/<START>/i)
@@ -60,15 +90,114 @@ export function exampleBlocks(mesExample: string): string[] {
     .filter(Boolean);
 }
 
-export function buildChatPrompt(
-  card: CardData,
-  history: ChatMessage[],
-  settings: ChatPromptSettings,
-  opts: { now?: Date; random?: () => number } = {},
-): BuiltPrompt {
+// ─── Shared pieces ───────────────────────────────────────────────────────────
+
+/** Macro expansion for one prompt build: names, card fields, the chat so
+ *  far, and one variable store shared by every part. */
+export function macroExpander(card: CardData, history: ChatMessage[], settings: Pick<ChatPromptSettings, 'userName' | 'persona'>, opts: BuildOptions = {}) {
   const char = card.nickname || card.name || 'Character';
   const user = settings.userName || 'User';
-  const x = (text: string, original?: string) => expandMacros(text ?? '', { char, user, original, ...opts }).trim();
+  const texts = history.map(messageText);
+  const lastOf = (role: ChatMessage['role']) => {
+    for (let i = history.length - 1; i >= 0; i--) if (history[i].role === role) return texts[i];
+    return '';
+  };
+  const base: MacroContext = {
+    char,
+    user,
+    model: opts.model,
+    vars: new Map(),
+    now: opts.now,
+    random: opts.random,
+    chat: { last: texts[texts.length - 1] ?? '', lastUser: lastOf('user'), lastChar: lastOf('assistant') },
+  };
+  // Fields are expanded once themselves, so {{description}} inside a
+  // preset prompt reads "Ann is…" rather than "{{char}} is…".
+  const plain = (t: string) => expandMacros(t ?? '', base).trim();
+  base.fields = {
+    description: plain(card.description),
+    personality: plain(card.personality),
+    scenario: plain(card.scenario),
+    persona: plain(settings.persona),
+    mesExamples: plain(card.mes_example),
+  };
+  const x = (text: string, original?: string) => expandMacros(text ?? '', { ...base, original }).trim();
+  return { x, char, user, texts };
+}
+
+export type LorePlace = 'before' | 'after' | 'depth';
+
+/** Where an entry goes: SillyTavern keeps its own position (0 before, 1
+ *  after, 4 at a depth, others near those) in the entry's extensions; the
+ *  card spec only has before_char / after_char. */
+export function lorePlace(e: LorebookEntry): LorePlace {
+  const st = (e.extensions as { position?: unknown })?.position;
+  if (typeof st === 'number') {
+    if (st === 4) return 'depth';
+    if (st === 1 || st === 3 || st === 6) return 'after';
+    return 'before';
+  }
+  return e.position === 'after_char' ? 'after' : 'before';
+}
+
+export interface DepthInjection {
+  label: string;
+  role: LlmMessage['role'];
+  content: string;
+  /** Messages from the end of the chat: 0 goes after the last one. */
+  depth: number;
+  order: number;
+}
+
+const ROLE_BY_NUMBER: LlmMessage['role'][] = ['system', 'user', 'assistant'];
+
+/** The card's own at-depth note (SillyTavern's "Character's Note", in
+ *  extensions.depth_prompt) and lorebook entries placed at a depth. */
+export function cardDepthInjections(card: CardData, lore: ActivatedEntry[], x: (t: string) => string): DepthInjection[] {
+  const out: DepthInjection[] = [];
+  const note = (card.extensions as { depth_prompt?: { prompt?: string; depth?: number; role?: string } }).depth_prompt;
+  if (note?.prompt?.trim()) {
+    const role = note.role === 'user' || note.role === 'assistant' ? note.role : 'system';
+    out.push({ label: "Character's note", role, content: x(note.prompt), depth: typeof note.depth === 'number' ? note.depth : 4, order: 100 });
+  }
+  for (const a of lore) {
+    if (lorePlace(a.entry) !== 'depth') continue;
+    const ext = a.entry.extensions as { depth?: number; role?: number };
+    out.push({ label: `Lorebook: ${describeEntry(a)}`, role: ROLE_BY_NUMBER[ext.role ?? 0] ?? 'system', content: x(a.entry.content), depth: typeof ext.depth === 'number' ? ext.depth : 4, order: a.entry.insertion_order ?? 100 });
+  }
+  return out;
+}
+
+/** The chat as prompt parts, with at-depth injections in their places. */
+export function historyParts(history: ChatMessage[], injections: DepthInjection[], x: (t: string) => string, names: { char: string; user: string; inContent?: boolean }): PromptPart[] {
+  const msgs: PromptPart[] = [];
+  history.forEach((m, i) => {
+    let content = x(messageText(m));
+    if (!content) return;
+    if (names.inContent && m.role !== 'system') content = `${m.role === 'user' ? names.user : names.char}: ${content}`;
+    msgs.push({ label: i === 0 && m.role === 'assistant' && m.id === 'greeting' ? 'Greeting' : m.role === 'user' ? names.user : m.role === 'assistant' ? names.char : 'System', role: m.role, content });
+  });
+  if (!injections.length) return msgs;
+  const out: PromptPart[] = [];
+  const sorted = [...injections].filter((i) => i.content.trim()).sort((a, b) => a.order - b.order);
+  for (let i = 0; i <= msgs.length; i++) {
+    for (const inj of sorted) {
+      if (Math.max(0, msgs.length - Math.max(0, inj.depth)) === i) out.push({ label: `${inj.label} (depth ${inj.depth})`, role: inj.role, content: inj.content });
+    }
+    if (i < msgs.length) out.push(msgs[i]);
+  }
+  return out;
+}
+
+export const toMessages = (parts: PromptPart[]): LlmMessage[] => parts.map(({ role, content }) => ({ role, content }));
+
+// ─── The built-in prompt (no preset) ─────────────────────────────────────────
+
+export function buildChatPrompt(card: CardData, history: ChatMessage[], settings: ChatPromptSettings, opts: BuildOptions = {}): BuiltPrompt {
+  const mode = opts.mode ?? 'reply';
+  // Continuing: the reply being continued is the prefill, not history.
+  const chat = mode === 'continue' ? history.slice(0, -1) : history;
+  const { x, char, user, texts } = macroExpander(card, chat, settings, opts);
 
   const parts: PromptPart[] = [];
   const sys = (label: string, content: string) => {
@@ -76,23 +205,17 @@ export function buildChatPrompt(
   };
 
   const main = x(settings.mainPrompt);
-  sys(
-    settings.useCardSystemPrompt && card.system_prompt.trim() ? 'System prompt (card)' : 'Main prompt',
-    settings.useCardSystemPrompt && card.system_prompt.trim() ? x(card.system_prompt, main) : main,
-  );
+  const cardSystem = settings.useCardSystemPrompt && card.system_prompt.trim();
+  sys(cardSystem ? 'System prompt (card)' : 'Main prompt', cardSystem ? x(card.system_prompt, main) : main);
 
-  const texts = history.map(messageText);
   const lore = settings.useLorebook ? scanLorebook(card.character_book, texts) : { active: [], dropped: [] };
-  const loreAt = (position: 'before_char' | 'after_char') =>
-    lore.active
-      .filter((a) => (a.entry.position === 'after_char' ? 'after_char' : 'before_char') === position)
-      .map((a) => ({ name: describeEntry(a), content: x(a.entry.content) }));
-  for (const e of loreAt('before_char')) sys(`Lorebook: ${e.name}`, e.content);
+  const loreAt = (place: LorePlace) => lore.active.filter((a) => lorePlace(a.entry) === place).map((a) => ({ name: describeEntry(a), content: x(a.entry.content) }));
+  for (const e of loreAt('before')) sys(`Lorebook: ${e.name}`, e.content);
 
   sys('Description', x(card.description));
   if (card.personality.trim()) sys('Personality', `${char}'s personality: ${x(card.personality)}`);
   if (card.scenario.trim()) sys('Scenario', `Scenario: ${x(card.scenario)}`);
-  for (const e of loreAt('after_char')) sys(`Lorebook: ${e.name}`, e.content);
+  for (const e of loreAt('after')) sys(`Lorebook: ${e.name}`, e.content);
   if (settings.persona.trim()) sys('Persona', `${user}'s persona: ${x(settings.persona)}`);
 
   if (settings.includeExamples) {
@@ -102,17 +225,20 @@ export function buildChatPrompt(
     }
   }
 
-  history.forEach((m, i) => {
-    const content = x(messageText(m));
-    if (!content) return;
-    parts.push({ label: i === 0 && m.role === 'assistant' ? 'Greeting' : m.role === 'user' ? user : m.role === 'assistant' ? char : 'System', role: m.role, content });
-  });
+  parts.push(...historyParts(chat, cardDepthInjections(card, lore.active, x), x, { char, user }));
 
   const phiDefault = x(settings.defaultPostHistory);
-  const phi = settings.useCardPostHistory && card.post_history_instructions.trim() ? x(card.post_history_instructions, phiDefault) : phiDefault;
-  sys(settings.useCardPostHistory && card.post_history_instructions.trim() ? 'Post-history instructions (card)' : 'Post-history instructions', phi);
+  const cardPhi = settings.useCardPostHistory && card.post_history_instructions.trim();
+  sys(cardPhi ? 'Post-history instructions (card)' : 'Post-history instructions', cardPhi ? x(card.post_history_instructions, phiDefault) : phiDefault);
+  if (mode === 'impersonate') sys('Impersonation prompt', x(DEFAULT_IMPERSONATION));
 
-  return { parts, messages: parts.map(({ role, content }) => ({ role, content })), lore };
+  return {
+    parts,
+    messages: toMessages(parts),
+    lore,
+    prefill: mode === 'continue' ? opts.continueText : undefined,
+    droppedHistory: 0,
+  };
 }
 
 /** A greeting's text for opening a chat: 0 is first_mes, 1+ the alternates. */

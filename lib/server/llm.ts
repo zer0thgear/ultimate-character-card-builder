@@ -21,7 +21,7 @@ function baseUrlFor(req: LlmRequest): string {
  *  out so each server uses its own defaults. */
 function openAiParams(kind: 'novelai' | 'openai', p: SamplerParams) {
   const body: Record<string, unknown> = { max_tokens: p.max_tokens };
-  const copy = ['temperature', 'top_p', 'top_k', 'min_p', 'frequency_penalty', 'presence_penalty'] as const;
+  const copy = ['temperature', 'top_p', 'top_k', 'min_p', 'top_a', 'frequency_penalty', 'presence_penalty', 'repetition_penalty', 'seed'] as const;
   for (const k of copy) if (typeof p[k] === 'number') body[k] = p[k];
   if (p.stop?.length) body.stop = p.stop;
   if (kind === 'novelai') {
@@ -132,7 +132,7 @@ async function* openAiStream(req: LlmRequest, signal: AbortSignal): AsyncGenerat
 
 async function* anthropicStream(req: LlmRequest, signal: AbortSignal): AsyncGenerator<LlmEvent> {
   const client = new Anthropic({ apiKey: req.connection.apiKey });
-  const { system, messages } = toAnthropic(req.messages);
+  const { system, messages } = toAnthropic(req.messages, { prefill: req.prefill });
   const p = req.connection.params;
   // Only what's set is sent: current models reject temperature/top_p/top_k,
   // so they're opt-in for the older models that take them.

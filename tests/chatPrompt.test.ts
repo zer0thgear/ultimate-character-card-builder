@@ -20,7 +20,7 @@ describe('buildChatPrompt', () => {
   const settings = { ...DEFAULT_CHAT_SETTINGS, userName: 'Bob', persona: 'A traveller.' };
 
   it('assembles the card in the usual order with macros expanded', () => {
-    const history = [newMessage('assistant', 'Welcome, {{user}}.'), newMessage('user', 'Nice sword.')];
+    const history = [{ ...newMessage('assistant', 'Welcome, {{user}}.'), id: 'greeting' }, newMessage('user', 'Nice sword.')];
     const { parts } = buildChatPrompt(card(), history, settings);
     expect(parts.map((p) => p.label)).toEqual([
       'Main prompt',

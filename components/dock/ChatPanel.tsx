@@ -7,10 +7,13 @@ import { useLlmStore } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
-import { buildChatPrompt, displayText, greetingText, messageText, newMessage, type BuiltPrompt } from '@/lib/chatPrompt';
+import { buildChatPrompt, displayText, greetingText, messageText, newMessage, type BuildOptions, type BuiltPrompt } from '@/lib/chatPrompt';
+import { buildPresetPrompt } from '@/lib/presetPrompt';
+import { presetParams } from '@/lib/stPreset';
 import { describeEntry } from '@/lib/lorebookScan';
 import { AutoTextarea, Button, IconButton, Modal, TokenBadge, Toggle, confirmDialog, cx, inputClass } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
+import { PresetPicker } from '@/components/llm/PresetManager';
 import { useTextTokens, formatTokens } from '@/lib/textTokens';
 import type { CardData } from '@/types/card';
 import type { ChatMessage } from '@/types/project';
@@ -22,7 +25,7 @@ import type { ChatMessage } from '@/types/project';
 export function ChatPanel() {
   const project = useProjectStore((s) => s.project);
   const { chat, list, loadFor, newChat, openChat, deleteChat, rename, setGreeting, setMessages } = useChatStore();
-  const { connections, chatConnectionId, setChatConnection, chatSettings } = useLlmStore();
+  const { connections, chatConnectionId, setChatConnection, chatSettings, presets } = useLlmStore();
   const connection = connections.find((c) => c.id === chatConnectionId) ?? null;
   const pending = useBridgeStore((s) => s.chatGreeting);
   const clearPending = useBridgeStore((s) => s.clearChat);
@@ -59,23 +62,38 @@ export function ChatPanel() {
     return g.trim() ? [{ ...newMessage('assistant', g), id: 'greeting' }, ...messages] : messages;
   };
 
+  const preset = chatSettings.presetId ? (presets.find((p) => p.id === chatSettings.presetId) ?? null) : null;
+  const overrides = preset && chatSettings.presetSamplers && connection ? presetParams(preset, connection.kind) : {};
+
+  /** The prompt for `messages` (greeting added), through the preset if one is on. */
+  const build = (messages: ChatMessage[], opts: BuildOptions = {}): BuiltPrompt => {
+    const full = { model: connection?.model, kind: connection?.kind, maxTokens: overrides.max_tokens ?? connection?.params.max_tokens, ...opts };
+    return preset ? buildPresetPrompt(card, history(messages), chatSettings, preset, full) : buildChatPrompt(card, history(messages), chatSettings, full);
+  };
+
+  /** Streams a completion for `built`, calling `onText` with the reply so far. */
+  const complete = (built: BuiltPrompt, onText: (full: string) => void) => {
+    setLastPrompt(built);
+    const messages = built.prefill !== undefined ? [...built.messages, { role: 'assistant' as const, content: built.prefill }] : built.messages;
+    return run(connection, messages, onText, { prefill: built.prefill !== undefined, params: overrides });
+  };
+
   /**
    * Generates a reply after `messages`: a new message, or with `target` a
    * new swipe of that message (the prompt then stops before it). With
-   * `continueFrom`, the target's text is sent as the start of the reply and
-   * the model carries on from it.
+   * `continueFrom`, the model carries on from the target's text, by
+   * prefilling it or with the preset's continue nudge.
    */
-  const reply = async (messages: ChatMessage[], target?: ChatMessage, continueFrom?: string) => {
-    const before = target ? messages.filter((m) => m.id !== target.id) : messages;
-    const built = buildChatPrompt(card, history(before), chatSettings);
-    const sent = continueFrom ? [...built.messages, { role: 'assistant' as const, content: continueFrom }] : built.messages;
-    setLastPrompt(built);
+  const reply = async (messages: ChatMessage[], target?: ChatMessage, continueFrom?: string, emptySend = false) => {
+    const built = continueFrom !== undefined
+      ? build(messages, { mode: 'continue', continueText: continueFrom })
+      : build(target ? messages.filter((m) => m.id !== target.id) : messages, { emptySend });
     const id = target?.id ?? crypto.randomUUID();
     const base = continueFrom ?? '';
     setStreamingId(id);
     if (!target) setMessages((m) => [...m, { ...newMessage('assistant', '', connection?.model), id }]);
-    else if (!continueFrom) setMessages((m) => m.map((x) => (x.id === id ? { ...x, swipes: [...x.swipes, ''], swipe: x.swipes.length } : x)));
-    const r = await run(connection, sent, (full) =>
+    else if (continueFrom === undefined) setMessages((m) => m.map((x) => (x.id === id ? { ...x, swipes: [...x.swipes, ''], swipe: x.swipes.length } : x)));
+    const r = await complete(built, (full) =>
       setMessages((m) => m.map((x) => (x.id === id ? { ...x, swipes: x.swipes.map((s, i) => (i === x.swipe ? base + (continueFrom && !/^\s/.test(full) && !/\s$/.test(base) ? ' ' : '') + full : s)) } : x))),
     );
     setStreamingId(null);
@@ -100,7 +118,7 @@ export function ChatPanel() {
       setMessages(() => messages);
       setInput('');
     }
-    await reply(messages);
+    await reply(messages, undefined, undefined, !text);
   };
 
   const regenerate = async () => {
@@ -117,7 +135,16 @@ export function ChatPanel() {
     await reply(chat.messages, last, messageText(last));
   };
 
-  const preview = () => setInspect(buildChatPrompt(card, history(chat?.messages ?? []), chatSettings));
+  /** Writes your next message for you, into the box, to edit and send. */
+  const impersonate = async () => {
+    if (!chat || running) return;
+    setInput('');
+    const r = await complete(build(chat.messages, { mode: 'impersonate' }), (full) => setInput(full));
+    if (r.error) toast(r.error, 'error');
+    else setInput(r.text.trim());
+  };
+
+  const preview = () => setInspect(build(chat?.messages ?? []));
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -229,6 +256,9 @@ export function ChatPanel() {
             </Button>
             <Button size="sm" disabled={running} onClick={() => void continueLast()} title="Continue the last reply">
               → Continue
+            </Button>
+            <Button size="sm" disabled={running} onClick={() => void impersonate()} title="Write your next message for you (it lands in the box to edit)">
+              🎭 Impersonate
             </Button>
             {lastPrompt && (
               <button type="button" className="ml-auto text-[11px] text-slate-500 hover:text-slate-300" onClick={() => setInspect(lastPrompt)}>
@@ -415,6 +445,7 @@ function Bubble({
 
 function ChatSettings({ onClose }: { onClose: () => void }) {
   const { chatSettings: s, setChatSettings, chatConnectionId, setChatConnection } = useLlmStore();
+  const usingPreset = !!s.presetId;
   return (
     <div className="flex max-h-[55%] flex-shrink-0 flex-col gap-3 overflow-y-auto border-b border-slate-800 bg-slate-950 p-3">
       <div className="flex items-center justify-between">
@@ -424,6 +455,7 @@ function ChatSettings({ onClose }: { onClose: () => void }) {
         </IconButton>
       </div>
       <ConnectionPicker value={chatConnectionId} onChange={setChatConnection} label="Model" />
+      <PresetPicker />
       <div className="grid gap-2 sm:grid-cols-[1fr_2fr]">
         <label className="flex flex-col gap-1 text-xs text-slate-400">
           Your name ({'{{user}}'})
@@ -434,19 +466,23 @@ function ChatSettings({ onClose }: { onClose: () => void }) {
           <input value={s.persona} onChange={(e) => setChatSettings({ persona: e.target.value })} placeholder="Optional: who you are in the chat" className={inputClass} />
         </label>
       </div>
-      <label className="flex flex-col gap-1 text-xs text-slate-400">
-        <span className="flex justify-between">
-          Main prompt <TokenBadge text={s.mainPrompt} />
-        </span>
-        <AutoTextarea value={s.mainPrompt} onChange={(e) => setChatSettings({ mainPrompt: e.target.value })} minRows={2} maxRows={8} />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-slate-400">
-        Default post-history instructions
-        <AutoTextarea value={s.defaultPostHistory} onChange={(e) => setChatSettings({ defaultPostHistory: e.target.value })} minRows={1} maxRows={6} placeholder="Optional, sent after the chat" />
-      </label>
+      {!usingPreset && (
+        <>
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
+            <span className="flex justify-between">
+              Main prompt <TokenBadge text={s.mainPrompt} />
+            </span>
+            <AutoTextarea value={s.mainPrompt} onChange={(e) => setChatSettings({ mainPrompt: e.target.value })} minRows={2} maxRows={8} />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
+            Default post-history instructions
+            <AutoTextarea value={s.defaultPostHistory} onChange={(e) => setChatSettings({ defaultPostHistory: e.target.value })} minRows={1} maxRows={6} placeholder="Optional, sent after the chat" />
+          </label>
+        </>
+      )}
       <div className="flex flex-wrap gap-x-4 gap-y-2">
-        <Toggle checked={s.useCardSystemPrompt} onChange={(v) => setChatSettings({ useCardSystemPrompt: v })} label={<span className="text-xs">Use the card&apos;s system prompt</span>} />
-        <Toggle checked={s.useCardPostHistory} onChange={(v) => setChatSettings({ useCardPostHistory: v })} label={<span className="text-xs">Use the card&apos;s post-history instructions</span>} />
+        <Toggle checked={s.useCardSystemPrompt} onChange={(v) => setChatSettings({ useCardSystemPrompt: v })} label={<span className="text-xs">Card&apos;s system prompt replaces {usingPreset ? 'Main Prompt' : 'the main prompt'}</span>} />
+        <Toggle checked={s.useCardPostHistory} onChange={(v) => setChatSettings({ useCardPostHistory: v })} label={<span className="text-xs">Card&apos;s post-history instructions replace {usingPreset ? 'Post-History Instructions' : 'the default'}</span>} />
         <Toggle checked={s.includeExamples} onChange={(v) => setChatSettings({ includeExamples: v })} label={<span className="text-xs">Send example messages</span>} />
         <Toggle checked={s.useLorebook} onChange={(v) => setChatSettings({ useLorebook: v })} label={<span className="text-xs">Use the lorebook</span>} />
       </div>
@@ -460,6 +496,12 @@ function PromptInspector({ prompt, onClose }: { prompt: BuiltPrompt; onClose: ()
   return (
     <Modal open onClose={onClose} title={`Prompt · ~${formatTokens(total)} tokens`} size="lg" footer={<Button onClick={() => void navigator.clipboard.writeText(JSON.stringify(prompt.messages, null, 2))}>Copy as JSON</Button>}>
       <div className="flex flex-col gap-3">
+        {(prompt.prefill !== undefined || prompt.droppedHistory > 0) && (
+          <div className="text-xs text-amber-300">
+            {prompt.droppedHistory > 0 && <div>{prompt.droppedHistory} oldest messages left out to fit the preset&apos;s context size.</div>}
+            {prompt.prefill !== undefined && <div>The reply starts from a prefill: “{prompt.prefill.slice(0, 120)}{prompt.prefill.length > 120 ? '…' : ''}”</div>}
+          </div>
+        )}
         <div className="text-xs text-slate-400">
           Lorebook: {prompt.lore.active.length ? prompt.lore.active.map((a) => `${describeEntry(a)} (${a.reason})`).join(' · ') : 'nothing fired'}
           {prompt.lore.dropped.length > 0 && <span className="text-amber-300"> · over budget: {prompt.lore.dropped.map(describeEntry).join(', ')}</span>}

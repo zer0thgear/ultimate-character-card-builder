@@ -5,6 +5,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { LlmConnection, ProviderKind } from '@/types/llm';
 import { DEFAULT_PARAMS } from '@/types/llm';
 import { DEFAULT_CHAT_SETTINGS, type ChatPromptSettings } from '@/lib/chatPrompt';
+import type { ChatPreset } from '@/lib/stPreset';
 import { useSessionStore } from '@/store/sessionStore';
 
 // LLM connections (keys included, in localStorage like the NovelAI key),
@@ -29,6 +30,11 @@ interface LlmState {
   chatConnectionId: string | null;
   assistConnectionId: string | null;
   chatSettings: ChatPromptSettings;
+  /** Imported SillyTavern chat-completion presets. */
+  presets: ChatPreset[];
+  addPreset: (p: ChatPreset) => void;
+  updatePreset: (id: string, patch: Partial<ChatPreset>) => void;
+  removePreset: (id: string) => void;
   addConnection: (kind: ProviderKind) => LlmConnection;
   updateConnection: (id: string, patch: Partial<LlmConnection>) => void;
   removeConnection: (id: string) => void;
@@ -44,6 +50,11 @@ export const useLlmStore = create<LlmState>()(
       chatConnectionId: null,
       assistConnectionId: null,
       chatSettings: DEFAULT_CHAT_SETTINGS,
+      presets: [],
+      addPreset: (preset) => set((s) => ({ presets: [...s.presets, preset], chatSettings: { ...s.chatSettings, presetId: preset.id } })),
+      updatePreset: (id, patch) => set((s) => ({ presets: s.presets.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
+      removePreset: (id) =>
+        set((s) => ({ presets: s.presets.filter((p) => p.id !== id), chatSettings: s.chatSettings.presetId === id ? { ...s.chatSettings, presetId: null } : s.chatSettings })),
       addConnection: (kind) => {
         const c = newConnection(kind);
         set((s) => ({

@@ -11,7 +11,7 @@ import type { LlmMessage } from '@/types/llm';
  * ones are folded into the user turn they sit beside; runs of one role are
  * merged; and an opening or closing user turn is added when missing.
  */
-export function toAnthropic(messages: LlmMessage[]): { system: string; messages: { role: 'user' | 'assistant'; content: string }[] } {
+export function toAnthropic(messages: LlmMessage[], opts: { prefill?: boolean } = {}): { system: string; messages: { role: 'user' | 'assistant'; content: string }[] } {
   const system: string[] = [];
   let i = 0;
   for (; i < messages.length && messages[i].role === 'system'; i++) system.push(messages[i].content);
@@ -29,7 +29,9 @@ export function toAnthropic(messages: LlmMessage[]): { system: string; messages:
     else push(m.role, m.content);
   }
   if (out[0]?.role !== 'user') out.unshift({ role: 'user', content: '[Start a new chat]' });
-  if (out[out.length - 1].role !== 'user') out.push({ role: 'user', content: '[Continue]' });
+  // A prefill stays last; older Claude models continue it, and newer ones
+  // (which refuse prefills) report so rather than silently dropping it.
+  if (out[out.length - 1].role !== 'user' && !opts.prefill) out.push({ role: 'user', content: '[Continue]' });
   return { system: system.join('\n\n'), messages: out };
 }
 
