@@ -1,5 +1,5 @@
 import { getConfig } from '@/lib/server/storage';
-import { libraryItems, scanLibrary } from '@/lib/server/library';
+import { libraryItems, scanLibrary, scanProgress } from '@/lib/server/library';
 import { handle } from '@/lib/server/http';
 import { searchLibrary } from '@/lib/librarySearch';
 
@@ -12,8 +12,13 @@ export async function GET(req: Request) {
   return handle(async () => {
     const url = new URL(req.url);
     const q = url.searchParams;
-    // A rescan on request; otherwise at most once a minute on its own.
-    await scanLibrary(q.get('rescan') === '1' ? 0 : 60_000);
+    // A rescan on request; otherwise at most once a minute on its own. It
+    // isn't waited for: results come from what's indexed so far, and the
+    // browser polls while `scan.scanning` is true.
+    void scanLibrary(q.get('rescan') === '1' ? 0 : 60_000);
+    // Give a quick scan (nothing new) a moment to finish, so the usual
+    // answer is complete rather than "still scanning".
+    await new Promise((r) => setTimeout(r, 150));
     const cfg = await getConfig();
     const all = await libraryItems();
 
@@ -54,6 +59,7 @@ export async function GET(req: Request) {
       roots: cfg.libraryFolders,
       folders,
       total: items.length,
+      scan: scanProgress(),
       items: items.slice(offset, offset + limit),
     });
   });

@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+/* Dark is the default and is designed in Tailwind's slate scale (as
+   NovelFrontEnd's components are). Light mode flips the slate scale end
+   for end, so every slate-950 background becomes slate-50 and every
+   slate-200 text becomes slate-800 without touching a component; accent
+   text shades are darkened to keep their contrast on white. */
+:root {
+  --background: #020617;
+  --foreground: #f1f5f9;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --color-slate-50: oklch(0.129 0.042 264.695);
+  --color-slate-100: oklch(0.208 0.042 265.755);
+  --color-slate-200: oklch(0.279 0.041 260.031);
+  --color-slate-300: oklch(0.372 0.044 257.287);
+  --color-slate-400: oklch(0.446 0.043 257.281);
+  --color-slate-500: oklch(0.554 0.046 257.417);
+  --color-slate-600: oklch(0.704 0.04 256.788);
+  --color-slate-700: oklch(0.869 0.022 252.894);
+  --color-slate-800: oklch(0.929 0.013 255.508);
+  --color-slate-900: oklch(0.968 0.007 247.896);
+  --color-slate-950: oklch(0.984 0.003 247.858);
+  --color-violet-200: oklch(0.432 0.232 292.759);
+  --color-violet-300: oklch(0.491 0.27 292.581);
+  --color-violet-400: oklch(0.541 0.281 293.009);
+  --color-emerald-300: oklch(0.508 0.118 165.612);
+  --color-emerald-400: oklch(0.596 0.145 163.225);
+  --color-amber-300: oklch(0.555 0.163 48.998);
+  --color-amber-400: oklch(0.666 0.179 58.318);
+  --color-red-300: oklch(0.505 0.213 27.518);
+  --color-red-400: oklch(0.577 0.245 27.325);
+  --color-sky-300: oklch(0.5 0.134 242.749);
+  --color-sky-400: oklch(0.588 0.158 241.966);
+  --color-pink-300: oklch(0.525 0.223 3.958);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans, Arial, sans-serif);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-slate-700);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-slate-600);
+}
+
+/* Chat messages: light markdown-ish styling for *actions* and "speech". */
+.chat-text em {
+  color: var(--color-slate-400);
+}
+.chat-text q {
+  color: var(--color-amber-200, #fde68a);
+  quotes: none;
+}
+:root[data-theme="light"] .chat-text q {
+  color: var(--color-amber-700);
+}
+
+/* Checkerboard behind images, so transparency shows. */
+.checker {
+  background-color: var(--color-slate-900);
+  background-image:
+    linear-gradient(45deg, var(--color-slate-800) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--color-slate-800) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--color-slate-800) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--color-slate-800) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}

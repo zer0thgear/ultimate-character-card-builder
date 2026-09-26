@@ -37,3 +37,16 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     return Response.json({ ok: true });
   });
 }
+
+/** Changes a kept gen's details (its label, say) without re-sending it. */
+export async function PATCH(req: Request, { params }: Ctx) {
+  const { id, file } = await params;
+  return handle(async () => {
+    const patch = (await req.json()) as Partial<KeptImage>;
+    const saved = await updateProject(id, (p) => ({
+      ...p,
+      kept: p.kept.map((k) => (k.file === file ? { ...k, ...patch, file, id: k.id } : k)),
+    }));
+    return Response.json(saved.kept.find((k) => k.file === file) ?? null);
+  });
+}

@@ -31,6 +31,8 @@ interface IndexFile {
 let index: IndexFile | null = null;
 let scanning: Promise<void> | null = null;
 let lastScan = 0;
+/** The folder list the last scan covered: a change forces a new scan. */
+let lastScanFolders = '';
 
 const idFor = (abs: string) => createHash('sha1').update(abs.toLowerCase()).digest('hex').slice(0, 16);
 const toSlash = (p: string) => p.split(path.sep).join('/');
@@ -63,13 +65,29 @@ async function* walk(dir: string): AsyncGenerator<string> {
   }
 }
 
-async function readInfo(abs: string): Promise<{ width: number; height: number; info: GenInfo }> {
-  const bytes = new Uint8Array(await fs.readFile(abs));
-  const size = pngSize(bytes);
-  let info: GenInfo = size ? genInfoFromPng(bytes) : {};
+/** The start of a file: enough for a PNG's text chunks, which NovelAI
+ *  writes before the image data. */
+async function readHead(abs: string, bytes = 64 * 1024): Promise<Uint8Array> {
+  const fh = await fs.open(abs, 'r');
+  try {
+    const buf = new Uint8Array(bytes);
+    const { bytesRead } = await fh.read(buf, 0, bytes, 0);
+    return buf.subarray(0, bytesRead);
+  } finally {
+    await fh.close();
+  }
+}
+
+async function readInfo(abs: string, fileSize: number): Promise<{ width: number; height: number; info: GenInfo }> {
+  const head = await readHead(abs);
+  const size = pngSize(head);
+  let info: GenInfo = size ? genInfoFromPng(head) : {};
+  // A text chunk past the head (rare: huge metadata, or written after the
+  // image data) needs the whole file.
+  if (size && !info.source && fileSize > head.length) info = genInfoFromPng(new Uint8Array(await fs.readFile(abs)));
   let { width = 0, height = 0 } = size ?? {};
   if (!size) {
-    const meta = await sharp(bytes).metadata().catch(() => null);
+    const meta = await sharp(abs).metadata().catch(() => null);
     width = meta?.width ?? 0;
     height = meta?.height ?? 0;
   }
@@ -77,7 +95,7 @@ async function readInfo(abs: string): Promise<{ width: number; height: number; i
   // NovelAI hides in the alpha channel. Only PNG/WebP keep alpha exactly.
   if (!info.source && width * height > 0 && width * height <= MAX_STEALTH_PIXELS && !/\.jpe?g$/i.test(abs)) {
     try {
-      const { data, info: raw } = await sharp(bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      const { data, info: raw } = await sharp(abs).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
       const stealth = await readStealth({ width: raw.width, height: raw.height, data }, async (b) => gunzipSync(b));
       if (stealth) info = genInfoFromStealth(stealth);
     } catch {
@@ -88,11 +106,24 @@ async function readInfo(abs: string): Promise<{ width: number; height: number; i
   return { width, height, info };
 }
 
+export interface ScanProgress {
+  scanning: boolean;
+  /** Files read so far, of those that were new or changed. */
+  done: number;
+  total: number;
+}
+
+const progress: ScanProgress = { scanning: false, done: 0, total: 0 };
+export const scanProgress = (): ScanProgress => ({ ...progress, scanning: !!scanning });
+
 async function runScan() {
   const cfg = await getConfig();
+  const folders = JSON.stringify(cfg.libraryFolders);
   const idx = await loadIndex();
   const seen = new Set<string>();
   const todo: { abs: string; size: number; mtime: number }[] = [];
+  progress.done = 0;
+  progress.total = 0;
   for (const root of cfg.libraryFolders) {
     for await (const abs of walk(path.resolve(root))) {
       seen.add(abs);
@@ -104,35 +135,51 @@ async function runScan() {
     }
   }
   for (const abs of Object.keys(idx.items)) if (!seen.has(abs)) delete idx.items[abs];
+  progress.total = todo.length;
 
   // A few at a time: sharp is threaded already, and this keeps memory flat.
-  const CONCURRENCY = 4;
+  // Results land in the in-memory index as they come, so searches during a
+  // long first scan already see what's been read; it's saved every so often.
+  const CONCURRENCY = 6;
   let next = 0;
+  let sinceSave = 0;
   await Promise.all(
     Array.from({ length: CONCURRENCY }, async () => {
       while (next < todo.length) {
         const { abs, size, mtime } = todo[next++];
         try {
-          const { width, height, info } = await readInfo(abs);
+          const { width, height, info } = await readInfo(abs, size);
           idx.items[abs] = { id: idFor(abs), name: path.basename(abs), size, mtime, width, height, info };
         } catch (err) {
           console.warn('Library: could not read', abs, err);
+        }
+        progress.done++;
+        if (++sinceSave >= 1000) {
+          sinceSave = 0;
+          await writeFileAtomic(INDEX_FILE, JSON.stringify(idx));
         }
       }
     }),
   );
   await writeFileAtomic(INDEX_FILE, JSON.stringify(idx));
   lastScan = Date.now();
+  lastScanFolders = folders;
 }
 
-/** Brings the index up to date. Concurrent callers share one scan; within
- *  `maxAgeMs` of the last one, nothing is rescanned. */
-export async function scanLibrary(maxAgeMs = 0) {
+/**
+ * Starts bringing the index up to date, if it isn't already. Within
+ * `maxAgeMs` of the last scan of the same folders, nothing is rescanned.
+ * Returns the running scan (callers may await it, or not).
+ */
+export async function scanLibrary(maxAgeMs = 0): Promise<void> {
   if (scanning) return scanning;
-  if (maxAgeMs && Date.now() - lastScan < maxAgeMs) return;
-  scanning = runScan().finally(() => {
-    scanning = null;
-  });
+  const folders = JSON.stringify((await getConfig()).libraryFolders);
+  if (maxAgeMs && folders === lastScanFolders && Date.now() - lastScan < maxAgeMs) return;
+  scanning = runScan()
+    .catch((err) => console.error('Library scan failed', err))
+    .finally(() => {
+      scanning = null;
+    });
   return scanning;
 }
 

@@ -100,11 +100,10 @@ export const useSettingsStore = create<SettingsState>()(
       name: 'uccb-gen-settings',
       storage: createJSONStorage(() => localStorage),
       // The card's prompt fields are saved with the card, not here.
-      partialize: (s) => {
-        const { set: _set, patch: _patch, basePrompts: _b, characters: _c, negativePrompt: _n, negativeTidbits: _t, ...rest } = s;
-        void _set, void _patch, void _b, void _c, void _n, void _t;
-        return rest;
-      },
+      partialize: (s) =>
+        Object.fromEntries(
+          Object.entries(s).filter(([k, v]) => typeof v !== 'function' && !(PROJECT_GEN_KEYS as readonly string[]).includes(k)),
+        ) as Partial<SettingsState>,
     },
   ),
 );

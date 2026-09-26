@@ -27,17 +27,22 @@ export function useTagSuggestions(query: string, model: NovelAIModel, apiKey: st
   const [isLoading, setIsLoading] = useState(false);
   const requestIdRef = useRef(0);
 
+  const trimmedQuery = query.trim();
+  const enabled = !!apiKey && trimmedQuery.length >= MIN_QUERY_LENGTH;
+  // Which query the current suggestions answer, so a different one (or
+  // none) shows nothing without an effect having to clear them.
+  const [answered, setAnswered] = useState('');
+
   useEffect(() => {
-    const trimmed = query.trim();
-    if (!apiKey || trimmed.length < MIN_QUERY_LENGTH) {
-      setSuggestions([]);
-      setIsLoading(false);
+    const trimmed = trimmedQuery;
+    if (!enabled) {
+      requestIdRef.current++; // drop any request still in flight
       return;
     }
 
     const thisRequestId = ++requestIdRef.current;
-    setIsLoading(true);
     const timer = setTimeout(async () => {
+      setIsLoading(true);
       try {
         const url = `https://image.novelai.net/ai/generate-image/suggest-tags?model=${encodeURIComponent(model)}&prompt=${encodeURIComponent(trimmed)}`;
         const res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
@@ -45,6 +50,7 @@ export function useTagSuggestions(query: string, model: NovelAIModel, apiKey: st
         if (!res.ok) { setSuggestions([]); return; }
         const data = await res.json();
         setSuggestions(Array.isArray(data.tags) ? data.tags.slice(0, 8) : []);
+        setAnswered(`${model}|${trimmed}`);
       } catch {
         if (thisRequestId === requestIdRef.current) setSuggestions([]);
       } finally {
@@ -53,7 +59,8 @@ export function useTagSuggestions(query: string, model: NovelAIModel, apiKey: st
     }, DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [query, model, apiKey]);
+  }, [trimmedQuery, enabled, model, apiKey]);
 
-  return { suggestions, isLoading };
+  const current = enabled && answered === `${model}|${trimmedQuery}`;
+  return { suggestions: current ? suggestions : [], isLoading: enabled && isLoading };
 }
