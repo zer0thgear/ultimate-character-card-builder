@@ -1,0 +1,22 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# testing
+/coverage
+
+# user data: card projects, chats, settings, gen library index. Never commit.
+/data/
+
+# misc
+.DS_Store
+*.pem
+.env*
+npm-debug.log*
+
+/.claude/settings.local.json
