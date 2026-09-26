@@ -38,7 +38,7 @@ export function LibraryPanel() {
   const [error, setError] = useState<string | null>(null);
   const [scan, setScan] = useState<{ scanning: boolean; done: number; total: number } | null>(null);
   const [open, setOpen] = useState<number | null>(null);
-  const [showFolders, setShowFolders] = useState(true);
+  const [showFolders, setShowFolders] = useState(false);
   const [help, setHelp] = useState(false);
   const request = useRef(0);
   const key = JSON.stringify([query, sort, scope, config.libraryFolders]);

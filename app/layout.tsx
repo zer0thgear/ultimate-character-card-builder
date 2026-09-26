@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 // Set the theme before first paint, so a light-mode user doesn't get a
 // flash of dark.
-const themeScript = `try{var t=localStorage.getItem('uccb-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}`;
+const themeScript = `try{var t=JSON.parse(localStorage.getItem('uccb-ui')||'{}').state.theme;if(t)document.documentElement.dataset.theme=t}catch(e){}`;
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

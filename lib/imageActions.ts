@@ -51,6 +51,8 @@ export const genFileName = (img: { timestamp: number; seed: number }) =>
 
 /** Saves to the output folder; asks for one first if none is set. */
 export async function saveToFolder(blob: Blob, filename: string, quiet = false): Promise<string | null> {
+  // The folder may have been set since the page loaded (another tab).
+  if (!useConfigStore.getState().config.outputDir) await useConfigStore.getState().load().catch(() => {});
   const { config } = useConfigStore.getState();
   if (!config.outputDir) {
     toast('Choose an output folder first.', 'info', { label: 'Settings', run: () => openSettings('folders') });

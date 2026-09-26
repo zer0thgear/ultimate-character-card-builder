@@ -36,11 +36,6 @@ export const useUiStore = create<UiState>()(
       theme: 'dark',
       setTheme: (theme) => {
         document.documentElement.dataset.theme = theme;
-        try {
-          localStorage.setItem('uccb-theme', theme);
-        } catch {
-          /* private mode */
-        }
         set({ theme });
       },
       editorTab: 'basics',

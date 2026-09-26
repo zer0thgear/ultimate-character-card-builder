@@ -77,3 +77,11 @@ export const useSessionStore = create<SessionState>((set) => ({
   retryNotice: null,
   setRetryNotice: (notice) => set({ retryNotice: notice }),
 }));
+
+// Like NovelAI's site, session gens live in memory: warn before the page
+// closes with some that were never kept or saved.
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', (e) => {
+    if (useSessionStore.getState().images.some((i) => !i.keptFile && !i.savedPath)) e.preventDefault();
+  });
+}

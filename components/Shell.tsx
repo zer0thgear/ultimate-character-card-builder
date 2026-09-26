@@ -20,9 +20,9 @@ export function Shell() {
   const workspace = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Theme is applied before paint by layout.tsx; keep the store in step.
-    const t = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
-    if (useUiStore.getState().theme !== t) useUiStore.getState().setTheme(t);
+    // layout.tsx applies the saved theme before paint; hydration can drop
+    // the attribute again, so it's set from the store once more here.
+    document.documentElement.dataset.theme = useUiStore.getState().theme;
     void useConfigStore.getState().load();
     const store = useProjectStore.getState();
     void store.refreshList().then(() => {

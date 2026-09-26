@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { forwardRef, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { formatTokens, useTextTokens } from '@/lib/textTokens';
 
@@ -156,14 +156,35 @@ export function NumberInput({
 export const AutoTextarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement> & { minRows?: number; maxRows?: number }>(
   function AutoTextarea({ minRows = 2, maxRows = 30, className, value, ...props }, outer) {
     const inner = useRef<HTMLTextAreaElement | null>(null);
-    useLayoutEffect(() => {
+    const lastWidth = useRef(0);
+    const fit = useCallback(() => {
+      const el = inner.current;
+      // Hidden (a dock panel that isn't open): nothing to measure yet; the
+      // observer below fits it once it's shown.
+      if (!el || el.offsetParent === null) return;
+      const style = getComputedStyle(el);
+      const line = parseFloat(style.lineHeight) || 20;
+      const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      const border = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+      el.style.height = '0px';
+      const content = el.scrollHeight; // content + padding
+      el.style.height = `${Math.min(Math.max(content, minRows * line + padding), maxRows * line + padding) + border}px`;
+    }, [minRows, maxRows]);
+    useLayoutEffect(fit, [value, fit]);
+    useEffect(() => {
       const el = inner.current;
       if (!el) return;
-      const line = parseFloat(getComputedStyle(el).lineHeight) || 20;
-      el.style.height = 'auto';
-      const pad = el.offsetHeight - el.clientHeight + parseFloat(getComputedStyle(el).paddingTop) + parseFloat(getComputedStyle(el).paddingBottom);
-      el.style.height = `${Math.min(Math.max(el.scrollHeight, minRows * line + pad), maxRows * line + pad)}px`;
-    }, [value, minRows, maxRows]);
+      // Refit when it's shown or its width changes (wrapping changes).
+      const ro = new ResizeObserver(([entry]) => {
+        const w = Math.round(entry.contentRect.width);
+        if (w !== lastWidth.current) {
+          lastWidth.current = w;
+          fit();
+        }
+      });
+      ro.observe(el);
+      return () => ro.disconnect();
+    }, [fit]);
     return (
       <textarea
         ref={(el) => {
