@@ -8,9 +8,10 @@ import { useLlmStore, requestConnection } from '@/store/llmStore';
 import type { LlmConnection, ProviderKind, SamplerParams } from '@/types/llm';
 import { api, streamLlm } from '@/lib/api';
 import { Button, IconButton, Modal, NumberInput, Tabs, Toggle, cx, inputClass } from '@/components/ui';
-import { PresetPicker } from '@/components/llm/PresetManager';
+import { AssistPresetPicker, PresetPicker } from '@/components/llm/PresetManager';
+import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 
-type SettingsTab = 'general' | 'folders' | 'llm' | 'chat';
+type SettingsTab = 'general' | 'folders' | 'llm' | 'chat' | 'assist';
 
 const useSettingsDialog = create<{ tab: SettingsTab | null; set: (t: SettingsTab | null) => void }>((set) => ({ tab: null, set: (tab) => set({ tab }) }));
 export const openSettings = (tab: SettingsTab = 'general') => useSettingsDialog.getState().set(tab);
@@ -29,11 +30,13 @@ export function SettingsDialog() {
           { value: 'folders', label: 'Folders' },
           { value: 'llm', label: 'LLM connections' },
           { value: 'chat', label: 'Chat preset' },
+          { value: 'assist', label: 'Assistant' },
         ]}
       />
       {tab === 'general' && <GeneralTab />}
       {tab === 'folders' && <FoldersTab />}
       {tab === 'llm' && <LlmTab />}
+      {tab === 'assist' && <AssistTab />}
       {tab === 'chat' && (
         <div className="flex flex-col gap-3">
           <p className="text-xs text-slate-500">
@@ -421,5 +424,18 @@ function ExtraJson({ connection: c }: { connection: LlmConnection }) {
         className={cx(inputClass, 'font-mono text-xs', bad && 'border-red-500')}
       />
     </label>
+  );
+}
+
+function AssistTab() {
+  const { assistConnectionId, setAssistConnection } = useLlmStore();
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs text-slate-500">
+        The writing assistant: ✨ on every field, new greetings, lorebook entries, tag suggestions, the card review, the art prompts and Brainstorm. It can use its own SillyTavern preset, separate from the chat&apos;s.
+      </p>
+      <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant model" />
+      <AssistPresetPicker />
+    </div>
   );
 }

@@ -3,7 +3,10 @@
 import { useCallback, useRef, useState } from 'react';
 import type { LlmConnection, LlmMessage, SamplerParams } from '@/types/llm';
 import { streamLlm } from '@/lib/api';
-import { requestConnection } from '@/store/llmStore';
+import { requestConnection, useLlmStore } from '@/store/llmStore';
+import { useProjectStore } from '@/store/projectStore';
+import { presetParams } from '@/lib/stPreset';
+import { wrapWithPreset } from '@/lib/assistPreset';
 
 export interface StreamResult {
   text: string;
@@ -76,6 +79,27 @@ export function useLlmStream() {
     return result;
   }, []);
 
+  /** A writing-assistant request: the assistant's connection, and its
+   *  SillyTavern preset (prompts and samplers) if one is set. */
+  const runAssist = useCallback(
+    (messages: LlmMessage[], onText?: (full: string) => void) => {
+      const { connections, assistConnectionId, assistSettings: a, presets, chatSettings } = useLlmStore.getState();
+      const connection = connections.find((c) => c.id === assistConnectionId) ?? null;
+      const preset = a.presetId ? presets.find((p) => p.id === a.presetId) : undefined;
+      if (!preset || !connection) return run(connection, messages, onText);
+      const wrapped = a.prompts
+        ? wrapWithPreset(messages, preset, {
+            card: useProjectStore.getState().project?.card.data,
+            userName: chatSettings.userName,
+            persona: chatSettings.persona,
+            excluded: a.excluded[preset.id] ?? [],
+          })
+        : messages;
+      return run(connection, wrapped, onText, { params: a.samplers ? presetParams(preset, connection.kind) : {} });
+    },
+    [run],
+  );
+
   const stop = useCallback(() => abortRef.current?.abort(), []);
   const reset = useCallback(() => {
     setText('');
@@ -83,5 +107,5 @@ export function useLlmStream() {
     setError(null);
   }, []);
 
-  return { run, stop, reset, text, reasoning, running, error };
+  return { run, runAssist, stop, reset, text, reasoning, running, error };
 }

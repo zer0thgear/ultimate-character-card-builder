@@ -26,8 +26,8 @@ export function BrainstormPanel() {
   const project = useProjectStore((s) => s.project);
   const setNotes = useProjectStore((s) => s.setNotes);
   const { threads, set } = useBrainstorm();
-  const { connections, assistConnectionId, setAssistConnection } = useLlmStore();
-  const { run, stop, running, text } = useLlmStream();
+  const { assistConnectionId, setAssistConnection } = useLlmStore();
+  const { runAssist, stop, running, text } = useLlmStream();
   const [input, setInput] = useState('');
   const bottom = useRef<HTMLDivElement>(null);
   const messages = project ? (threads[project.id] ?? []) : [];
@@ -46,7 +46,7 @@ export function BrainstormPanel() {
     set(project.id, next);
     setInput('');
     const card = useProjectStore.getState().project?.card.data ?? project.card.data;
-    const r = await run(connections.find((c) => c.id === assistConnectionId) ?? null, [
+    const r = await runAssist([
       { role: 'system', content: `${SYSTEM}\n\n<card>\n${cardContext(card, undefined, 20000)}\n</card>` },
       ...next,
     ]);

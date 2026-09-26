@@ -77,19 +77,18 @@ function FocusEditor({ path, onClose }: { path: string; onClose: () => void }) {
 function AssistDialog({ path, onClose }: { path: string; onClose: () => void }) {
   const card = useProjectStore((s) => s.project?.card.data);
   const updateCard = useProjectStore((s) => s.updateCard);
-  const { connections, assistConnectionId, setAssistConnection } = useLlmStore();
-  const connection = connections.find((c) => c.id === assistConnectionId) ?? null;
+  const { assistConnectionId, setAssistConnection } = useLlmStore();
   const current = card ? getPath(card, path) : '';
   const [action, setAction] = useState<FieldAction>(current.trim() ? 'rewrite' : 'draft');
   const [instruction, setInstruction] = useState('');
   const [edited, setDraft] = useState('');
-  const { run, stop, text, reasoning, running, error } = useLlmStream();
+  const { runAssist, stop, text, reasoning, running, error } = useLlmStream();
   const draft = running ? text : edited;
 
   if (!card) return null;
   const label = fieldLabel(card, path);
   const go = async () => {
-    const r = await run(connection, fieldActionMessages(card, path, action, instruction));
+    const r = await runAssist(fieldActionMessages(card, path, action, instruction));
     setDraft(r.text.trim());
   };
   const apply = (mode: 'replace' | 'append') => {

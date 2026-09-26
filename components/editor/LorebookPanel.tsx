@@ -286,9 +286,9 @@ function KeyTester({ book }: { book: Lorebook }) {
 
 function WriteEntryDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (e: Partial<LorebookEntry>) => void }) {
   const card = useProjectStore((s) => s.project?.card.data);
-  const { connections, assistConnectionId, setAssistConnection } = useLlmStore();
+  const { assistConnectionId, setAssistConnection } = useLlmStore();
   const [topic, setTopic] = useState('');
-  const { run, stop, text, running, error } = useLlmStream();
+  const { runAssist, stop, text, running, error } = useLlmStream();
   const parsed = parseLorebookEntry(text);
   if (!card) return null;
   return (
@@ -325,7 +325,7 @@ function WriteEntryDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (e: 
             autoFocus
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && topic.trim() && !running && void run(connections.find((c) => c.id === assistConnectionId) ?? null, lorebookEntryMessages(card, topic))}
+            onKeyDown={(e) => e.key === 'Enter' && topic.trim() && !running && void runAssist(lorebookEntryMessages(card, topic))}
             placeholder='What about? e.g. "her hometown", "the royal guard"'
             className={inputClass}
           />
@@ -334,7 +334,7 @@ function WriteEntryDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (e: 
               Stop
             </Button>
           ) : (
-            <Button variant="primary" disabled={!topic.trim()} onClick={() => void run(connections.find((c) => c.id === assistConnectionId) ?? null, lorebookEntryMessages(card, topic))}>
+            <Button variant="primary" disabled={!topic.trim()} onClick={() => void runAssist(lorebookEntryMessages(card, topic))}>
               Write
             </Button>
           )}

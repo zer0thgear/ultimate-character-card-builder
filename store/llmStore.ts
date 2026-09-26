@@ -25,11 +25,26 @@ export function newConnection(kind: ProviderKind): LlmConnection {
   };
 }
 
+/** A SillyTavern preset around the writing assistant's requests. */
+export interface AssistSettings {
+  presetId: string | null;
+  /** Use the preset's samplers over the assistant connection's. */
+  samplers: boolean;
+  /** Include the preset's own prompts (see lib/assistPreset.ts). */
+  prompts: boolean;
+  /** Per preset, the prompts left out of assistant requests. */
+  excluded: Record<string, string[]>;
+}
+
+export const DEFAULT_ASSIST_SETTINGS: AssistSettings = { presetId: null, samplers: true, prompts: true, excluded: {} };
+
 interface LlmState {
   connections: LlmConnection[];
   chatConnectionId: string | null;
   assistConnectionId: string | null;
   chatSettings: ChatPromptSettings;
+  assistSettings: AssistSettings;
+  setAssistSettings: (patch: Partial<AssistSettings>) => void;
   /** Imported SillyTavern chat-completion presets. */
   presets: ChatPreset[];
   addPreset: (p: ChatPreset) => void;
@@ -50,11 +65,17 @@ export const useLlmStore = create<LlmState>()(
       chatConnectionId: null,
       assistConnectionId: null,
       chatSettings: DEFAULT_CHAT_SETTINGS,
+      assistSettings: DEFAULT_ASSIST_SETTINGS,
+      setAssistSettings: (patch) => set((s) => ({ assistSettings: { ...s.assistSettings, ...patch } })),
       presets: [],
       addPreset: (preset) => set((s) => ({ presets: [...s.presets, preset], chatSettings: { ...s.chatSettings, presetId: preset.id } })),
       updatePreset: (id, patch) => set((s) => ({ presets: s.presets.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
       removePreset: (id) =>
-        set((s) => ({ presets: s.presets.filter((p) => p.id !== id), chatSettings: s.chatSettings.presetId === id ? { ...s.chatSettings, presetId: null } : s.chatSettings })),
+        set((s) => ({
+          presets: s.presets.filter((p) => p.id !== id),
+          chatSettings: s.chatSettings.presetId === id ? { ...s.chatSettings, presetId: null } : s.chatSettings,
+          assistSettings: s.assistSettings.presetId === id ? { ...s.assistSettings, presetId: null } : s.assistSettings,
+        })),
       addConnection: (kind) => {
         const c = newConnection(kind);
         set((s) => ({
@@ -85,7 +106,12 @@ export const useLlmStore = create<LlmState>()(
       storage: createJSONStorage(() => localStorage),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<LlmState>;
-        return { ...current, ...p, chatSettings: { ...DEFAULT_CHAT_SETTINGS, ...(p.chatSettings ?? {}) } };
+        return {
+          ...current,
+          ...p,
+          chatSettings: { ...DEFAULT_CHAT_SETTINGS, ...(p.chatSettings ?? {}) },
+          assistSettings: { ...DEFAULT_ASSIST_SETTINGS, ...(p.assistSettings ?? {}) },
+        };
       },
     },
   ),

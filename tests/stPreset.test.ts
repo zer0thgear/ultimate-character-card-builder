@@ -192,3 +192,29 @@ describe('buildPresetPrompt', () => {
     expect(b.parts.find((p) => p.label === 'Bob')?.content).toBe('Bob: Nice sword.');
   });
 });
+
+describe('wrapWithPreset (the writing assistant)', () => {
+  const task = [
+    { role: 'system' as const, content: 'You help write cards.' },
+    { role: 'user' as const, content: 'Rewrite the description.' },
+  ];
+
+  it("puts the preset's own prompts around the request, skipping placeholders", async () => {
+    const { wrapWithPreset, assistablePrompts } = await import('@/lib/assistPreset');
+    const p = parseStPreset(ST_PRESET);
+    // Enabled, with text: Main (before), Post-History and the in-chat one (after).
+    expect(assistablePrompts(p).map((a) => [a.prompt.identifier, a.before])).toEqual([
+      ['main', true],
+      ['jailbreak', false],
+      ['abc-123', false],
+    ]);
+    const out = wrapWithPreset(task, p, { card: card(), userName: 'Bob', persona: '', excluded: [] });
+    expect(out.map((m) => m.content)).toEqual(["Write Ann's next reply.", 'You help write cards.', 'Rewrite the description.', 'Keep it grim.', '(Stay terse, Bob.)']);
+  });
+
+  it('leaves out excluded prompts', async () => {
+    const { wrapWithPreset } = await import('@/lib/assistPreset');
+    const out = wrapWithPreset(task, parseStPreset(ST_PRESET), { card: card(), userName: 'Bob', persona: '', excluded: ['main', 'abc-123'] });
+    expect(out.map((m) => m.content)).toEqual(['You help write cards.', 'Rewrite the description.', 'Keep it .']);
+  });
+});

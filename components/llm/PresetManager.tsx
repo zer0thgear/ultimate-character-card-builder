@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useLlmStore } from '@/store/llmStore';
 import { toast } from '@/store/uiStore';
 import { parseStPreset, PresetImportError, type ChatPreset } from '@/lib/stPreset';
+import { assistablePrompts } from '@/lib/assistPreset';
 import { SortableList, arrayMove } from '@/components/SortableList';
 import { AutoTextarea, Button, IconButton, TokenBadge, Toggle, confirmDialog, cx, inputClass, pickFiles } from '@/components/ui';
 
@@ -144,6 +145,60 @@ function PromptManager({ preset }: { preset: ChatPreset }) {
           );
         }}
       </SortableList>
+    </div>
+  );
+}
+
+/** The writing assistant's preset: which one, whether its samplers and
+ *  prompts apply, and which of its prompts to leave out. Separate from the
+ *  chat's, so a roleplay preset can drive chats while the assistant uses
+ *  another (or the same one, minus its "write the next reply" prompts). */
+export function AssistPresetPicker() {
+  const { presets, assistSettings: a, setAssistSettings } = useLlmStore();
+  const preset = presets.find((p) => p.id === a.presetId) ?? null;
+  const excluded = preset ? (a.excluded[preset.id] ?? []) : [];
+  const prompts = preset ? assistablePrompts(preset) : [];
+  const toggle = (id: string, on: boolean) =>
+    preset && setAssistSettings({ excluded: { ...a.excluded, [preset.id]: on ? excluded.filter((x) => x !== id) : [...excluded, id] } });
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-slate-800 p-2">
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs whitespace-nowrap text-slate-400">Assistant preset</span>
+        <select value={a.presetId ?? ''} onChange={(e) => setAssistSettings({ presetId: e.target.value || null })} className={cx(inputClass, 'py-1 text-xs')}>
+          <option value="">None: the assistant&apos;s own instructions only</option>
+          {presets.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      {presets.length === 0 && <p className="text-[11px] text-slate-500">Import presets under Chat preset first; any of them can be used here too.</p>}
+      {preset && (
+        <>
+          <Toggle checked={a.samplers} onChange={(samplers) => setAssistSettings({ samplers })} label={<span className="text-xs">Use its samplers ({samplerSummary(preset)})</span>} />
+          <Toggle checked={a.prompts} onChange={(p) => setAssistSettings({ prompts: p })} label={<span className="text-xs">Include its prompts around each request</span>} />
+          {a.prompts && (
+            <div className="flex flex-col gap-1">
+              <p className="text-[11px] text-slate-500">
+                Prompts ordered before Chat History go before the assistant&apos;s request, the rest after it. The card is already sent, so placeholders are skipped. Untick any that fight a writing task (say, &quot;write {'{{char}}'}&apos;s next reply&quot;).
+              </p>
+              {prompts.length === 0 && <p className="text-[11px] text-slate-500">This preset has no prompts of its own switched on.</p>}
+              {prompts.map(({ prompt, before }) => (
+                <label key={prompt.identifier} className="flex items-center gap-2 rounded border border-slate-800 px-2 py-1 text-xs">
+                  <input type="checkbox" checked={!excluded.includes(prompt.identifier)} onChange={(e) => toggle(prompt.identifier, e.target.checked)} className="accent-violet-500" />
+                  <span className="min-w-0 flex-1 truncate text-slate-200" title={prompt.content}>
+                    {prompt.name}
+                  </span>
+                  <span className="text-[10px] text-slate-500">{before ? 'before' : 'after'}</span>
+                  <TokenBadge text={prompt.content} />
+                </label>
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

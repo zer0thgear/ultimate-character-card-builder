@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSettingsStore, DEFAULT_NEGATIVE } from '@/store/settingsStore';
 import { useSessionStore, type SessionImage } from '@/store/sessionStore';
 import { useProjectStore } from '@/store/projectStore';
-import { useLlmStore } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { useConfigStore, toast } from '@/store/uiStore';
 import { useGenerate } from '@/hooks/useGenerate';
@@ -444,15 +443,14 @@ function PromptForm() {
 
 function SceneSection({ text, onChange, model, apiKey, meter }: { text: string; onChange: (v: string) => void; model: NovelAIModel; apiKey: string; meter: React.ReactNode }) {
   const card = useProjectStore((s) => s.project?.card.data);
-  const { connections, assistConnectionId } = useLlmStore();
   const illustrate = useBridgeStore((s) => s.illustrate);
   const clearIllustrate = useBridgeStore((s) => s.clearIllustrate);
-  const { run, running, stop } = useLlmStream();
+  const { runAssist, running, stop } = useLlmStream();
   const [pickOpen, setPickOpen] = useState(false);
 
   const fromText = async (scene: string) => {
     if (!card) return;
-    const r = await run(connections.find((c) => c.id === assistConnectionId) ?? null, sceneTagsMessages(card, scene, ''));
+    const r = await runAssist(sceneTagsMessages(card, scene, ''));
     if (r.error) return toast(r.error, 'error');
     const tags = cleanTags(r.text);
     if (tags) {
@@ -519,8 +517,7 @@ function CharactersSection({ counts }: { counts: Record<string, { prompt: number
   const { characters, set, model, useCoords } = useSettingsStore();
   const apiKey = useSessionStore((s) => s.apiKey);
   const card = useProjectStore((s) => s.project?.card.data);
-  const { connections, assistConnectionId } = useLlmStore();
-  const { run, running, stop } = useLlmStream();
+  const { runAssist, running, stop } = useLlmStream();
   const [openUc, setOpenUc] = useState<Set<string>>(new Set());
   const max = maxCharacters(model);
   const active = characters.filter((c) => !c.archived);
@@ -531,7 +528,7 @@ function CharactersSection({ counts }: { counts: Record<string, { prompt: number
 
   const appearance = async (target?: CharacterPromptEntry) => {
     if (!card) return;
-    const r = await run(connections.find((c) => c.id === assistConnectionId) ?? null, appearanceTagsMessages(card, ''));
+    const r = await runAssist(appearanceTagsMessages(card, ''));
     if (r.error) return toast(r.error, 'error');
     const tags = cleanTags(r.text);
     if (!tags) return;

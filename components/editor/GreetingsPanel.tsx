@@ -181,14 +181,14 @@ function GreetingText({ path }: { path: string }) {
 function NewGreetingDialog({ onClose }: { onClose: () => void }) {
   const card = useProjectStore((s) => s.project?.card.data);
   const updateCard = useProjectStore((s) => s.updateCard);
-  const { connections, assistConnectionId, setAssistConnection } = useLlmStore();
+  const { assistConnectionId, setAssistConnection } = useLlmStore();
   const [instruction, setInstruction] = useState('');
-  const { run, stop, text, running, error } = useLlmStream();
+  const { runAssist, stop, text, running, error } = useLlmStream();
   const [draft, setDraft] = useState<string | null>(null);
   if (!card) return null;
   const go = async () => {
     setDraft(null);
-    const r = await run(connections.find((c) => c.id === assistConnectionId) ?? null, newGreetingMessages(card, instruction));
+    const r = await runAssist(newGreetingMessages(card, instruction));
     setDraft(r.text.trim());
   };
   const shown = draft ?? text;

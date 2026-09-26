@@ -35,11 +35,11 @@ export function CreatorPanel() {
   const updateCard = useProjectStore((s) => s.updateCard);
   const [creator, setCreator] = useCardField('creator');
   const [version, setVersion] = useCardField('character_version');
-  const { connections, assistConnectionId, setAssistConnection } = useLlmStore();
-  const { run, running } = useLlmStream();
+  const { assistConnectionId, setAssistConnection } = useLlmStore();
+  const { runAssist, running } = useLlmStream();
   if (!card) return null;
   const suggestTags = async () => {
-    const r = await run(connections.find((c) => c.id === assistConnectionId) ?? null, cardTagsMessages(card));
+    const r = await runAssist(cardTagsMessages(card));
     if (r.error) return toast(r.error, 'error');
     const tags = r.text.split(',').map((t) => t.trim().replace(/^["'#]|["'.]$/g, '').toLowerCase()).filter(Boolean);
     updateCard((d) => ({ ...d, tags: [...new Set([...d.tags, ...tags])] }));
@@ -110,8 +110,8 @@ export function NotesPanel() {
   const notes = useProjectStore((s) => s.project?.notes ?? '');
   const setNotes = useProjectStore((s) => s.setNotes);
   const card = useProjectStore((s) => s.project?.card.data);
-  const { connections, assistConnectionId, setAssistConnection } = useLlmStore();
-  const { run, stop, text, running, error } = useLlmStream();
+  const { assistConnectionId, setAssistConnection } = useLlmStore();
+  const { runAssist, stop, text, running, error } = useLlmStream();
   return (
     <div className="flex flex-col gap-5">
       <Section title="Notes" actions={<TokenBadge text={notes} />}>
@@ -126,7 +126,7 @@ export function NotesPanel() {
               Stop
             </Button>
           ) : (
-            <Button size="sm" disabled={!card} onClick={() => card && void run(connections.find((c) => c.id === assistConnectionId) ?? null, critiqueMessages(card))}>
+            <Button size="sm" disabled={!card} onClick={() => card && void runAssist(critiqueMessages(card))}>
               ✨ Review the card
             </Button>
           )

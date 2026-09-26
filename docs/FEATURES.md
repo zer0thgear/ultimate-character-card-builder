@@ -70,6 +70,8 @@ Search is GenBrowser's: comma-separated terms, all required; `-term` excludes; `
 - **Use the preset's samplers** puts its temperature, top P/K/A, min P, penalties, max tokens and seed over the connection's (for Claude, only length and reasoning effort, since current models refuse the rest).
 - **Prompts** opens its prompt manager: switch prompts on and off, drag to reorder, edit text, role and depth. Changes apply to UCCB's copy.
 
+**The writing assistant can use a preset too** (Settings → Assistant), chosen separately from the chat's. Its samplers can apply, and its own prompts are wrapped around every assistant request (✨ on fields, new greetings, lorebook entries, tags, the review, the art prompts, Brainstorm): those ordered before Chat History go first, the rest after. The card is already in the request, so placeholders are skipped. Untick any prompt that fights a writing task, such as a roleplay "write {{char}}'s next reply"; that choice is the assistant's alone and doesn't touch the chat.
+
 Text-completion (instruct/context) presets aren't supported yet.
 
 ## Brainstorm
