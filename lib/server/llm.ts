@@ -64,8 +64,7 @@ async function* openAiStream(req: LlmRequest, signal: AbortSignal): AsyncGenerat
     signal,
   });
   if (!res.ok || !res.body) {
-    const hint = hasImages(req) ? ` ${VISION_HINT}` : '';
-    yield { type: 'error', status: res.status, message: `${res.status}: ${await errorText(res)}${hint}` };
+    yield { type: 'error', status: res.status, message: withVisionHint(req, `${res.status}: ${await errorText(res)}`) };
     return;
   }
   const reader = res.body.getReader();
@@ -175,13 +174,19 @@ async function* anthropicStream(req: LlmRequest, signal: AbortSignal): AsyncGene
     };
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
-      const hint = hasImages(req) && err.status === 400 ? ` ${VISION_HINT}` : '';
-      yield { type: 'error', status: err.status, message: `${`${err.status ?? ''} ${err.message}`.trim()}${hint}` };
+      const message = `${err.status ?? ''} ${err.message}`.trim();
+      yield { type: 'error', status: err.status, message: err.status === 400 ? withVisionHint(req, message) : message };
     } else throw err;
   }
 }
 
 const hasImages = (req: LlmRequest) => req.messages.some((m) => m.images?.length);
+
+/** A provider's error, with the vision hint after it when pictures went. */
+function withVisionHint(req: LlmRequest, message: string): string {
+  if (!hasImages(req)) return message;
+  return `${message.trim()}${/[.!?]$/.test(message.trim()) ? '' : '.'} ${VISION_HINT}`;
+}
 
 export function streamChat(req: LlmRequest, signal: AbortSignal): AsyncGenerator<LlmEvent> {
   // NovelAI's chat API takes text only (its messages' content is a string).
