@@ -49,7 +49,7 @@ export function ImagePanel() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="h-[46%] min-h-48 flex-shrink-0 border-b border-slate-800 phone:h-[38%] phone:min-h-40">
-        <ImageViewer image={shown} preview={generating > 0 ? streamPreview : null} generating={generating > 0} />
+        <ImageViewer image={shown} all={mine} preview={generating > 0 ? streamPreview : null} generating={generating > 0} />
       </div>
       {mine.length > 1 && <HistoryStrip images={mine} selected={shown?.id} />}
       <div className="min-h-0 flex-1 overflow-y-auto p-3">

@@ -12,8 +12,14 @@ import { openLightbox } from '@/components/Lightbox';
  *  the Edit Image or Inpaint canvas on it. */
 export const sendToImg2Img = (blob: Blob, open?: EditorMode) => useBridgeStore.getState().sendToImg2Img(blob, open);
 
-export function ImageViewer({ image, preview, generating }: { image?: SessionImage; preview: string | null; generating: boolean }) {
+export function ImageViewer({ image, all = [], preview, generating }: { image?: SessionImage; all?: SessionImage[]; preview: string | null; generating: boolean }) {
   const removeImages = useSessionStore((s) => s.removeImages);
+  const select = useSessionStore((s) => s.select);
+  /** Full screen, swiping through this card's gens; the viewer follows. */
+  const fullscreen = (img: SessionImage) => {
+    const list = all.some((i) => i.id === img.id) ? all : [img];
+    openLightbox(list.map((i) => i.url), list.findIndex((i) => i.id === img.id), (n) => select(list[n].id));
+  };
   const set = useSettingsStore((s) => s.set);
   const src = preview ?? image?.url;
   return (
@@ -25,7 +31,7 @@ export function ImageViewer({ image, preview, generating }: { image?: SessionIma
             src={src}
             alt=""
             title={image && !preview ? 'Tap for full screen' : undefined}
-            onClick={() => image && !preview && openLightbox(image.url)}
+            onClick={() => image && !preview && fullscreen(image)}
             className={cx('max-h-full max-w-full object-contain', preview ? 'opacity-80' : image && 'cursor-zoom-in')}
           />
         ) : (
@@ -45,7 +51,7 @@ export function ImageViewer({ image, preview, generating }: { image?: SessionIma
             {image.savedPath ? '✓ Saved' : 'Save to folder'}
           </Button>
           <div className="ml-auto flex items-center">
-            <IconButton title="Full screen" onClick={() => openLightbox(image.url)}>
+            <IconButton title="Full screen" onClick={() => fullscreen(image)}>
               ⛶
             </IconButton>
             <IconButton title="Download" onClick={() => downloadBlob(image.blob, genFileName(image), 'image/png')}>

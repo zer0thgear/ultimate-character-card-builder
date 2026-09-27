@@ -201,13 +201,13 @@ export function LibraryPanel() {
           )}
         </div>
       </div>
-      {open !== null && items[open] && <LibraryViewer item={items[open]} onClose={() => setOpen(null)} onStep={(d) => setOpen((o) => (o === null ? o : Math.max(0, Math.min(items.length - 1, o + d))))} onSearch={(t) => setQ(t)} />}
+      {open !== null && items[open] && <LibraryViewer item={items[open]} onFullscreen={() => openLightbox(items.map((it) => api.libraryFile(it.id)), open, setOpen)} onClose={() => setOpen(null)} onStep={(d) => setOpen((o) => (o === null ? o : Math.max(0, Math.min(items.length - 1, o + d))))} onSearch={(t) => setQ(t)} />}
       {help && <SearchHelp onClose={() => setHelp(false)} />}
     </div>
   );
 }
 
-function LibraryViewer({ item, onClose, onStep, onSearch }: { item: LibraryItem; onClose: () => void; onStep: (d: number) => void; onSearch: (text: string) => void }) {
+function LibraryViewer({ item, onClose, onStep, onSearch, onFullscreen }: { item: LibraryItem; onClose: () => void; onStep: (d: number) => void; onSearch: (text: string) => void; onFullscreen: () => void }) {
   const hasProject = useProjectStore((s) => !!s.project);
   const blob = async () => (await fetch(api.libraryFile(item.id))).blob();
   useEffect(() => {
@@ -258,7 +258,7 @@ function LibraryViewer({ item, onClose, onStep, onSearch }: { item: LibraryItem;
       <div className="flex flex-col gap-3 md:flex-row">
         <div className="checker flex flex-1 items-center justify-center rounded-md">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={api.libraryFile(item.id)} alt="" title="Tap for full screen" onClick={() => openLightbox(api.libraryFile(item.id))} className="max-h-[65vh] cursor-zoom-in object-contain" />
+          <img src={api.libraryFile(item.id)} alt="" title="Tap for full screen" onClick={onFullscreen} className="max-h-[65vh] cursor-zoom-in object-contain" />
         </div>
         <div className="flex w-full flex-col gap-2 overflow-y-auto md:max-h-[65vh] md:w-80">
           <div className="text-xs text-slate-500">

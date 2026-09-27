@@ -82,7 +82,18 @@ export function GalleryPanel() {
           </div>
         )}
       </Section>
-      {view && <KeptViewer projectId={project.id} item={view.item} onClose={() => setView(null)} />}
+      {view && (
+        <KeptViewer
+          projectId={project.id}
+          item={view.item}
+          onClose={() => setView(null)}
+          onFullscreen={() => {
+            // Swipes through the kept gens, in the grid's order; the dialog follows.
+            const kept = [...project.kept].reverse();
+            openLightbox(kept.map((k) => api.keptUrl(project.id, k.file)), kept.findIndex((k) => k.file === view.item.file), (n) => setView({ kind: 'kept', item: kept[n] }));
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -110,7 +121,7 @@ function SessionThumb({ img, onOpen }: { img: SessionImage; onOpen: () => void }
   );
 }
 
-function KeptViewer({ projectId, item, onClose }: { projectId: string; item: KeptImage; onClose: () => void }) {
+function KeptViewer({ projectId, item, onClose, onFullscreen }: { projectId: string; item: KeptImage; onClose: () => void; onFullscreen: () => void }) {
   const { unkeep, updateKept } = useProjectStore();
   const [label, setLabel] = useState(item.label ?? '');
   const url = api.keptUrl(projectId, item.file);
@@ -149,7 +160,7 @@ function KeptViewer({ projectId, item, onClose }: { projectId: string; item: Kep
       <div className="flex flex-col gap-3 md:flex-row">
         <div className="checker flex flex-1 items-center justify-center rounded-md">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={url} alt="" title="Tap for full screen" onClick={() => openLightbox(url)} className="max-h-[65vh] cursor-zoom-in object-contain" />
+          <img src={url} alt="" title="Tap for full screen" onClick={onFullscreen} className="max-h-[65vh] cursor-zoom-in object-contain" />
         </div>
         <div className="flex w-full flex-col gap-2 md:w-72">
           <label className="flex flex-col gap-1 text-xs text-slate-400">

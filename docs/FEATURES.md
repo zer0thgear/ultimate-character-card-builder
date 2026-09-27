@@ -39,7 +39,7 @@ The dock on the right starts on **🎨 Image**. Model, size, sampler and the oth
 - On each gen: ⛶ **full screen** (or tap the picture), **Set as avatar**, **☆ Keep** (saved with the card, shown in Gallery), **Save to folder**, download, ⎘ Img2Img base, 🖌 inpaint, use its seed, ♻ load its prompt back, remove.
 - **Edit image and Inpaint**, NovelFrontEnd's canvas: paint over the base (draw, erase, fill, smudge, blur, colour pick, pen pressure) or mark what to regenerate on NovelAI's 8-pixel mask grid. Saving brings you back with the base updated; Generate then does an Image2Image or an inpaint (on the model's inpainting model, with its strength), and the result is pasted over the original through NovelAI's feathered edge. Paint and mask stay editable. Any gen, kept gen or library image can start one.
 - **🖼 Gallery**: gens kept with this card (label them, e.g. "avatar v2", "angry"), and this session's gens, for this card or all of them.
-- **Full screen**: tap the picture in a gen, kept gen or library image. Pinch or scroll to zoom, drag to pan, double-tap to zoom in and back out; swipe down, Back, Esc or ✕ closes it. On a phone it also takes the browser fullscreen (⛶ toggles that anywhere it's supported).
+- **Full screen**: tap the picture in a gen, kept gen or library image. Swipe sideways (or ←/→, or the ‹ › buttons with a mouse) through the card's gens, the kept gens or the library results, with a count at the top; closing leaves the view underneath on the picture you ended on. Pinch or scroll to zoom, drag to pan, double-tap to zoom in and back out; swipe down, Back, Esc or ✕ closes it. On a phone it also takes the browser fullscreen (⛶ toggles that anywhere it's supported).
 
 ## The gen library
 
