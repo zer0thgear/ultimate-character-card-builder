@@ -10,6 +10,7 @@ import { GreetingsPanel } from '@/components/editor/GreetingsPanel';
 import { LorebookPanel } from '@/components/editor/LorebookPanel';
 import { CreatorPanel, NotesPanel, PromptsPanel, ToolsPanel } from '@/components/editor/OtherPanels';
 import { openVisionWrite } from '@/components/VisionWriteDialog';
+import { ExtensionImageActions } from '@/components/ExtensionSlots';
 
 export function CardEditor() {
   const { editorTab, setEditorTab, showAvatar } = useUiStore();
@@ -123,6 +124,7 @@ function AvatarStrip() {
               ✍ Write from picture
             </button>
           )}
+          {url && <ExtensionImageActions variant="chip" image={{ name: `${project.card.data.name || 'avatar'}.png`, source: 'avatar', blob: async () => (await fetch(url)).blob(), projectId: project.id }} />}
           {project.avatar && (
             <span className="self-center text-slate-500">
               {project.avatar.width}×{project.avatar.height}

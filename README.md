@@ -78,3 +78,7 @@ lib/server/         disk storage, library index, LLM providers
 store/              Zustand stores (project + undo, gen settings, recent gens,
                     LLM connections, chats, UI)
 ```
+
+### Local extensions
+
+Features you'd rather not publish can live in a `local/` folder beside the app, kept out of git (add `/local/` to `.git/info/exclude`, which stays on your machine, rather than `.gitignore`, which is published). `local/client.tsx` default-exports a list of client extensions and `local/server.ts` a list of server ones (see `lib/extensions/types.ts`); either may be left out. An extension can add actions on pictures (gens, kept gens, library images, the avatar), a section in Settings → Extensions, its own dialogs, and an API under `/api/ext/<id>/`, with private storage in `data/ext/<id>/`. Without the folder the app runs as usual. Restart after adding or removing it.

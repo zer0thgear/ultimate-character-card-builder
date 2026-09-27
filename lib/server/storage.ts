@@ -331,3 +331,12 @@ export async function recentGenStats(): Promise<{ count: number; bytes: number }
   const sizes = await Promise.all(files.map((f) => fs.stat(path.join(RECENT, f)).then((s) => s.size, () => 0)));
   return { count: files.filter((f) => f.endsWith('.png')).length, bytes: sizes.reduce((a, b) => a + b, 0) };
 }
+
+// ─── Local extensions ────────────────────────────────────────────────────────
+
+/** A local extension's own folder under data/ (lib/extensions/types.ts). */
+export async function extensionDataDir(id: string): Promise<string> {
+  const dir = path.join(DATA_DIR, 'ext', checkId(id));
+  await fs.mkdir(dir, { recursive: true });
+  return dir;
+}

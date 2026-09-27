@@ -58,7 +58,7 @@ Search is GenBrowser's: comma-separated terms, all required; `-term` excludes; `
 - The **greeting is read live from the card**: edit it and the chat shows the edit. Swipe ‹ › through every greeting.
 - **Swipes** on the last reply (› generates another), **Regenerate**, **Continue**, edit or delete any message, or cut the chat after one.
 - Reasoning from thinking models is shown folded, apart from the reply.
-- Messages show *actions* in italics, **bold**, and "speech" highlighted, nested either way: italics inside quotes keep the speech's colour, as in SillyTavern.
+- Messages show *actions* in italics, **bold**, and "speech" highlighted, nested either way: italics inside quotes keep the speech's colour, as in SillyTavern. Pictures embedded in the greeting or messages, as `![alt](url)` or `<img src="url">`, are shown (web and inline images only).
 - While a reply streams, the chat follows it only until the reply's start reaches the top, so you read it from the beginning; scroll up and it stays where you put it. **↓** jumps to the end (and keeps following it for the rest of that reply).
 - **🔍 Prompt inspector**: every part of the prompt, labelled, with tokens, and which lorebook entries fired and why (or were dropped over budget).
 - **⚙ Chat settings**: your name and persona, the main prompt, default post-history instructions, and whether to use the card's system prompt, post-history instructions, examples and lorebook.

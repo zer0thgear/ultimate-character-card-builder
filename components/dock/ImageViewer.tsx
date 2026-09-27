@@ -1,6 +1,6 @@
 'use client';
 
-import { useSessionStore, type SessionImage } from '@/store/sessionStore';
+import { imageBlob, useSessionStore, type SessionImage } from '@/store/sessionStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import type { EditorMode } from '@/lib/editorResult';
@@ -8,6 +8,7 @@ import { setAsAvatar, keepImage, saveSessionImage, reusePrompt, genFileName, wit
 import { downloadBlob, IconButton, Button, cx } from '@/components/ui';
 import { openLightbox } from '@/components/Lightbox';
 import { openVisionWrite } from '@/components/VisionWriteDialog';
+import { ExtensionImageActions } from '@/components/ExtensionSlots';
 
 /** Makes this picture the image panel's Img2Img base, optionally opening
  *  the Edit Image or Inpaint canvas on it. */
@@ -70,6 +71,7 @@ export function ImageViewer({ image, all = [], preview, generating }: { image?: 
             <IconButton title="✨ Write from this image: a physical description, a greeting, or ask about it (vision model)" onClick={() => withImage(image, openVisionWrite)}>
               ✍
             </IconButton>
+            <ExtensionImageActions variant="icon" image={{ name: genFileName(image), source: 'gen', blob: () => imageBlob(image), projectId: image.projectId }} />
             <IconButton title="Load this image's prompt back into the form" onClick={() => withImage(image, reusePrompt)}>
               ♻
             </IconButton>

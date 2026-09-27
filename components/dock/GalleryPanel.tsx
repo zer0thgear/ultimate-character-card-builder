@@ -12,6 +12,7 @@ import { sendToImg2Img } from '@/components/dock/ImageViewer';
 import type { KeptImage } from '@/types/project';
 import { openLightbox } from '@/components/Lightbox';
 import { openVisionWrite } from '@/components/VisionWriteDialog';
+import { ExtensionImageActions } from '@/components/ExtensionSlots';
 
 // This card's pictures: gens kept with it (saved in the project) and recent
 // gens (on the server for Settings → Folders' number of days; see
@@ -392,6 +393,7 @@ function KeptViewer({ projectId, item, onClose, onFullscreen }: { projectId: str
           <Button onClick={async () => { sendToImg2Img(await blob(), 'mask'); onClose(); }}>Inpaint</Button>
           <Button onClick={async () => { await reusePrompt(await blob()); onClose(); }}>Reuse prompt</Button>
           <Button onClick={async () => openVisionWrite(await blob())} title="A physical description, a greeting, or ask about it (vision model)">✨ Write from image</Button>
+          <ExtensionImageActions image={{ name: keptName(item), source: 'kept', blob, projectId }} />
           <Button variant="primary" onClick={async () => { await setAsAvatar(await blob()); onClose(); }}>
             Set as avatar
           </Button>

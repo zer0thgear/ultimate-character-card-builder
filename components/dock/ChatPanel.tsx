@@ -419,6 +419,10 @@ function renderNodes(nodes: FormatNode[]): React.ReactNode {
       <em key={i}>{renderNodes(n.children)}</em>
     ) : n.kind === 'strong' ? (
       <strong key={i}>{renderNodes(n.children)}</strong>
+    ) : n.kind === 'image' ? (
+      // An embedded picture, as the card shows it on Chub or SillyTavern.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img key={i} src={n.src} alt={n.alt} title={n.alt || undefined} loading="lazy" referrerPolicy="no-referrer" className="my-1 inline-block max-h-96 max-w-full rounded-md align-middle" />
     ) : (
       <q key={i}>{renderNodes(n.children)}</q>
     ),

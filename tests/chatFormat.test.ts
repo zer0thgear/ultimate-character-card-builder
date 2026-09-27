@@ -37,4 +37,24 @@ describe('formatChat', () => {
     expect(formatChat('a *b\nc* d')).toEqual(['a *b\nc* d']);
     expect(formatChat('5 * 3 = 15 "unclosed')).toEqual(['5 * 3 = 15 "unclosed']);
   });
+
+  it('shows embedded pictures, markdown or HTML', () => {
+    expect(formatChat('Hi ![Edith waving](https://example.com/a.png "title") there')).toEqual([
+      'Hi ',
+      { kind: 'image', src: 'https://example.com/a.png', alt: 'Edith waving' },
+      ' there',
+    ]);
+    expect(formatChat('<img src="https://example.com/b.webp" alt="b" width="300">')).toEqual([{ kind: 'image', src: 'https://example.com/b.webp', alt: 'b' }]);
+    expect(formatChat("<IMG alt='c' src='https://example.com/c.png'/>")).toEqual([{ kind: 'image', src: 'https://example.com/c.png', alt: 'c' }]);
+  });
+
+  it('shows pictures inside speech and italics', () => {
+    expect(formatChat('*holds up ![](https://example.com/p.png)*')).toEqual([{ kind: 'em', children: ['holds up ', { kind: 'image', src: 'https://example.com/p.png', alt: '' }] }]);
+  });
+
+  it('leaves anything but web and inline pictures as text', () => {
+    expect(formatChat('![x](javascript:alert(1))')).toEqual(['![x](javascript:alert(1))']);
+    expect(formatChat('<img src="file:///etc/passwd">')).toEqual(['<img src="file:///etc/passwd">']);
+    expect(formatChat('![x](images/a.png) !not an image')).toEqual(['![x](images/a.png) !not an image']);
+  });
 });

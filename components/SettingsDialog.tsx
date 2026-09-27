@@ -20,8 +20,9 @@ import { useModelPrices } from '@/hooks/useModelPrices';
 import { formatPrice, isOpenRouter, priceLabel } from '@/lib/modelPricing';
 import { useProjectStore } from '@/store/projectStore';
 import { AccountStatus } from '@/components/AccountStatus';
+import { ExtensionSettings, hasExtensionSettings } from '@/components/ExtensionSlots';
 
-type SettingsTab = 'general' | 'folders' | 'llm' | 'chat' | 'assist' | 'personas';
+type SettingsTab = 'general' | 'folders' | 'llm' | 'chat' | 'assist' | 'personas' | 'extensions';
 
 const useSettingsDialog = create<{ tab: SettingsTab | null; set: (t: SettingsTab | null) => void }>((set) => ({ tab: null, set: (tab) => set({ tab }) }));
 export const openSettings = (tab: SettingsTab = 'general') => useSettingsDialog.getState().set(tab);
@@ -42,6 +43,8 @@ export function SettingsDialog() {
           { value: 'chat', label: 'Chat preset' },
           { value: 'assist', label: 'Assistant' },
           { value: 'personas', label: 'Personas' },
+          // Local extensions' settings, when any are installed.
+          ...(hasExtensionSettings ? [{ value: 'extensions' as const, label: 'Extensions' }] : []),
         ]}
       />
       {tab === 'general' && <GeneralTab />}
@@ -49,6 +52,7 @@ export function SettingsDialog() {
       {tab === 'llm' && <LlmTab />}
       {tab === 'assist' && <AssistTab />}
       {tab === 'personas' && <PersonaManager />}
+      {tab === 'extensions' && <ExtensionSettings />}
       {tab === 'chat' && (
         <div className="flex flex-col gap-3">
           <p className="text-xs text-slate-500">

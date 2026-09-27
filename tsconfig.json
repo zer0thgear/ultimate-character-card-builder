@@ -19,7 +19,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@local/client": ["./local/client.tsx", "./lib/extensions/noClient.ts"],
+      "@local/server": ["./local/server.ts", "./lib/extensions/noServer.ts"]
     }
   },
   "include": [
