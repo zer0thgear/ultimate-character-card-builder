@@ -9,6 +9,7 @@ import { Button, Empty, IconButton, Modal, cx, inputClass } from '@/components/u
 import { sendToImg2Img } from '@/components/dock/ImageViewer';
 import { openSettings } from '@/components/SettingsDialog';
 import { useProjectStore } from '@/store/projectStore';
+import { copyText } from '@/lib/clipboard';
 
 // Older gens, from any folders set in Settings (GenBrowser's library, a
 // downloads folder…), searchable by prompt like GenBrowser: for
@@ -218,7 +219,7 @@ function LibraryViewer({ item, onClose, onStep, onSearch }: { item: LibraryItem;
     return () => window.removeEventListener('keydown', onKey);
   }, [onStep]);
   const tags = useMemo(() => (item.info.prompt ?? '').split(',').map((t) => t.trim()).filter(Boolean), [item]);
-  const copy = (text: string) => navigator.clipboard.writeText(text).then(() => toast('Copied.', 'success'));
+  const copy = (text: string) => copyText(text).then(() => toast('Copied.', 'success'));
   return (
     <Modal
       open

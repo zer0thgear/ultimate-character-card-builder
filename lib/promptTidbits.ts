@@ -1,4 +1,5 @@
 import { LibraryTidbit, PromptTidbit } from '@/types/novelai';
+import { uuid } from '@/lib/uuid';
 
 // Composing tidbits into prompt text happens in lib/wildcards.ts
 // (resolveRequestPrompts), since linked entries may be random wildcards that
@@ -15,14 +16,14 @@ export function linkedEntry(
 }
 
 export function createTidbit(label: string): PromptTidbit {
-  return { id: crypto.randomUUID(), label, text: '', enabled: true };
+  return { id: uuid(), label, text: '', enabled: true };
 }
 
 /** A prompt-level tidbit linked to a library entry. Label/text are snapshotted
  *  so the tidbit still reads sensibly if the entry is later deleted. */
 export function createLinkedTidbit(entry: LibraryTidbit): PromptTidbit {
   return {
-    id: crypto.randomUUID(),
+    id: uuid(),
     label: entry.label,
     text: snapshotText(entry),
     enabled: true,

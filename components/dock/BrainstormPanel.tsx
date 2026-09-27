@@ -10,6 +10,7 @@ import { cardContext } from '@/lib/assist';
 import type { LlmMessage } from '@/types/llm';
 import { AutoTextarea, Button, IconButton, cx } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
+import { copyText } from '@/lib/clipboard';
 
 // A free-form chat with the writing assistant about the card: ideas,
 // names, backstory, "what would she wear to a funeral". It always sees the
@@ -81,7 +82,7 @@ export function BrainstormPanel() {
               {m.content}
               {m.role === 'assistant' && (
                 <div className="mt-1 flex justify-end gap-1 opacity-0 group-hover:opacity-100 touch:opacity-100">
-                  <IconButton title="Copy" onClick={() => void navigator.clipboard.writeText(m.content)}>
+                  <IconButton title="Copy" onClick={() => void copyText(m.content)}>
                     ⧉
                   </IconButton>
                   <IconButton

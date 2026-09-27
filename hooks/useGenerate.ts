@@ -7,6 +7,7 @@ import { useSessionStore } from '@/store/sessionStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { NovelAIGenerateRequest, PromptSource, SweepCellInfo, WildcardPicks } from '@/types/novelai';
 import type { SessionImage as GeneratedImage } from '@/store/sessionStore';
+import { uuid } from '@/lib/uuid';
 
 interface GenerateOptions {
   /** If this generation is an enhancement, the source image's ID and a fresh object URL. */
@@ -99,7 +100,7 @@ export function useGenerate(): UseGenerateReturn {
 
       const now = Date.now();
       const images: GeneratedImage[] = blobs.map((blob, i) => ({
-        id: crypto.randomUUID(),
+        id: uuid(),
         url: URL.createObjectURL(blob),
         blob,
         prompt: request.input,
@@ -214,7 +215,7 @@ export function useGenerate(): UseGenerateReturn {
           if (finish) imageBlob = await finish(imageBlob);
 
           finalImage = {
-            id: crypto.randomUUID(),
+            id: uuid(),
             url: URL.createObjectURL(imageBlob),
             blob: imageBlob,
             prompt: request.input,

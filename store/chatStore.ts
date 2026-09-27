@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import type { ChatMessage, ChatSession, ChatSummary } from '@/types/project';
 import { api } from '@/lib/api';
+import { uuid } from '@/lib/uuid';
 
 // The open card's test chats. The greeting isn't stored as a message: the
 // chat remembers which greeting opened it and reads it live from the card,
@@ -71,7 +72,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       if (!projectId) return;
       await get().flush();
       const now = Date.now();
-      const chat: ChatSession = { id: crypto.randomUUID(), name: `Chat ${new Date(now).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}`, greeting, messages: [], createdAt: now, updatedAt: now };
+      const chat: ChatSession = { id: uuid(), name: `Chat ${new Date(now).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}`, greeting, messages: [], createdAt: now, updatedAt: now };
       const saved = await api.saveChat(projectId, chat);
       set((s) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: 0 }, ...s.list] }));
     },

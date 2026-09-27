@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import type { ChatSession, Persona } from '@/types/project';
 import { api } from '@/lib/api';
 import { useLlmStore } from '@/store/llmStore';
+import { uuid } from '@/lib/uuid';
 
 // Personas: who you are in test chats. Kept on the local server
 // (data/personas/), avatars included; which one is active is a chat
@@ -33,7 +34,7 @@ export const usePersonaStore = create<PersonaState>((set, get) => {
     loaded: false,
     load: async () => set({ personas: await api.listPersonas(), loaded: true }),
     add: (init = {}) => {
-      const p: Persona = { id: crypto.randomUUID(), name: 'New persona', description: '', ...init };
+      const p: Persona = { id: uuid(), name: 'New persona', description: '', ...init };
       set((s) => ({ personas: [...s.personas, p] }));
       save();
       return p;

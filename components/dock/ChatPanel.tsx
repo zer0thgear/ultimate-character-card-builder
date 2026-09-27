@@ -23,6 +23,8 @@ import type { Persona } from '@/types/project';
 import { useTextTokens, formatTokens } from '@/lib/textTokens';
 import type { CardData } from '@/types/card';
 import type { ChatMessage } from '@/types/project';
+import { uuid } from '@/lib/uuid';
+import { copyText } from '@/lib/clipboard';
 
 // Test-chatting the card, built the way SillyTavern builds its prompt (see
 // lib/chatPrompt.ts), with swipes, edits, the greeting read live from the
@@ -101,7 +103,7 @@ export function ChatPanel() {
     const built = continueFrom !== undefined
       ? build(messages, { mode: 'continue', continueText: continueFrom })
       : build(target ? messages.filter((m) => m.id !== target.id) : messages, { emptySend });
-    const id = target?.id ?? crypto.randomUUID();
+    const id = target?.id ?? uuid();
     const base = continueFrom ?? '';
     setStreamingId(id);
     if (!target) setMessages((m) => [...m, { ...newMessage('assistant', '', connection?.model), id }]);
@@ -431,7 +433,7 @@ function Bubble({
             <IconButton title="Edit" disabled={busy} onClick={() => setEditing(text)}>
               ✎
             </IconButton>
-            <IconButton title="Copy" onClick={() => void navigator.clipboard.writeText(text)}>
+            <IconButton title="Copy" onClick={() => void copyText(text)}>
               ⧉
             </IconButton>
             {!isLast && (
@@ -566,7 +568,7 @@ function PromptInspector({ prompt, onClose }: { prompt: BuiltPrompt; onClose: ()
   const all = useMemo(() => prompt.parts.map((p) => p.content).join('\n\n'), [prompt]);
   const total = useTextTokens(all, 0);
   return (
-    <Modal open onClose={onClose} title={`Prompt · ~${formatTokens(total)} tokens`} size="lg" footer={<Button onClick={() => void navigator.clipboard.writeText(JSON.stringify(prompt.messages, null, 2))}>Copy as JSON</Button>}>
+    <Modal open onClose={onClose} title={`Prompt · ~${formatTokens(total)} tokens`} size="lg" footer={<Button onClick={() => void copyText(JSON.stringify(prompt.messages, null, 2))}>Copy as JSON</Button>}>
       <div className="flex flex-col gap-3">
         {(prompt.prefill !== undefined || prompt.droppedHistory > 0) && (
           <div className="text-xs text-amber-300">

@@ -11,6 +11,7 @@ import { Button, IconButton, Modal, NumberInput, Tabs, Toggle, cx, inputClass } 
 import { AssistPresetPicker, PresetPicker } from '@/components/llm/PresetManager';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { PersonaManager } from '@/components/llm/Personas';
+import { AccountStatus } from '@/components/AccountStatus';
 
 type SettingsTab = 'general' | 'folders' | 'llm' | 'chat' | 'assist' | 'personas';
 
@@ -79,6 +80,7 @@ function GeneralTab() {
           </Button>
         </div>
         <p className="text-xs text-slate-500">Kept on this computer (data/settings.json) and shared by every device you open UCCB on, like your connections and presets.</p>
+        {apiKey && <AccountStatus className="mt-1" />}
       </Row>
       <Row label="Who can connect" hint="UCCB always accepts this computer and your Tailscale devices. Changes apply within a few seconds.">
         <Toggle checked={config.allowLan} onChange={(allowLan) => void update({ allowLan })} label="Also allow devices on the home network" />

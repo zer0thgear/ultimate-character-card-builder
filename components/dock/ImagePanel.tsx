@@ -18,6 +18,7 @@ import { buildGenerateRequest, POSITIONS, SIZE_PRESETS, type Img2ImgBase } from 
 import { applyEditorResult, type EditorMode, type Img2ImgSource } from '@/lib/editorResult';
 import { hasInpaintStrength, toInpaintingModel } from '@/lib/inpaint';
 import { CanvasEditor } from '@/components/CanvasEditor';
+import { AccountStatus } from '@/components/AccountStatus';
 import { calculateAnlasCost, opusStatus, MAX_GENERATION_PIXELS } from '@/lib/anlasCost';
 import { hasVariety } from '@/lib/variety';
 import { blobToBase64, getImageDimensions } from '@/lib/imageUtils';
@@ -31,6 +32,7 @@ import { Button, IconButton, NumberInput, Toggle, cx, inputClass } from '@/compo
 import { ImageViewer } from '@/components/dock/ImageViewer';
 import { openSettings } from '@/components/SettingsDialog';
 import type { CharacterPromptEntry, NovelAIModel, NovelAINoiseSchedule } from '@/types/novelai';
+import { uuid } from '@/lib/uuid';
 
 const promptClass = cx(inputClass, 'min-h-16 resize-y font-mono text-[13px] leading-relaxed');
 
@@ -85,7 +87,7 @@ function PromptForm() {
   const { set, patch } = form;
   const apiKey = useSessionStore((s) => s.apiKey);
   const { generate, error, clearError } = useGenerate();
-  const { subscription, anlas, refresh } = useSubscription();
+  const { subscription, refresh } = useSubscription();
   const setGenerating = useSessionStore((s) => s.setGenerating);
   const generating = useSessionStore((s) => s.generating);
   const retryNotice = useSessionStore((s) => s.retryNotice);
@@ -212,10 +214,12 @@ function PromptForm() {
           <NumberInput value={form.copies} onChange={(v) => set('copies', v ?? 1)} min={1} max={8} step={1} className="w-14" />
         </label>
       </div>
-      <div className="-mt-2 flex justify-between text-[11px] text-slate-500">
-        <span>{anlas !== null ? `${anlas.toLocaleString()} Anlas${subscription?.tier === 3 ? ' · Opus' : ''}` : ''}</span>
-        {config.autoSaveGens && config.outputDir && <span title={config.outputDir}>Auto-saving to the output folder</span>}
-      </div>
+      {config.autoSaveGens && config.outputDir && (
+        <div className="-mt-2 text-right text-[11px] text-slate-500" title={config.outputDir}>
+          Auto-saving to the output folder
+        </div>
+      )}
+      <AccountStatus />
       {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
       {tooBig && <div className="text-xs text-red-400">That size is past NovelAI&apos;s limit of about 3.1 megapixels.</div>}
 
@@ -524,7 +528,7 @@ function CharactersSection({ counts }: { counts: Record<string, { prompt: number
 
   const update = (id: string, patch: Partial<CharacterPromptEntry>) => set('characters', characters.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   const add = (prompt = '') =>
-    set('characters', [...characters, { id: crypto.randomUUID(), label: active.length === 0 ? card?.name || 'Character' : `Character ${active.length + 1}`, prompt, uc: '', center: { x: 0.5, y: 0.5 }, enabled: true }]);
+    set('characters', [...characters, { id: uuid(), label: active.length === 0 ? card?.name || 'Character' : `Character ${active.length + 1}`, prompt, uc: '', center: { x: 0.5, y: 0.5 }, enabled: true }]);
 
   const appearance = async (target?: CharacterPromptEntry) => {
     if (!card) return;

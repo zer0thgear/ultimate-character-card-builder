@@ -3,6 +3,7 @@ import type { LlmMessage, ProviderKind } from '@/types/llm';
 import type { ChatMessage } from '@/types/project';
 import { expandMacros, type MacroContext } from '@/lib/macros';
 import { scanLorebook, describeEntry, type ScanResult, type ActivatedEntry } from '@/lib/lorebookScan';
+import { uuid } from '@/lib/uuid';
 
 // Builds the prompt a test chat sends, the way a SillyTavern-style frontend
 // builds it from a card, so testing here tells you how the card will play
@@ -252,7 +253,7 @@ export function greetingText(card: CardData, index: number): string {
 }
 
 export function newMessage(role: ChatMessage['role'], text: string, model?: string): ChatMessage {
-  return { id: crypto.randomUUID(), role, swipes: [text], swipe: 0, createdAt: Date.now(), model };
+  return { id: uuid(), role, swipes: [text], swipe: 0, createdAt: Date.now(), model };
 }
 
 /** Expanded for display, as the model will see it. */

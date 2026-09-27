@@ -8,6 +8,7 @@ import { varietySigma } from '@/lib/variety';
 import type { ParsedNaiMetadata } from '@/lib/naiMetadata';
 import { MODELS } from '@/lib/models';
 import { SAMPLERS } from '@/lib/samplers';
+import { uuid } from '@/lib/uuid';
 
 // One Generate's request, built the way NovelFrontEnd's PromptForm builds
 // it, so gens here match novelai.net's: a plain generation, Image2Image
@@ -84,7 +85,7 @@ export function reuseFromMetadata(
   if (opts.characters && m.characters.length) {
     out.characters = m.characters.map(
       (c, i): CharacterPromptEntry => ({
-        id: crypto.randomUUID(),
+        id: uuid(),
         label: form.characters[i]?.label ?? `Character ${i + 1}`,
         prompt: c.prompt,
         uc: c.uc,

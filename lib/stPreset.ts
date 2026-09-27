@@ -3,6 +3,8 @@
 // order and on/off state), the format strings, and the samplers. Parsed into
 // a ChatPreset that lib/presetPrompt.ts builds a prompt from.
 
+import { uuid } from '@/lib/uuid';
+
 export type PromptRole = 'system' | 'user' | 'assistant';
 
 /** The prompt manager's placeholders, filled in from the card and chat. */
@@ -167,7 +169,7 @@ export function parseStPreset(json: unknown, fileName = 'Preset'): ChatPreset {
   }
   const s = json;
   return {
-    id: crypto.randomUUID(),
+    id: uuid(),
     name: str(s.name) || fileName.replace(/\.json$/i, ''),
     prompts,
     order: pickOrder(s.prompt_order, prompts),

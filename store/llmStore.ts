@@ -8,6 +8,7 @@ import { DEFAULT_CHAT_SETTINGS, type ChatPromptSettings } from '@/lib/chatPrompt
 import type { ChatPreset } from '@/lib/stPreset';
 import { useSessionStore } from '@/store/sessionStore';
 import { serverStorage } from '@/lib/serverSettings';
+import { uuid } from '@/lib/uuid';
 
 // LLM connections (keys included, on the server like the NovelAI key),
 // which one the test chat and the writing assistant each use, and the
@@ -16,7 +17,7 @@ import { serverStorage } from '@/lib/serverSettings';
 export function newConnection(kind: ProviderKind): LlmConnection {
   const names: Record<ProviderKind, string> = { novelai: 'NovelAI', openai: 'OpenAI-compatible', anthropic: 'Claude' };
   return {
-    id: crypto.randomUUID(),
+    id: uuid(),
     name: names[kind],
     kind,
     baseUrl: kind === 'openai' ? 'https://openrouter.ai/api/v1' : '',

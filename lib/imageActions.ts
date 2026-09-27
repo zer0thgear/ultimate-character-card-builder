@@ -9,6 +9,7 @@ import { readNaiMetadata } from '@/lib/naiMetadata';
 import { reuseFromMetadata } from '@/lib/genRequest';
 import { cardFileName } from '@/lib/cardFile';
 import { openSettings } from '@/components/SettingsDialog';
+import { uuid } from '@/lib/uuid';
 
 // What you can do with any image in UCCB (a fresh gen, a kept one, one
 // from the library): make it the avatar, keep it with the card, save it to
@@ -27,7 +28,7 @@ export async function keepImage(img: SessionImage, label?: string) {
   const p = useProjectStore.getState().project;
   if (!p) return;
   try {
-    const id = img.id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60) || crypto.randomUUID();
+    const id = img.id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60) || uuid();
     const kept = await useProjectStore.getState().keep(img.blob, {
       id,
       width: img.parameters.width,
