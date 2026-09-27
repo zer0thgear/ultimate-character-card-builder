@@ -43,7 +43,7 @@ function SortableRow({ id, children }: { id: string; children: (handle: ReactNod
       {...listeners}
       title="Drag to reorder"
       aria-label="Drag to reorder"
-      className="flex h-7 w-5 cursor-grab items-center justify-center text-slate-500 hover:text-slate-300 active:cursor-grabbing"
+      className="flex h-7 w-5 cursor-grab touch-none items-center justify-center text-slate-500 hover:text-slate-300 active:cursor-grabbing phone:w-7"
     >
       ⠿
     </button>

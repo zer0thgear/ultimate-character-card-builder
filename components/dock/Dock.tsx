@@ -14,7 +14,7 @@ import { BrainstormPanel } from '@/components/dock/BrainstormPanel';
 // Panels other than the open one stay mounted (hidden), so a generation or
 // a chat reply carries on while you look at something else.
 
-export function Dock() {
+export function Dock({ phone = false }: { phone?: boolean }) {
   const { dockTab, setDockTab } = useUiStore();
   const generating = useSessionStore((s) => s.generating);
   const projectId = useProjectStore((s) => s.project?.id);
@@ -34,7 +34,7 @@ export function Dock() {
   );
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <Tabs value={dockTab} onChange={setDockTab} tabs={tabs} className="flex-shrink-0 px-2" />
+      {!phone && <Tabs value={dockTab} onChange={setDockTab} tabs={tabs} className="flex-shrink-0 px-2" />}
       <div className="min-h-0 flex-1">
         {panel('image', <ImagePanel />)}
         {panel('gallery', <GalleryPanel />)}

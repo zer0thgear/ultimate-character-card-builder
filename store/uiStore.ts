@@ -17,7 +17,11 @@ interface UiState {
   editorTab: EditorTab;
   setEditorTab: (t: EditorTab) => void;
   dockTab: DockTab;
+  /** Opens a dock tab; on a phone, that also brings the dock on screen. */
   setDockTab: (t: DockTab) => void;
+  /** On a phone, which one screen shows: the card editor or the dock. */
+  phoneView: 'card' | 'dock';
+  setPhoneView: (v: 'card' | 'dock') => void;
   /** The dock's share of the workspace width, 0.25–0.75. */
   dockWidth: number;
   setDockWidth: (w: number) => void;
@@ -50,7 +54,9 @@ export const useUiStore = create<UiState>()(
       editorTab: 'basics',
       setEditorTab: (editorTab) => set({ editorTab }),
       dockTab: 'image',
-      setDockTab: (dockTab) => set({ dockTab }),
+      setDockTab: (dockTab) => set({ dockTab, phoneView: 'dock' }),
+      phoneView: 'card',
+      setPhoneView: (phoneView) => set({ phoneView }),
       dockWidth: 0.45,
       setDockWidth: (w) => set({ dockWidth: Math.min(0.75, Math.max(0.25, w)) }),
       sidebarOpen: true,

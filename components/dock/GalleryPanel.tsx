@@ -93,7 +93,7 @@ function SessionThumb({ img, onOpen }: { img: SessionImage; onOpen: () => void }
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={img.url} alt="" className="h-full w-full object-cover" />
       </button>
-      <div className="absolute inset-x-0 bottom-0 flex justify-center gap-0.5 bg-black/70 opacity-0 group-hover:opacity-100">
+      <div className="absolute inset-x-0 bottom-0 flex justify-center gap-0.5 bg-black/70 opacity-0 group-hover:opacity-100 touch:opacity-100">
         <IconButton title="Set as avatar" className="text-white" onClick={() => void setAsAvatar(img.blob)}>
           👤
         </IconButton>

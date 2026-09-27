@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -8,6 +8,15 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: "Ultimate Character Card Builder",
   description: "Write, illustrate and test character cards in one place",
+};
+
+// viewport-fit=cover lets the phone layout's bottom bar pad itself clear of
+// the home indicator (env(safe-area-inset-bottom)).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#020617",
 };
 
 // Set the theme before first paint, so a light-mode user doesn't get a

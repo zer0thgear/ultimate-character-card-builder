@@ -13,12 +13,18 @@ import { SettingsDialog, openSettings } from '@/components/SettingsDialog';
 import { FieldToolsHost } from '@/components/editor/fieldTools';
 import { CardEditor } from '@/components/editor/CardEditor';
 import { Dock } from '@/components/dock/Dock';
+import { useMediaQuery, PHONE_QUERY } from '@/hooks/useMediaQuery';
+import { useSessionStore as useGenSession } from '@/store/sessionStore';
 
 export function Shell() {
   const project = useProjectStore((s) => s.project);
   const loading = useProjectStore((s) => s.loading);
-  const { sidebarOpen, dockWidth, setDockWidth } = useUiStore();
+  const { sidebarOpen, setSidebarOpen, dockWidth, setDockWidth, phoneView } = useUiStore();
   const workspace = useRef<HTMLDivElement>(null);
+  // Phones get one screen at a time with a bottom bar, and the card list
+  // as a drawer, as NovelFrontEnd's phone layout does.
+  const phone = useMediaQuery(PHONE_QUERY);
+  const [drawer, setDrawer] = useState(false);
 
   useEffect(() => {
     // layout.tsx applies the saved theme before paint; hydration can drop
@@ -91,7 +97,7 @@ export function Shell() {
 
   return (
     <div
-      className="flex h-screen flex-col overflow-hidden"
+      className="flex h-[100dvh] flex-col overflow-hidden"
       onDragOver={(e) => {
         // Image drops onto specific targets (avatar, img2img) handle themselves.
         if (e.dataTransfer.types.includes('Files')) {
@@ -102,11 +108,22 @@ export function Shell() {
       onDragLeave={(e) => e.currentTarget === e.target && setDropping(false)}
       onDrop={(e) => void onDrop(e)}
     >
-      <Header />
+      <Header phone={phone} onMenu={() => (phone ? setDrawer(true) : setSidebarOpen(!sidebarOpen))} />
       <div className="flex min-h-0 flex-1">
-        {sidebarOpen && <ProjectSidebar />}
+        {!phone && sidebarOpen && <ProjectSidebar />}
         <div ref={workspace} className="flex min-w-0 flex-1">
-          {project ? (
+          {project && phone ? (
+            // Both stay mounted, so a generation or a reply carries on
+            // while the other screen is showing.
+            <>
+              <main className="min-w-0 flex-1" hidden={phoneView !== 'card'}>
+                <CardEditor />
+              </main>
+              <aside className="min-w-0 flex-1" hidden={phoneView !== 'dock'}>
+                <Dock phone />
+              </aside>
+            </>
+          ) : project ? (
             <>
               <main className="min-w-0 border-r border-slate-800" style={{ width: `${(1 - dockWidth) * 100}%` }}>
                 <CardEditor />
@@ -121,6 +138,15 @@ export function Shell() {
           )}
         </div>
       </div>
+      {phone && project && <PhoneNav />}
+      {phone && drawer && (
+        <div className="fixed inset-0 z-40 flex">
+          <div className="h-full w-72 max-w-[85vw] shadow-2xl">
+            <ProjectSidebar onPicked={() => setDrawer(false)} className="w-full" />
+          </div>
+          <button type="button" aria-label="Close the card list" className="flex-1 bg-black/50" onClick={() => setDrawer(false)} />
+        </div>
+      )}
       {dropping && (
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center border-4 border-dashed border-violet-500/60 bg-violet-950/30 text-lg text-violet-200">
           Drop a card (PNG, JSON, CHARX) to import it as a new card
@@ -145,10 +171,10 @@ function SaveStatus() {
   );
 }
 
-function Header() {
+function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
   const project = useProjectStore((s) => s.project);
   const { past, future, undo, redo, replaceCard } = useProjectStore();
-  const { sidebarOpen, setSidebarOpen, theme, setTheme, showAvatar, setShowAvatar, exportKeepsMetadata, exportMaxSize, exportCompression } = useUiStore();
+  const { sidebarOpen, theme, setTheme, showAvatar, setShowAvatar, exportKeepsMetadata, exportMaxSize, exportCompression } = useUiStore();
   const imageOpts = { keepMetadata: exportKeepsMetadata, maxSize: exportMaxSize, compression: exportCompression };
   const apiKey = useSessionStore((s) => s.apiKey);
   const [exportOpen, setExportOpen] = useState(false);
@@ -168,14 +194,14 @@ function Header() {
 
   return (
     <header className="flex h-11 flex-shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-950 px-2">
-      <IconButton title={sidebarOpen ? 'Hide the card list' : 'Show the card list'} onClick={() => setSidebarOpen(!sidebarOpen)}>
+      <IconButton title={phone ? 'Cards' : sidebarOpen ? 'Hide the card list' : 'Show the card list'} onClick={onMenu}>
         ☰
       </IconButton>
-      <span className="text-sm font-semibold tracking-tight text-violet-300">UCCB</span>
+      {!(phone && project) && <span className="text-sm font-semibold tracking-tight text-violet-300">UCCB</span>}
       {project && (
         <>
-          <span className="text-slate-700">/</span>
-          <span className="max-w-64 truncate text-sm text-slate-200">{project.card.data.name || 'Unnamed character'}</span>
+          {!phone && <span className="text-slate-700">/</span>}
+          <span className="max-w-64 min-w-0 truncate text-sm text-slate-200 phone:max-w-[34vw]">{project.card.data.name || 'Unnamed character'}</span>
           <SaveStatus />
           <div className="ml-2 flex items-center">
             <IconButton title="Undo (Ctrl+Z outside a text box)" disabled={!past.length} onClick={undo}>
@@ -189,18 +215,22 @@ function Header() {
       )}
       <div className="ml-auto flex items-center gap-1.5">
         {!apiKey && (
-          <button type="button" onClick={() => openSettings('general')} className="rounded bg-amber-500/15 px-2 py-1 text-xs text-amber-300">
-            Add your NovelAI key
+          <button type="button" onClick={() => openSettings('general')} className="rounded bg-amber-500/15 px-2 py-1 text-xs whitespace-nowrap text-amber-300">
+            {phone ? 'NAI key' : 'Add your NovelAI key'}
           </button>
         )}
         {project && (
           <>
-            <IconButton title={showAvatar ? 'Hide the avatar strip' : 'Show the avatar strip'} onClick={() => setShowAvatar(!showAvatar)}>
-              {showAvatar ? '▣' : '□'}
-            </IconButton>
-            <Button size="sm" variant="ghost" onClick={() => void overwrite()} title="Replace this card's text with a card or JSON file, keeping the picture">
-              Overwrite…
-            </Button>
+            {!phone && (
+              <>
+                <IconButton title={showAvatar ? 'Hide the avatar strip' : 'Show the avatar strip'} onClick={() => setShowAvatar(!showAvatar)}>
+                  {showAvatar ? '▣' : '□'}
+                </IconButton>
+                <Button size="sm" variant="ghost" onClick={() => void overwrite()} title="Replace this card's text with a card or JSON file, keeping the picture">
+                  Overwrite…
+                </Button>
+              </>
+            )}
             <div className="relative">
               <Button size="sm" variant="primary" onClick={() => setExportOpen(!exportOpen)}>
                 Export ▾
@@ -211,6 +241,8 @@ function Header() {
                     { label: 'PNG card (V3 + V2)', run: async () => toast(`Exported the PNG card (${await exportPng(project, imageOpts)}).`, 'success') },
                     { label: 'JSON (V3)', run: async () => exportJson(project) },
                     { label: 'CHARX', run: () => exportCharx(project, imageOpts) },
+                    // The header has no room for it on a phone.
+                    ...(phone ? [{ label: 'Overwrite from a file…', run: overwrite }] : []),
                   ].map((o) => (
                     <button
                       key={o.label}
@@ -230,9 +262,11 @@ function Header() {
             </div>
           </>
         )}
-        <IconButton title={theme === 'dark' ? 'Light mode' : 'Dark mode'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-          {theme === 'dark' ? '☀' : '☾'}
-        </IconButton>
+        {!phone && (
+          <IconButton title={theme === 'dark' ? 'Light mode' : 'Dark mode'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+            {theme === 'dark' ? '☀' : '☾'}
+          </IconButton>
+        )}
         <IconButton title="Settings" onClick={() => openSettings()}>
           ⚙
         </IconButton>
@@ -241,8 +275,18 @@ function Header() {
   );
 }
 
-function ProjectSidebar() {
-  const { summaries, project, open, create, remove, setAvatar } = useProjectStore();
+function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; className?: string }) {
+  const { summaries, project, open: openProject, create: createProject, remove, setAvatar } = useProjectStore();
+  // In the phone's drawer, picking a card closes it.
+  const open = async (id: string) => {
+    await openProject(id);
+    onPicked?.();
+  };
+  const create = async (init?: Parameters<typeof createProject>[0]) => {
+    const p = await createProject(init);
+    onPicked?.();
+    return p;
+  };
   const [filter, setFilter] = useState('');
   const q = filter.trim().toLowerCase();
   const shown = summaries.filter((s) => !q || s.name.toLowerCase().includes(q) || s.tags.some((t) => t.toLowerCase().includes(q)));
@@ -257,7 +301,7 @@ function ProjectSidebar() {
     }
   };
   return (
-    <nav className="flex w-60 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950">
+    <nav className={cx('flex h-full w-60 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950 pt-[env(safe-area-inset-top)]', className)}>
       <div className="flex gap-1.5 p-2">
         <Button size="sm" variant="primary" className="flex-1" onClick={() => void create()}>
           + New card
@@ -289,7 +333,7 @@ function ProjectSidebar() {
               <IconButton
                 title="Delete card"
                 tone="danger"
-                className="opacity-0 group-hover:opacity-100"
+                className="opacity-0 group-hover:opacity-100 touch:opacity-100"
                 onClick={async () => {
                   if (await confirmDialog({ title: `Delete "${s.name || 'Unnamed'}"?`, body: 'The project (card, gens kept with it, chats) moves to data/trash, where you can recover it by hand.', confirmLabel: 'Delete', danger: true })) {
                     await remove(s.id);
@@ -333,7 +377,7 @@ function Welcome({ loading }: { loading: boolean }) {
 function Toasts() {
   const { toasts, dismiss } = useToastStore();
   return (
-    <div className="pointer-events-none fixed right-4 bottom-4 z-[60] flex w-80 flex-col gap-2">
+    <div className="pointer-events-none fixed right-4 bottom-4 z-[60] flex w-80 flex-col gap-2 phone:inset-x-3 phone:bottom-[calc(4.5rem+env(safe-area-inset-bottom))] phone:w-auto">
       {toasts.map((t) => (
         <div
           key={t.id}
@@ -354,5 +398,39 @@ function Toasts() {
         </div>
       ))}
     </div>
+  );
+}
+
+/** The phone's bottom bar: the card, and each dock tab. */
+function PhoneNav() {
+  const { phoneView, setPhoneView, dockTab, setDockTab } = useUiStore();
+  const generating = useGenSession((s) => s.generating);
+  const items: { key: string; icon: string; label: string; active: boolean; go: () => void }[] = [
+    { key: 'card', icon: '📝', label: 'Card', active: phoneView === 'card', go: () => setPhoneView('card') },
+    ...(
+      [
+        ['image', '🎨', 'Image'],
+        ['gallery', '🖼', 'Gallery'],
+        ['library', '📚', 'Library'],
+        ['chat', '💬', 'Chat'],
+        ['assist', '✨', 'Ideas'],
+      ] as const
+    ).map(([tab, icon, label]) => ({ key: tab, icon, label, active: phoneView === 'dock' && dockTab === tab, go: () => setDockTab(tab) })),
+  ];
+  return (
+    <nav className="flex flex-shrink-0 border-t border-slate-800 bg-slate-950 pb-[env(safe-area-inset-bottom)]">
+      {items.map((i) => (
+        <button
+          key={i.key}
+          type="button"
+          onClick={i.go}
+          className={cx('relative flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[10px]', i.active ? 'text-violet-300' : 'text-slate-500')}
+        >
+          <span className="text-lg leading-none">{i.icon}</span>
+          {i.label}
+          {i.key === 'image' && generating > 0 && <span className="absolute top-1 right-[30%] h-2 w-2 animate-pulse rounded-full bg-violet-400" />}
+        </button>
+      ))}
+    </nav>
   );
 }

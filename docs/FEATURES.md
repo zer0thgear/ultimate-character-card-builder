@@ -90,6 +90,18 @@ Settings → LLM connections:
 
 Each connection has its own max tokens, sampler settings and stop sequences, and a **Test connection** button. The test chat and the assistant each pick their own connection.
 
+## On a phone
+
+On a narrow screen (or a phone on its side) UCCB becomes one screen at a time, as NovelFrontEnd does: a bar along the bottom switches between the **Card** and the dock's **Image**, **Gallery**, **Library**, **Chat** and **Ideas** (Brainstorm). Both stay loaded, so a generation or a reply carries on while you look at the other. Anything that opens a dock tab (🎨 or 💬 on a greeting, Img2Img, Inpaint) switches to it.
+
+- ☰ opens the card list as a drawer; picking a card closes it.
+- The header keeps what fits: undo/redo, Export (which gains **Overwrite from a file…**) and Settings; the theme switch is in Settings → General.
+- Controls that otherwise show on hover (deleting a card, message actions, thumbnail actions) are always shown on a touch screen. Drag handles don't scroll the page.
+- Dialogs, the Edit/Inpaint canvas included, fill the screen; text fields are 16px so iPhone Safari doesn't zoom in.
+- The chat's toolbar wraps to two rows, and greetings keep their actions inside the unfolded greeting.
+
+To use it from your phone, run UCCB on your computer and open `http://<computer's LAN address>:3210` on the phone, on a network you trust (see the README's note on exposing it).
+
 ## Keyboard
 
 - **Ctrl+Enter** in the image form generates.

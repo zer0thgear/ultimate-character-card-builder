@@ -288,7 +288,7 @@ export function ChipInput({ values, onChange, placeholder }: { values: string[];
 
 export function Tabs<T extends string>({ value, onChange, tabs, className }: { value: T; onChange: (v: T) => void; tabs: { value: T; label: ReactNode; badge?: ReactNode }[]; className?: string }) {
   return (
-    <div className={cx('flex gap-0.5 overflow-x-auto border-b border-slate-800', className)} role="tablist">
+    <div className={cx('flex gap-0.5 overflow-x-auto border-b border-slate-800 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden', className)} role="tablist">
       {tabs.map((t) => (
         <button
           key={t.value}
@@ -335,8 +335,17 @@ export function Modal({
   if (!open) return null;
   const width = { sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl', xl: 'max-w-5xl', full: 'max-w-[96vw] h-[92vh]' }[size];
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={cx('flex max-h-[92vh] w-full flex-col rounded-lg border border-slate-700 bg-slate-900 shadow-2xl', width)} role="dialog" aria-modal>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 phone:p-0" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div
+        className={cx(
+          'flex max-h-[92vh] w-full flex-col rounded-lg border border-slate-700 bg-slate-900 shadow-2xl',
+          width,
+          // A phone gets the whole screen (clear of the notch and home bar).
+          size === 'sm' ? 'phone:mx-3' : 'phone:h-[100dvh] phone:max-h-none phone:max-w-none phone:rounded-none phone:border-0 phone:pt-[env(safe-area-inset-top)] phone:pb-[env(safe-area-inset-bottom)]',
+        )}
+        role="dialog"
+        aria-modal
+      >
         <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2.5">
           <h2 className="text-sm font-semibold text-slate-100">{title}</h2>
           <IconButton title="Close" onClick={onClose}>
@@ -344,7 +353,7 @@ export function Modal({
           </IconButton>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
-        {footer && <div className="flex justify-end gap-2 border-t border-slate-800 px-4 py-2.5">{footer}</div>}
+        {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-slate-800 px-4 py-2.5">{footer}</div>}
       </div>
     </div>,
     document.body,

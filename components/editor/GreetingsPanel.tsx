@@ -146,22 +146,36 @@ function GreetingList({ listKey, title, items, extraActions }: { listKey: ListKe
                   {!open.has(i) && <span className="min-w-0 truncate text-xs text-slate-500">{preview(items[i])}</span>}
                 </button>
                 <TokenBadge text={items[i]} className="mx-1" />
-                <GreetingButtons index={isAlt ? i + 1 : -1} text={items[i]} />
-                {isAlt && (
-                  <IconButton title="Make this the first message" onClick={() => void promote(i)}>
-                    ⇈
-                  </IconButton>
-                )}
-                <IconButton title="Duplicate" onClick={() => duplicate(i)}>
-                  ⧉
-                </IconButton>
-                <FieldActions path={`${listKey}.${i}`} />
+                <span className="flex items-center phone:hidden">
+                  <GreetingButtons index={isAlt ? i + 1 : -1} text={items[i]} />
+                    {isAlt && (
+                      <IconButton title="Make this the first message" onClick={() => void promote(i)}>
+                        ⇈
+                      </IconButton>
+                    )}
+                    <IconButton title="Duplicate" onClick={() => duplicate(i)}>
+                      ⧉
+                    </IconButton>
+                    <FieldActions path={`${listKey}.${i}`} />
+                </span>
                 <IconButton title="Delete" tone="danger" onClick={() => void remove(i)}>
                   🗑
                 </IconButton>
               </div>
               {open.has(i) && (
                 <div className="px-2 pb-2">
+                  <div className="mb-1.5 hidden flex-wrap items-center gap-0.5 phone:flex">
+                    <GreetingButtons index={isAlt ? i + 1 : -1} text={items[i]} />
+                    {isAlt && (
+                      <IconButton title="Make this the first message" onClick={() => void promote(i)}>
+                        ⇈
+                      </IconButton>
+                    )}
+                    <IconButton title="Duplicate" onClick={() => duplicate(i)}>
+                      ⧉
+                    </IconButton>
+                    <FieldActions path={`${listKey}.${i}`} />
+                  </div>
                   <GreetingText path={`${listKey}.${i}`} />
                 </div>
               )}

@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* NovelFrontEnd's variants (its ported canvas uses them), and UCCB's
+   phone layout: one screen with a bottom bar on narrow screens and on a
+   phone turned on its side. Keep PHONE_QUERY in hooks/useMediaQuery.ts
+   the same. */
+@custom-variant touch (@media (hover: none));
+@custom-variant phone (@media (max-width: 767.98px) or ((max-height: 500px) and (pointer: coarse)));
+@custom-variant wide (@media (min-width: 768px) and (not ((max-height: 500px) and (pointer: coarse))));
+@custom-variant short (@media (max-height: 500px) and (pointer: coarse));
+
 /* Dark is the default and is designed in Tailwind's slate scale (as
    NovelFrontEnd's components are). Light mode flips the slate scale end
    for end, so every slate-950 background becomes slate-50 and every
@@ -95,4 +104,18 @@ body {
     linear-gradient(-45deg, transparent 75%, var(--color-slate-800) 75%);
   background-size: 16px 16px;
   background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+/* iOS Safari zooms in on a text field under 16px, and stays zoomed. Touch
+   screens get 16px text fields instead. */
+@media (hover: none) and (pointer: coarse) {
+  textarea,
+  select,
+  input:not([type]),
+  input[type="text"],
+  input[type="search"],
+  input[type="number"],
+  input[type="password"] {
+    font-size: max(16px, 1em);
+  }
 }

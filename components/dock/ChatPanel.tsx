@@ -17,6 +17,7 @@ import { PresetPicker } from '@/components/llm/PresetManager';
 import { PersonaAvatar, PersonaPicker } from '@/components/llm/Personas';
 import { resolvePersona, usePersonaStore } from '@/store/personaStore';
 import { openSettings } from '@/components/SettingsDialog';
+import { useMediaQuery, PHONE_QUERY } from '@/hooks/useMediaQuery';
 import { chatFileName, chatToStJsonl, chatToText } from '@/lib/chatExport';
 import type { Persona } from '@/types/project';
 import { useTextTokens, formatTokens } from '@/lib/textTokens';
@@ -32,6 +33,7 @@ export function ChatPanel() {
   const { chat, list, loadFor, newChat, openChat, deleteChat, rename, setGreeting, setMessages } = useChatStore();
   const { connections, chatConnectionId, setChatConnection, chatSettings, presets } = useLlmStore();
   const personas = usePersonaStore((s) => s.personas);
+  const phone = useMediaQuery(PHONE_QUERY);
   const connection = connections.find((c) => c.id === chatConnectionId) ?? null;
   const pending = useBridgeStore((s) => s.chatGreeting);
   const clearPending = useBridgeStore((s) => s.clearChat);
@@ -159,8 +161,9 @@ export function ChatPanel() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex flex-shrink-0 items-center gap-1.5 border-b border-slate-800 p-2">
-        <select value={chat?.id ?? ''} onChange={(e) => e.target.value && void openChat(e.target.value)} className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs')}>
+      {/* On a phone this wraps to two rows: the chats, then who and how. */}
+      <div className="flex flex-shrink-0 flex-wrap items-center gap-1.5 border-b border-slate-800 p-2">
+        <select value={chat?.id ?? ''} onChange={(e) => e.target.value && void openChat(e.target.value)} className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs phone:min-w-[45%]')}>
           {!chat && <option value="">No chat open</option>}
           {list.map((c) => (
             <option key={c.id} value={c.id}>
@@ -220,21 +223,23 @@ export function ChatPanel() {
             </IconButton>
           </>
         )}
-        <IconButton title="Show the prompt the next reply would send" onClick={preview}>
-          🔍
-        </IconButton>
-        <PersonaPicker onManage={() => openSettings('personas')} />
-        <button
-          type="button"
-          onClick={() => setShowSettings(true)}
-          title={preset ? `Every chat uses the "${preset.name}" preset. Click to change it.` : 'No preset: the built-in prompt. Click to import or pick a SillyTavern preset.'}
-          className={cx('max-w-28 truncate rounded px-1.5 py-0.5 text-[10px]', preset ? 'bg-violet-500/15 text-violet-300' : 'bg-slate-800 text-slate-500')}
-        >
-          {preset ? preset.name : 'Built-in prompt'}
-        </button>
-        <IconButton title="Chat settings: connection, persona, prompt" onClick={() => setShowSettings(!showSettings)}>
-          ⚙
-        </IconButton>
+        <div className="flex items-center gap-1.5 phone:w-full">
+          <PersonaPicker onManage={() => openSettings('personas')} />
+          <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            title={preset ? `Every chat uses the "${preset.name}" preset. Click to change it.` : 'No preset: the built-in prompt. Click to import or pick a SillyTavern preset.'}
+            className={cx('max-w-28 truncate rounded px-1.5 py-0.5 text-[10px] phone:max-w-none phone:min-w-0 phone:flex-1 phone:text-left', preset ? 'bg-violet-500/15 text-violet-300' : 'bg-slate-800 text-slate-500')}
+          >
+            {preset ? preset.name : 'Built-in prompt'}
+          </button>
+          <IconButton title="Show the prompt the next reply would send" onClick={preview}>
+            🔍
+          </IconButton>
+          <IconButton title="Chat settings: connection, persona, prompt" onClick={() => setShowSettings(!showSettings)}>
+            ⚙
+          </IconButton>
+        </div>
       </div>
 
       {showSettings && <ChatSettings onClose={() => setShowSettings(false)} />}
@@ -287,7 +292,7 @@ export function ChatPanel() {
             }}
             minRows={2}
             maxRows={10}
-            placeholder={`Message as ${me.name}… (Enter sends, Shift+Enter for a new line; empty Enter asks for a reply)`}
+            placeholder={phone ? `Message as ${me.name}…` : `Message as ${me.name}… (Enter sends, Shift+Enter for a new line; empty Enter asks for a reply)`}
           />
           <div className="mt-1.5 flex items-center gap-1.5">
             {running ? (
@@ -421,7 +426,7 @@ function Bubble({
         <div className={cx('mb-1 flex items-center gap-2 text-xs', isUser && 'flex-row-reverse')}>
           <span className="font-semibold text-slate-200">{isUser ? userName || 'User' : card.nickname || card.name || 'Character'}</span>
           {m.model && !isUser && <span className="truncate text-slate-600">{m.model}</span>}
-          <span className={cx('flex items-center gap-0.5 opacity-0 group-hover:opacity-100', isUser ? 'mr-auto' : 'ml-auto')}>
+          <span className={cx('flex items-center gap-0.5 opacity-0 group-hover:opacity-100 touch:opacity-100', isUser ? 'mr-auto' : 'ml-auto')}>
             <span className="mr-1 text-[10px] text-slate-600">{formatTokens(tokens)} tok</span>
             <IconButton title="Edit" disabled={busy} onClick={() => setEditing(text)}>
               ✎

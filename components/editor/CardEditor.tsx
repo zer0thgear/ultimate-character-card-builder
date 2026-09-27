@@ -27,7 +27,7 @@ export function CardEditor() {
     <div className="flex h-full min-h-0 flex-col">
       {showAvatar && <AvatarStrip />}
       <Tabs value={editorTab} onChange={setEditorTab} tabs={tabs} className="px-3" />
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 phone:px-3">
         <div className="mx-auto max-w-4xl">
           {editorTab === 'basics' && <BasicsPanel />}
           {editorTab === 'greetings' && <GreetingsPanel />}
@@ -64,7 +64,7 @@ function AvatarStrip() {
 
   return (
     <div
-      className={cx('flex items-center gap-4 border-b border-slate-800 px-4 py-3', over && 'bg-violet-500/10')}
+      className={cx('flex items-center gap-4 border-b border-slate-800 px-4 py-3 phone:gap-3 phone:px-3 phone:py-2', over && 'bg-violet-500/10')}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('Files')) {
           e.preventDefault();
@@ -89,7 +89,7 @@ function AvatarStrip() {
           if (file) void set(file);
         }}
         title="Change the avatar (or drop an image here)"
-        className="checker group relative h-28 w-20 flex-shrink-0 overflow-hidden rounded-md border border-slate-700"
+        className="checker group relative h-28 w-20 flex-shrink-0 overflow-hidden rounded-md border border-slate-700 phone:h-20 phone:w-14"
       >
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element

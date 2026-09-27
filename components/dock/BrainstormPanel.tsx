@@ -80,7 +80,7 @@ export function BrainstormPanel() {
             <div key={i} className={cx('group rounded-lg px-3 py-2 text-sm whitespace-pre-wrap', m.role === 'user' ? 'ml-8 bg-sky-500/10 text-slate-200' : 'mr-4 bg-slate-900 text-slate-300')}>
               {m.content}
               {m.role === 'assistant' && (
-                <div className="mt-1 flex justify-end gap-1 opacity-0 group-hover:opacity-100">
+                <div className="mt-1 flex justify-end gap-1 opacity-0 group-hover:opacity-100 touch:opacity-100">
                   <IconButton title="Copy" onClick={() => void navigator.clipboard.writeText(m.content)}>
                     ⧉
                   </IconButton>

@@ -5,7 +5,8 @@ import type { NextConfig } from "next";
 // Don't deploy it anywhere public — the routes can read any folder you point
 // the gen library at.
 const nextConfig: NextConfig = {
-  devIndicators: { position: 'bottom-left' },
+  // Off: in the phone layout it sat on the bottom bar. Errors still show.
+  devIndicators: false,
   // sharp is a native module; keep it out of the server bundle.
   serverExternalPackages: ['sharp'],
 };
