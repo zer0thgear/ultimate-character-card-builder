@@ -10,6 +10,7 @@ import { sendToImg2Img } from '@/components/dock/ImageViewer';
 import { openSettings } from '@/components/SettingsDialog';
 import { useProjectStore } from '@/store/projectStore';
 import { copyText } from '@/lib/clipboard';
+import { openLightbox } from '@/components/Lightbox';
 
 // Older gens, from any folders set in Settings (GenBrowser's library, a
 // downloads folder…), searchable by prompt like GenBrowser: for
@@ -257,7 +258,7 @@ function LibraryViewer({ item, onClose, onStep, onSearch }: { item: LibraryItem;
       <div className="flex flex-col gap-3 md:flex-row">
         <div className="checker flex flex-1 items-center justify-center rounded-md">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={api.libraryFile(item.id)} alt="" className="max-h-[65vh] object-contain" />
+          <img src={api.libraryFile(item.id)} alt="" title="Tap for full screen" onClick={() => openLightbox(api.libraryFile(item.id))} className="max-h-[65vh] cursor-zoom-in object-contain" />
         </div>
         <div className="flex w-full flex-col gap-2 overflow-y-auto md:max-h-[65vh] md:w-80">
           <div className="text-xs text-slate-500">

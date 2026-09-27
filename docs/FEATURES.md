@@ -36,9 +36,10 @@ The dock on the right starts on **🎨 Image**. Model, size, sampler and the oth
 - **Scene** (the base prompt) and **Characters** (V4+, one prompt each, with a per-character negative and optional positions), with NovelAI's live tag suggestions, `{}`/`[]` emphasis on Ctrl+↑/↓, and NovelAI's own token meters.
 - **✨ From description** writes the character's appearance prompt from the card. **✨ From greeting** (or 🎨 on any greeting in the editor) writes a scene prompt that illustrates that greeting.
 - **Generate** (Ctrl+Enter from the form) with a cost estimate from NovelAI's own formulas ("free" when Opus covers it); **Copies** makes several in a row. Under it, and in Settings → General, your **Anlas** balance and, on Opus, how much of the free V5 allowance is left (with NovelAI's image estimate, refill rate and time to full; click the Anlas line to collapse it). Quality tags, UC presets, Variety+, SMEA, transparency (V5), live streaming preview, and **Img2Img** (⎘ on any image) are all there.
-- On each gen: **Set as avatar**, **☆ Keep** (saved with the card, shown in Gallery), **Save to folder**, download, ⎘ Img2Img base, 🖌 inpaint, use its seed, ♻ load its prompt back, remove.
+- On each gen: ⛶ **full screen** (or tap the picture), **Set as avatar**, **☆ Keep** (saved with the card, shown in Gallery), **Save to folder**, download, ⎘ Img2Img base, 🖌 inpaint, use its seed, ♻ load its prompt back, remove.
 - **Edit image and Inpaint**, NovelFrontEnd's canvas: paint over the base (draw, erase, fill, smudge, blur, colour pick, pen pressure) or mark what to regenerate on NovelAI's 8-pixel mask grid. Saving brings you back with the base updated; Generate then does an Image2Image or an inpaint (on the model's inpainting model, with its strength), and the result is pasted over the original through NovelAI's feathered edge. Paint and mask stay editable. Any gen, kept gen or library image can start one.
 - **🖼 Gallery**: gens kept with this card (label them, e.g. "avatar v2", "angry"), and this session's gens, for this card or all of them.
+- **Full screen**: tap the picture in a gen, kept gen or library image. Pinch or scroll to zoom, drag to pan, double-tap to zoom in and back out; swipe down, Back, Esc or ✕ closes it. On a phone it also takes the browser fullscreen (⛶ toggles that anywhere it's supported).
 
 ## The gen library
 
@@ -95,13 +96,14 @@ Each connection has its own max tokens, sampler settings and stop sequences, and
 
 On a narrow screen (or a phone on its side) UCCB becomes one screen at a time, as NovelFrontEnd does: a bar along the bottom switches between the **Card** and the dock's **Image**, **Gallery**, **Library**, **Chat** and **Ideas** (Brainstorm). Both stay loaded, so a generation or a reply carries on while you look at the other. Anything that opens a dock tab (🎨 or 💬 on a greeting, Img2Img, Inpaint) switches to it.
 
-- ☰ opens the card list as a drawer; picking a card closes it, and **⌂ Home** at its top closes the open card.
+- ☰ opens the card list as a drawer; picking a card or swiping it left closes it, and **⌂ Home** at its top closes the open card.
 - The header keeps what fits: undo/redo, Export (which gains **Overwrite from a file…**) and Settings; the theme switch is in Settings → General.
 - Controls that otherwise show on hover (deleting a card, message actions, thumbnail actions) are always shown on a touch screen. Drag handles don't scroll the page.
 - Dialogs, the Edit/Inpaint canvas included, fill the screen; text fields are 16px so iPhone Safari doesn't zoom in.
+- Pictures open full screen with pinch-zoom (see Image generation), and the phone's Back closes them.
 - The chat's toolbar wraps to two rows, and greetings keep their actions inside the unfolded greeting.
 
-To use it from your phone, run UCCB on your computer and open `http://<computer's LAN address>:3210` on the phone, on a network you trust (see the README's note on exposing it).
+To use it from your phone, run UCCB on your computer and open it over Tailscale (see the README's section on other devices).
 
 ## Keyboard
 

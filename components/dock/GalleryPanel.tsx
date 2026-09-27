@@ -9,6 +9,7 @@ import { setAsAvatar, keepImage, saveSessionImage, saveToFolder, reusePrompt } f
 import { Button, Empty, IconButton, Modal, Section, confirmDialog, cx, downloadBlob, inputClass } from '@/components/ui';
 import { sendToImg2Img } from '@/components/dock/ImageViewer';
 import type { KeptImage } from '@/types/project';
+import { openLightbox } from '@/components/Lightbox';
 
 // This card's pictures: gens kept with it (saved in the project) and this
 // session's gens (in memory until kept, saved or cleared).
@@ -148,7 +149,7 @@ function KeptViewer({ projectId, item, onClose }: { projectId: string; item: Kep
       <div className="flex flex-col gap-3 md:flex-row">
         <div className="checker flex flex-1 items-center justify-center rounded-md">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={url} alt="" className="max-h-[65vh] object-contain" />
+          <img src={url} alt="" title="Tap for full screen" onClick={() => openLightbox(url)} className="max-h-[65vh] cursor-zoom-in object-contain" />
         </div>
         <div className="flex w-full flex-col gap-2 md:w-72">
           <label className="flex flex-col gap-1 text-xs text-slate-400">

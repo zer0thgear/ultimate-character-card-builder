@@ -13,6 +13,7 @@ import { SettingsDialog, openSettings } from '@/components/SettingsDialog';
 import { FieldToolsHost } from '@/components/editor/fieldTools';
 import { CardEditor } from '@/components/editor/CardEditor';
 import { Dock } from '@/components/dock/Dock';
+import { Lightbox } from '@/components/Lightbox';
 import { LibraryPanel } from '@/components/dock/LibraryPanel';
 import { Tabs } from '@/components/ui';
 import { useMediaQuery, PHONE_QUERY } from '@/hooks/useMediaQuery';
@@ -141,14 +142,7 @@ export function Shell() {
         </div>
       </div>
       {phone && project && <PhoneNav />}
-      {phone && drawer && (
-        <div className="fixed inset-0 z-40 flex">
-          <div className="h-full w-72 max-w-[85vw] shadow-2xl">
-            <ProjectSidebar onPicked={() => setDrawer(false)} className="w-full" />
-          </div>
-          <button type="button" aria-label="Close the card list" className="flex-1 bg-black/50" onClick={() => setDrawer(false)} />
-        </div>
-      )}
+      {phone && drawer && <PhoneDrawer onClose={() => setDrawer(false)} />}
       {dropping && (
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center border-4 border-dashed border-violet-500/60 bg-violet-950/30 text-lg text-violet-200">
           Drop a card (PNG, JSON, CHARX) to import it as a new card
@@ -157,6 +151,7 @@ export function Shell() {
       <SettingsDialog />
       <FieldToolsHost />
       <ConfirmHost />
+      <Lightbox />
       <Toasts />
     </div>
   );
@@ -442,6 +437,41 @@ function CardsHome() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** The card list on a phone: slides over from the left, and swipes back. */
+function PhoneDrawer({ onClose }: { onClose: () => void }) {
+  const [dx, setDx] = useState(0);
+  const start = useRef<{ x: number; y: number; t: number; horizontal: boolean | null } | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    start.current = { x: t.clientX, y: t.clientY, t: Date.now(), horizontal: null };
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    const s = start.current;
+    if (!s) return;
+    const t = e.touches[0];
+    const x = t.clientX - s.x;
+    const y = t.clientY - s.y;
+    // Decide once whether this is a swipe or the list scrolling.
+    if (s.horizontal === null && Math.hypot(x, y) > 8) s.horizontal = Math.abs(x) > Math.abs(y);
+    if (s.horizontal) setDx(Math.min(0, x));
+  };
+  const onTouchEnd = () => {
+    const s = start.current;
+    start.current = null;
+    // Far enough, or a quick flick.
+    if (s?.horizontal && (dx < -80 || (dx < -30 && Date.now() - s.t < 250))) onClose();
+    else setDx(0);
+  };
+  return (
+    <div className="fixed inset-0 z-40 flex" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}>
+      <div className={cx('h-full w-72 max-w-[85vw] shadow-2xl', dx === 0 && 'transition-transform duration-150')} style={{ transform: `translateX(${dx}px)` }}>
+        <ProjectSidebar onPicked={onClose} className="w-full" />
+      </div>
+      <button type="button" aria-label="Close the card list" className="flex-1 bg-black/50" style={{ opacity: Math.max(0, 1 + dx / 288) }} onClick={onClose} />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { useBridgeStore } from '@/store/bridgeStore';
 import type { EditorMode } from '@/lib/editorResult';
 import { setAsAvatar, keepImage, saveSessionImage, reusePrompt, genFileName } from '@/lib/imageActions';
 import { downloadBlob, IconButton, Button, cx } from '@/components/ui';
+import { openLightbox } from '@/components/Lightbox';
 
 /** Makes this picture the image panel's Img2Img base, optionally opening
  *  the Edit Image or Inpaint canvas on it. */
@@ -20,7 +21,13 @@ export function ImageViewer({ image, preview, generating }: { image?: SessionIma
       <div className="checker relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
         {src ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={src} alt="" className={cx('max-h-full max-w-full object-contain', preview && 'opacity-80')} />
+          <img
+            src={src}
+            alt=""
+            title={image && !preview ? 'Tap for full screen' : undefined}
+            onClick={() => image && !preview && openLightbox(image.url)}
+            className={cx('max-h-full max-w-full object-contain', preview ? 'opacity-80' : image && 'cursor-zoom-in')}
+          />
         ) : (
           <span className="text-sm text-slate-500">{generating ? 'Generating…' : 'Your gens for this card show up here.'}</span>
         )}
@@ -38,6 +45,9 @@ export function ImageViewer({ image, preview, generating }: { image?: SessionIma
             {image.savedPath ? '✓ Saved' : 'Save to folder'}
           </Button>
           <div className="ml-auto flex items-center">
+            <IconButton title="Full screen" onClick={() => openLightbox(image.url)}>
+              ⛶
+            </IconButton>
             <IconButton title="Download" onClick={() => downloadBlob(image.blob, genFileName(image), 'image/png')}>
               ⬇
             </IconButton>
