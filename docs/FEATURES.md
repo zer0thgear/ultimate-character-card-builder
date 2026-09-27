@@ -58,6 +58,8 @@ Search is GenBrowser's: comma-separated terms, all required; `-term` excludes; `
 - The **greeting is read live from the card**: edit it and the chat shows the edit. Swipe ‹ › through every greeting.
 - **Swipes** on the last reply (› generates another), **Regenerate**, **Continue**, edit or delete any message, or cut the chat after one.
 - Reasoning from thinking models is shown folded, apart from the reply.
+- Messages show *actions* in italics, **bold**, and "speech" highlighted, nested either way: italics inside quotes keep the speech's colour, as in SillyTavern.
+- While a reply streams, the chat follows it only until the reply's start reaches the top, so you read it from the beginning; scroll up and it stays where you put it. **↓** jumps to the end (and keeps following it for the rest of that reply).
 - **🔍 Prompt inspector**: every part of the prompt, labelled, with tokens, and which lorebook entries fired and why (or were dropped over budget).
 - **⚙ Chat settings**: your name and persona, the main prompt, default post-history instructions, and whether to use the card's system prompt, post-history instructions, examples and lorebook.
 - Chats are saved per card; start as many as you like.
@@ -84,12 +86,18 @@ Text-completion (instruct/context) presets aren't supported yet.
 
 **✨ Brainstorm** is a free-form chat with the writing assistant, which always sees the card as it is right now. Replies can be copied or added to the card's Notes.
 
+## What the assistant was asked
+
+Every assistant job shows its **reasoning** (folded, and live while it thinks) and a **🔍 Prompt** link to exactly what was sent: ✨ on fields, new greetings, lorebook entries, the card review and Brainstorm show both inline; the quick buttons (card tags, the character and scene prompts) get a 🔍 (🧠 when there's reasoning) once they've run. The inspector lists the connection, model, preset, effort and time, the reasoning, the reply, and every message sent, with tokens, and copies it as JSON.
+
+Settings → Assistant also has **Recent requests** (this session's, newest first, each openable the same way) and **What each job sends**: pick a job to see its full prompt for the open card, wrapped in the assistant's preset if one is on, before running it. The prompts are built in (lib/assist.ts); they aren't editable yet.
+
 ## LLM connections
 
 Settings → LLM connections:
 
-- **NovelAI**: through its OpenAI-compatible API (`text.novelai.net/oa/v1`), with the NovelAI key from General unless you give it its own. Min P, top K, the unified sampler and thinking mode are there. **List** fetches the models your subscription has.
-- **OpenAI-compatible**: any base URL (OpenRouter, DeepSeek, KoboldCpp, llama.cpp, LM Studio, vLLM…). Reasoning in `reasoning_content`, `reasoning` or `<think>` tags is shown apart from the reply. Extra body fields can be added as JSON.
+- **NovelAI**: through its OpenAI-compatible API (`text.novelai.net/oa/v1`), with the NovelAI key from General unless you give it its own. Min P, top K, the unified sampler and thinking mode are there (NovelAI's API has thinking on or off, with no effort level). **List** fetches the models your subscription has.
+- **OpenAI-compatible**: any base URL (OpenRouter, DeepSeek, KoboldCpp, llama.cpp, LM Studio, vLLM…). Reasoning in `reasoning_content`, `reasoning` or `<think>` tags is shown apart from the reply. **Reasoning effort** (none to xhigh) is sent as `reasoning_effort`, or as `reasoning.effort` to OpenRouter; a SillyTavern preset's effort applies when its samplers are on. Extra body fields can be added as JSON.
 - **Anthropic**: Claude through the official SDK, with prompt caching on (the card is the same at the start of every turn), adaptive thinking and effort. The chat is reshaped for Claude's rules (system prompt apart, alternating turns).
 
 Each connection has its own max tokens, sampler settings and stop sequences, and a **Test connection** button. The test chat and the assistant each pick their own connection.
@@ -103,7 +111,8 @@ On a narrow screen (or a phone on its side) UCCB becomes one screen at a time, a
 - Controls that otherwise show on hover (deleting a card, message actions, thumbnail actions) are always shown on a touch screen. Drag handles don't scroll the page.
 - Dialogs, the Edit/Inpaint canvas included, fill the screen; text fields are 16px so iPhone Safari doesn't zoom in.
 - Pictures open full screen with pinch-zoom (see Image generation), and the phone's Back closes them.
-- The chat's toolbar wraps to two rows, and greetings keep their actions inside the unfolded greeting.
+- The chat's header is one row: the chat, **+ New**, **⋯** (rename, export, the next or last prompt, delete) and **⚙** (model, persona, preset and the rest). Its buttons wrap rather than run off the edge, and greetings keep their actions inside the unfolded greeting.
+- **Typing**: the page shrinks to fit above the on-screen keyboard (Chrome), the field you're in scrolls back into view, and while the keyboard is up the header, the chat's header and the bottom bar hide to give the text room. Enter adds a new line; **Send** sends.
 
 To use it from your phone, run UCCB on your computer and open it over Tailscale (see the README's section on other devices).
 
@@ -111,5 +120,5 @@ To use it from your phone, run UCCB on your computer and open it over Tailscale 
 
 - **Ctrl+Enter** in the image form generates.
 - **Ctrl+Z / Ctrl+Y** undo and redo the card (outside text boxes). **Ctrl+S** saves now.
-- **Enter** sends in chats (Shift+Enter for a new line); an empty Enter asks for a reply.
-- **← / →** step through library images in the viewer. **Esc** closes dialogs.
+- **Enter** sends in chats and Brainstorm (Shift+Enter for a new line); an empty Enter asks for a reply. On a touch screen Enter is a new line instead.
+- **← / →** step through library images in the viewer. **Esc** closes the dialog on top.

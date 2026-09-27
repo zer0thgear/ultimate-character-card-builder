@@ -93,6 +93,13 @@ body {
 :root[data-theme="light"] .chat-text q {
   color: var(--color-amber-700);
 }
+/* Italics in speech stay the speech's colour, as in SillyTavern. */
+.chat-text q em {
+  color: inherit;
+}
+.chat-text strong {
+  font-weight: 600;
+}
 
 /* Checkerboard behind images, so transparency shows. */
 .checker {

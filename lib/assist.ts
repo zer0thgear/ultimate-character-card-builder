@@ -152,6 +152,25 @@ export function critiqueMessages(card: CardData): LlmMessage[] {
   ];
 }
 
+/** Brainstorm (the Ideas tab): a free-form chat that always sees the card. */
+export function brainstormMessages(card: CardData, thread: LlmMessage[]): LlmMessage[] {
+  const system = `You are a creative partner helping a creator develop a roleplay character card. You can see the card as it currently is. Brainstorm freely, be specific and concrete, offer options when asked for ideas, and when you write text meant for the card, match its voice and keep {{char}}/{{user}} macros. Be concise unless asked for more.`;
+  return [{ role: 'system', content: `${system}\n\n<card>\n${cardContext(card, undefined, 20000)}\n</card>` }, ...thread];
+}
+
+/** Every job, for Settings → Assistant to show its prompt before it runs. */
+export const ASSIST_JOBS: { label: string; build: (card: CardData) => LlmMessage[] }[] = [
+  ...FIELD_ACTIONS.map((a) => ({ label: `✨ Description: ${a.label}`, build: (card: CardData) => fieldActionMessages(card, 'description', a.value, '(your instruction)') })),
+  { label: '✨ First message: Rewrite', build: (card) => fieldActionMessages(card, 'first_mes', 'rewrite', '(your instruction)') },
+  { label: '✨ New greeting', build: (card) => newGreetingMessages(card, '(your instruction)') },
+  { label: '✨ Lorebook entry', build: (card) => lorebookEntryMessages(card, '(your topic)') },
+  { label: '✨ Card tags', build: (card) => cardTagsMessages(card) },
+  { label: '✨ Card review', build: (card) => critiqueMessages(card) },
+  { label: '✨ Character prompt (art)', build: (card) => appearanceTagsMessages(card, '') },
+  { label: '✨ Scene prompt (art, from the first message)', build: (card) => sceneTagsMessages(card, card.first_mes, '') },
+  { label: '✨ Brainstorm', build: (card) => brainstormMessages(card, [{ role: 'user', content: '(your message)' }]) },
+];
+
 // ─── Words → art ─────────────────────────────────────────────────────────────
 
 const TAG_RULES = `NovelAI's image models are prompted with Danbooru-style tags: lowercase, comma-separated, most important first, using real Danbooru tag names (e.g. "long hair", "blue eyes", "hair between eyes", "black thighhighs", "looking at viewer"). Use {tag} to emphasise and [tag] to de-emphasise only when it matters. No sentences, no names of the character, no quality tags like "masterpiece".`;

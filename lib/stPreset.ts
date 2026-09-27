@@ -226,5 +226,10 @@ export function presetParams(preset: ChatPreset, kind: 'novelai' | 'openai' | 'a
   for (const k of ['temperature', 'top_p', 'top_k', 'top_a', 'min_p', 'frequency_penalty', 'presence_penalty', 'repetition_penalty', 'seed'] as const) {
     if (s[k] !== undefined) out[k] = s[k];
   }
+  // SillyTavern's effort ('auto' leaves it to the server). NovelAI has none.
+  if (kind === 'openai') {
+    const effort = ({ min: 'minimal', low: 'low', medium: 'medium', high: 'high', max: 'high' } as Record<string, string>)[s.reasoning_effort ?? ''];
+    if (effort) out.reasoning_effort = effort;
+  }
   return out;
 }

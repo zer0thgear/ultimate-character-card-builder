@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useProjectStore } from '@/store/projectStore';
 import { useChatStore } from '@/store/chatStore';
 import { useLlmStore } from '@/store/llmStore';
@@ -11,13 +11,14 @@ import { buildChatPrompt, displayText, greetingText, messageText, newMessage, ty
 import { buildPresetPrompt } from '@/lib/presetPrompt';
 import { presetParams } from '@/lib/stPreset';
 import { describeEntry } from '@/lib/lorebookScan';
-import { AutoTextarea, Button, IconButton, Modal, TokenBadge, Toggle, confirmDialog, cx, downloadBlob, inputClass } from '@/components/ui';
+import { AutoTextarea, Button, IconButton, Modal, TokenBadge, Toggle, confirmDialog, cx, downloadBlob, enterSends, inputClass } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { PresetPicker } from '@/components/llm/PresetManager';
 import { PersonaAvatar, PersonaPicker } from '@/components/llm/Personas';
 import { resolvePersona, usePersonaStore } from '@/store/personaStore';
 import { openSettings } from '@/components/SettingsDialog';
 import { useMediaQuery, PHONE_QUERY } from '@/hooks/useMediaQuery';
+import { useKeyboard } from '@/hooks/useKeyboard';
 import { chatFileName, chatToStJsonl, chatToText } from '@/lib/chatExport';
 import type { Persona } from '@/types/project';
 import { useTextTokens, formatTokens } from '@/lib/textTokens';
@@ -25,6 +26,7 @@ import type { CardData } from '@/types/card';
 import type { ChatMessage } from '@/types/project';
 import { uuid } from '@/lib/uuid';
 import { copyText } from '@/lib/clipboard';
+import { formatChat, type FormatNode } from '@/lib/chatFormat';
 
 // Test-chatting the card, built the way SillyTavern builds its prompt (see
 // lib/chatPrompt.ts), with swipes, edits, the greeting read live from the
@@ -36,6 +38,7 @@ export function ChatPanel() {
   const { connections, chatConnectionId, setChatConnection, chatSettings, presets } = useLlmStore();
   const personas = usePersonaStore((s) => s.personas);
   const phone = useMediaQuery(PHONE_QUERY);
+  const keyboard = useKeyboard((s) => s.open);
   const connection = connections.find((c) => c.id === chatConnectionId) ?? null;
   const pending = useBridgeStore((s) => s.chatGreeting);
   const clearPending = useBridgeStore((s) => s.clearChat);
@@ -46,7 +49,13 @@ export function ChatPanel() {
   const [lastPrompt, setLastPrompt] = useState<BuiltPrompt | null>(null);
   const [streamingId, setStreamingId] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
-  const bottom = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  // Following the chat's end: true while you're at the bottom. Scrolling up
+  // stops it, and so does a reply growing past the top of the view.
+  const follow = useRef(true);
+  const [following, setFollowing] = useState(true);
+  // ↓ during a reply: follow its end, not its start, until the next one.
+  const chase = useRef(false);
 
   useEffect(() => {
     if (project) void loadFor(project.id);
@@ -59,9 +68,45 @@ export function ChatPanel() {
     void newChat(pending);
   }, [pending, project, clearPending, newChat, list]);
 
-  useEffect(() => {
-    bottom.current?.scrollIntoView({ block: 'end' });
-  }, [chat?.messages.length, streamText]);
+  // New text scrolls into view while following, but never past the start of
+  // the reply being written, so it can be read from the top as it streams.
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el || !follow.current) return;
+    let target = el.scrollHeight - el.clientHeight;
+    const writing = streamingId && !chase.current ? el.querySelector<HTMLElement>(`[data-msg="${streamingId}"]`) : null;
+    if (writing) target = Math.min(target, writing.offsetTop - 8);
+    if (target > el.scrollTop) el.scrollTop = target;
+    // Held at the reply's start with more below: stop following (↓ shows).
+    if (writing && el.scrollHeight - el.scrollTop - el.clientHeight >= 60) {
+      follow.current = false;
+      setTimeout(() => setFollowing(false));
+    }
+  }, [chat?.messages.length, streamText, streamingId]);
+
+  // A chat opens at its end.
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    follow.current = true;
+    el.scrollTop = el.scrollHeight;
+  }, [chat?.id]);
+
+  const onScroll = () => {
+    const el = scroller.current;
+    if (!el) return;
+    const atEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+    follow.current = atEnd;
+    if (atEnd !== following) setFollowing(atEnd);
+  };
+  const toEnd = () => {
+    const el = scroller.current;
+    if (!el) return;
+    follow.current = true;
+    chase.current = true;
+    setFollowing(true);
+    el.scrollTop = el.scrollHeight;
+  };
 
   if (!project) return null;
   const card = project.card.data;
@@ -133,6 +178,8 @@ export function ChatPanel() {
       setMessages(() => messages);
       setInput('');
     }
+    follow.current = true;
+    chase.current = false;
     await reply(messages, undefined, undefined, !text);
   };
 
@@ -160,42 +207,55 @@ export function ChatPanel() {
   };
 
   const preview = () => setInspect(build(chat?.messages ?? []));
+  const renameChat = () => {
+    if (!chat) return;
+    const name = prompt('Chat name', chat.name);
+    if (name?.trim()) rename(name.trim());
+  };
+  const deleteThisChat = async () => {
+    if (chat && (await confirmDialog({ title: `Delete "${chat.name}"?`, confirmLabel: 'Delete', danger: true }))) await deleteChat(chat.id);
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* On a phone this wraps to two rows: the chats, then who and how. */}
-      <div className="flex flex-shrink-0 flex-wrap items-center gap-1.5 border-b border-slate-800 p-2">
-        <select value={chat?.id ?? ''} onChange={(e) => e.target.value && void openChat(e.target.value)} className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs phone:min-w-[45%]')}>
-          {!chat && <option value="">No chat open</option>}
-          {list.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name} ({c.messageCount})
-            </option>
-          ))}
-        </select>
-        <Button size="sm" variant="primary" onClick={() => void newChat(0)}>
-          + New
-        </Button>
-        {chat && (
-          <>
-            <IconButton
-              title="Rename"
-              onClick={() => {
-                const name = prompt('Chat name', chat.name);
-                if (name?.trim()) rename(name.trim());
-              }}
-            >
-              ✎
-            </IconButton>
-            <div className="relative">
-              <IconButton title="Export this chat for SillyTavern or Chub" onClick={() => setExportOpen(!exportOpen)}>
-                ⬇
+      {/* On a phone: one row (the chats, ⋯ for the rest, ⚙ for who and how),
+          gone while you type. */}
+      {!(phone && keyboard) && (
+        <div className="flex flex-shrink-0 flex-wrap items-center gap-1.5 border-b border-slate-800 p-2 phone:flex-nowrap">
+          <select value={chat?.id ?? ''} onChange={(e) => e.target.value && void openChat(e.target.value)} className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs')}>
+            {!chat && <option value="">No chat open</option>}
+            {list.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.messageCount})
+              </option>
+            ))}
+          </select>
+          <Button size="sm" variant="primary" onClick={() => void newChat(0)}>
+            + New
+          </Button>
+          {chat && (
+            <div className="relative flex items-center">
+              {!phone && (
+                <IconButton title="Rename" onClick={renameChat}>
+                  ✎
+                </IconButton>
+              )}
+              <IconButton title={phone ? 'More: rename, export, delete, the prompt' : 'Export this chat for SillyTavern or Chub'} onClick={() => setExportOpen(!exportOpen)}>
+                {phone ? '⋯' : '⬇'}
               </IconButton>
               {exportOpen && (
-                <div className="absolute right-0 z-30 mt-1 w-64 rounded-md border border-slate-700 bg-slate-900 p-1 shadow-xl" onMouseLeave={() => setExportOpen(false)}>
+                <div className="absolute top-full right-0 z-30 mt-1 w-64 rounded-md border border-slate-700 bg-slate-900 p-1 shadow-xl" onMouseLeave={() => setExportOpen(false)}>
                   {[
-                    { label: 'SillyTavern / Chub (.jsonl)', hint: 'Import it in SillyTavern (Manage chat files → Import) or Chub', run: () => downloadBlob(chatToStJsonl(chat, card, me.name), `${chatFileName(chat, card)}.jsonl`, 'application/jsonl') },
-                    { label: 'Plain text (.txt)', hint: 'For reading or sharing', run: () => downloadBlob(chatToText(chat, card, me.name), `${chatFileName(chat, card)}.txt`, 'text/plain') },
+                    ...(phone ? [{ label: '✎ Rename', hint: '', run: renameChat }] : []),
+                    { label: '⬇ SillyTavern / Chub (.jsonl)', hint: 'Import it in SillyTavern (Manage chat files → Import) or Chub', run: () => downloadBlob(chatToStJsonl(chat, card, me.name), `${chatFileName(chat, card)}.jsonl`, 'application/jsonl') },
+                    { label: '⬇ Plain text (.txt)', hint: 'For reading or sharing', run: () => downloadBlob(chatToText(chat, card, me.name), `${chatFileName(chat, card)}.txt`, 'text/plain') },
+                    ...(phone
+                      ? [
+                          { label: '🔍 The next prompt', hint: 'What the next reply would send', run: preview },
+                          ...(lastPrompt ? [{ label: `🔍 The last prompt · ${lastPrompt.lore.active.length} lore`, hint: 'What the last reply sent', run: () => setInspect(lastPrompt) }] : []),
+                          { label: '🗑 Delete this chat', hint: '', run: deleteThisChat },
+                        ]
+                      : []),
                   ].map((o) => (
                     <button
                       key={o.label}
@@ -213,71 +273,85 @@ export function ChatPanel() {
                   ))}
                 </div>
               )}
+              {!phone && (
+                <IconButton title="Delete this chat" tone="danger" onClick={deleteThisChat}>
+                  🗑
+                </IconButton>
+              )}
             </div>
-            <IconButton
-              title="Delete this chat"
-              tone="danger"
-              onClick={async () => {
-                if (await confirmDialog({ title: `Delete "${chat.name}"?`, confirmLabel: 'Delete', danger: true })) await deleteChat(chat.id);
-              }}
-            >
-              🗑
+          )}
+          {phone ? (
+            <IconButton title="Chat settings: model, persona, preset" onClick={() => setShowSettings(!showSettings)}>
+              ⚙
             </IconButton>
-          </>
-        )}
-        <div className="flex items-center gap-1.5 phone:w-full">
-          <PersonaPicker onManage={() => openSettings('personas')} />
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <PersonaPicker onManage={() => openSettings('personas')} />
+              <button
+                type="button"
+                onClick={() => setShowSettings(true)}
+                title={preset ? `Every chat uses the "${preset.name}" preset. Click to change it.` : 'No preset: the built-in prompt. Click to import or pick a SillyTavern preset.'}
+                className={cx('max-w-28 truncate rounded px-1.5 py-0.5 text-[10px]', preset ? 'bg-violet-500/15 text-violet-300' : 'bg-slate-800 text-slate-500')}
+              >
+                {preset ? preset.name : 'Built-in prompt'}
+              </button>
+              <IconButton title="Show the prompt the next reply would send" onClick={preview}>
+                🔍
+              </IconButton>
+              <IconButton title="Chat settings: connection, persona, prompt" onClick={() => setShowSettings(!showSettings)}>
+                ⚙
+              </IconButton>
+            </div>
+          )}
+        </div>
+      )}
+
+      {showSettings && !(phone && keyboard) && <ChatSettings phone={phone} onClose={() => setShowSettings(false)} />}
+      {!showSettings && !phone && <ConnectionPicker value={chatConnectionId} onChange={setChatConnection} label="Model" className="flex-shrink-0 border-b border-slate-800 px-2 py-1.5" />}
+
+      <div className="relative min-h-0 flex-1">
+        <div ref={scroller} onScroll={onScroll} className="relative h-full overflow-y-auto px-3 py-3">
+          {!chat ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-slate-500">
+              Test how the card plays.
+              <Button variant="primary" onClick={() => void newChat(0)}>
+                Start a chat
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <GreetingBubble card={card} index={chat.greeting} count={greetingCount} onSwipe={setGreeting} userName={me.name} />
+              {chat.messages.map((m, i) => (
+                <div key={m.id} data-msg={m.id}>
+                  <Bubble
+                    card={card}
+                    message={m}
+                    userName={me.name}
+                    persona={me.persona}
+                    streaming={streamingId === m.id}
+                    streamReasoning={streamingId === m.id ? streamReasoning : ''}
+                    isLast={i === chat.messages.length - 1}
+                    busy={running}
+                    onChange={(patch) => setMessages((ms) => ms.map((x) => (x.id === m.id ? { ...x, ...patch } : x)))}
+                    onDelete={() => setMessages((ms) => ms.filter((x) => x.id !== m.id))}
+                    onDeleteAfter={() => setMessages((ms) => ms.slice(0, i + 1))}
+                    onSwipeNew={() => void reply(chat.messages, m)}
+                  />
+                </div>
+              ))}
+              {error && !running && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
+            </div>
+          )}
+        </div>
+        {chat && !following && (
           <button
             type="button"
-            onClick={() => setShowSettings(true)}
-            title={preset ? `Every chat uses the "${preset.name}" preset. Click to change it.` : 'No preset: the built-in prompt. Click to import or pick a SillyTavern preset.'}
-            className={cx('max-w-28 truncate rounded px-1.5 py-0.5 text-[10px] phone:max-w-none phone:min-w-0 phone:flex-1 phone:text-left', preset ? 'bg-violet-500/15 text-violet-300' : 'bg-slate-800 text-slate-500')}
+            onClick={toEnd}
+            title="Jump to the latest message"
+            className="absolute right-3 bottom-3 flex h-9 w-9 items-center justify-center rounded-full border border-slate-700 bg-slate-900/90 text-slate-200 shadow-lg hover:bg-slate-800"
           >
-            {preset ? preset.name : 'Built-in prompt'}
+            ↓
           </button>
-          <IconButton title="Show the prompt the next reply would send" onClick={preview}>
-            🔍
-          </IconButton>
-          <IconButton title="Chat settings: connection, persona, prompt" onClick={() => setShowSettings(!showSettings)}>
-            ⚙
-          </IconButton>
-        </div>
-      </div>
-
-      {showSettings && <ChatSettings onClose={() => setShowSettings(false)} />}
-      {!showSettings && <ConnectionPicker value={chatConnectionId} onChange={setChatConnection} label="Model" className="flex-shrink-0 border-b border-slate-800 px-2 py-1.5" />}
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-        {!chat ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-slate-500">
-            Test how the card plays.
-            <Button variant="primary" onClick={() => void newChat(0)}>
-              Start a chat
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <GreetingBubble card={card} index={chat.greeting} count={greetingCount} onSwipe={setGreeting} userName={me.name} />
-            {chat.messages.map((m, i) => (
-              <Bubble
-                key={m.id}
-                card={card}
-                message={m}
-                userName={me.name}
-                persona={me.persona}
-                streaming={streamingId === m.id}
-                streamReasoning={streamingId === m.id ? streamReasoning : ''}
-                isLast={i === chat.messages.length - 1}
-                busy={running}
-                onChange={(patch) => setMessages((ms) => ms.map((x) => (x.id === m.id ? { ...x, ...patch } : x)))}
-                onDelete={() => setMessages((ms) => ms.filter((x) => x.id !== m.id))}
-                onDeleteAfter={() => setMessages((ms) => ms.slice(0, i + 1))}
-                onSwipeNew={() => void reply(chat.messages, m)}
-              />
-            ))}
-            {error && !running && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
-            <div ref={bottom} />
-          </div>
         )}
       </div>
 
@@ -287,7 +361,7 @@ export function ChatPanel() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              if (enterSends(e)) {
                 e.preventDefault();
                 void send();
               }
@@ -296,7 +370,7 @@ export function ChatPanel() {
             maxRows={10}
             placeholder={phone ? `Message as ${me.name}…` : `Message as ${me.name}… (Enter sends, Shift+Enter for a new line; empty Enter asks for a reply)`}
           />
-          <div className="mt-1.5 flex items-center gap-1.5">
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {running ? (
               <Button size="sm" variant="danger" onClick={stop}>
                 Stop
@@ -315,7 +389,7 @@ export function ChatPanel() {
             <Button size="sm" disabled={running} onClick={() => void impersonate()} title="Write your next message for you (it lands in the box to edit)">
               🎭 Impersonate
             </Button>
-            {lastPrompt && (
+            {lastPrompt && !phone && (
               <button type="button" className="ml-auto text-[11px] text-slate-500 hover:text-slate-300" onClick={() => setInspect(lastPrompt)}>
                 Last prompt · {lastPrompt.lore.active.length} lore
               </button>
@@ -330,21 +404,24 @@ export function ChatPanel() {
 
 // ─── Messages ────────────────────────────────────────────────────────────────
 
-/** *actions* in italics and "speech" highlighted, as frontends show them. */
+/** *actions* in italics, **bold**, and "speech" highlighted, nested either
+ *  way, as frontends show them (lib/chatFormat.ts). */
 function Formatted({ text }: { text: string }) {
-  const parts = text.split(/(\*[^*\n]+\*|"[^"\n]*")/g);
-  return (
-    <div className="chat-text text-sm leading-relaxed whitespace-pre-wrap text-slate-200">
-      {parts.map((p, i) =>
-        p.startsWith('*') && p.endsWith('*') && p.length > 1 ? (
-          <em key={i}>{p.slice(1, -1)}</em>
-        ) : p.startsWith('"') && p.endsWith('"') && p.length > 1 ? (
-          <q key={i}>{p}</q>
-        ) : (
-          <Fragment key={i}>{p}</Fragment>
-        ),
-      )}
-    </div>
+  const nodes = useMemo(() => formatChat(text), [text]);
+  return <div className="chat-text text-sm leading-relaxed whitespace-pre-wrap text-slate-200">{renderNodes(nodes)}</div>;
+}
+
+function renderNodes(nodes: FormatNode[]): React.ReactNode {
+  return nodes.map((n, i) =>
+    typeof n === 'string' ? (
+      <Fragment key={i}>{n}</Fragment>
+    ) : n.kind === 'em' ? (
+      <em key={i}>{renderNodes(n.children)}</em>
+    ) : n.kind === 'strong' ? (
+      <strong key={i}>{renderNodes(n.children)}</strong>
+    ) : (
+      <q key={i}>{renderNodes(n.children)}</q>
+    ),
   );
 }
 
@@ -500,7 +577,7 @@ function Bubble({
 
 // ─── Settings and inspector ──────────────────────────────────────────────────
 
-function ChatSettings({ onClose }: { onClose: () => void }) {
+function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void }) {
   const { chatSettings: s, setChatSettings, chatConnectionId, setChatConnection } = useLlmStore();
   const usingPreset = !!s.presetId;
   const personas = usePersonaStore((st) => st.personas);
@@ -515,6 +592,11 @@ function ChatSettings({ onClose }: { onClose: () => void }) {
         </IconButton>
       </div>
       <ConnectionPicker value={chatConnectionId} onChange={setChatConnection} label="Model" />
+      {phone && (
+        <label className="flex items-center gap-2 text-xs text-slate-400">
+          Persona <PersonaPicker onManage={() => openSettings('personas')} />
+        </label>
+      )}
       <PresetPicker />
       {usingPersona ? (
         <div className="flex items-center justify-between rounded-md border border-slate-800 px-2 py-1.5 text-xs text-slate-400">

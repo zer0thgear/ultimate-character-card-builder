@@ -14,9 +14,11 @@ import { FieldToolsHost } from '@/components/editor/fieldTools';
 import { CardEditor } from '@/components/editor/CardEditor';
 import { Dock } from '@/components/dock/Dock';
 import { Lightbox } from '@/components/Lightbox';
+import { AssistInspectorHost } from '@/components/llm/AssistTrace';
 import { LibraryPanel } from '@/components/dock/LibraryPanel';
 import { Tabs } from '@/components/ui';
 import { useMediaQuery, PHONE_QUERY } from '@/hooks/useMediaQuery';
+import { useKeyboard, watchKeyboard } from '@/hooks/useKeyboard';
 import { useSessionStore as useGenSession } from '@/store/sessionStore';
 
 export function Shell() {
@@ -28,11 +30,13 @@ export function Shell() {
   // as a drawer, as NovelFrontEnd's phone layout does.
   const phone = useMediaQuery(PHONE_QUERY);
   const [drawer, setDrawer] = useState(false);
+  const keyboard = useKeyboard((s) => s.open);
 
   useEffect(() => {
     // layout.tsx applies the saved theme before paint; hydration can drop
     // the attribute again, so it's set from the store once more here.
     document.documentElement.dataset.theme = useUiStore.getState().theme;
+    watchKeyboard();
     void useConfigStore.getState().load();
     void usePersonaStore.getState().load();
     const store = useProjectStore.getState();
@@ -111,7 +115,8 @@ export function Shell() {
       onDragLeave={(e) => e.currentTarget === e.target && setDropping(false)}
       onDrop={(e) => void onDrop(e)}
     >
-      <Header phone={phone} onMenu={() => (phone ? setDrawer(true) : setSidebarOpen(!sidebarOpen))} />
+      {/* Typing on a phone, the header and bottom bar make way for the text. */}
+      {!(phone && keyboard) && <Header phone={phone} onMenu={() => (phone ? setDrawer(true) : setSidebarOpen(!sidebarOpen))} />}
       <div className="flex min-h-0 flex-1">
         {!phone && sidebarOpen && <ProjectSidebar />}
         <div ref={workspace} className="flex min-w-0 flex-1">
@@ -141,7 +146,7 @@ export function Shell() {
           )}
         </div>
       </div>
-      {phone && project && <PhoneNav />}
+      {phone && project && !keyboard && <PhoneNav />}
       {phone && drawer && <PhoneDrawer onClose={() => setDrawer(false)} />}
       {dropping && (
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center border-4 border-dashed border-violet-500/60 bg-violet-950/30 text-lg text-violet-200">
@@ -151,6 +156,7 @@ export function Shell() {
       <SettingsDialog />
       <FieldToolsHost />
       <ConfirmHost />
+      <AssistInspectorHost />
       <Lightbox />
       <Toasts />
     </div>

@@ -63,6 +63,16 @@ export function IconButton({
 
 // ─── Form controls ───────────────────────────────────────────────────────────
 
+/**
+ * Whether Enter in a message box should send: Enter without Shift, not
+ * mid-composition, and not on a touch screen, where Enter is the only way
+ * to start a new line (Send is right there).
+ */
+export function enterSends(e: React.KeyboardEvent): boolean {
+  if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return false;
+  return !(typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches);
+}
+
 export const inputClass =
   'w-full rounded-md border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-violet-500 focus:outline-none';
 
@@ -166,9 +176,22 @@ export const AutoTextarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAt
       const line = parseFloat(style.lineHeight) || 20;
       const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
       const border = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+      // Collapsing it to measure shrinks the panels it scrolls in, and the
+      // browser pulls their scroll position back to fit; put it back after,
+      // or the view jumps and what you're typing drops out of sight.
+      const kept: [HTMLElement, number][] = [];
+      for (let p = el.parentElement; p; p = p.parentElement) if (p.scrollHeight > p.clientHeight) kept.push([p, p.scrollTop]);
       el.style.height = '0px';
       const content = el.scrollHeight; // content + padding
       el.style.height = `${Math.min(Math.max(content, minRows * line + padding), maxRows * line + padding) + border}px`;
+      for (const [p, top] of kept) p.scrollTop = top;
+      // Typing at the end as it grows: keep that end in view (above the
+      // on-screen keyboard too).
+      if (document.activeElement === el && el.selectionEnd === el.value.length) {
+        const bottom = el.getBoundingClientRect().bottom;
+        const visible = window.visualViewport ? window.visualViewport.offsetTop + window.visualViewport.height : window.innerHeight;
+        if (bottom > visible) el.scrollIntoView({ block: 'end' });
+      }
     }, [minRows, maxRows]);
     useLayoutEffect(fit, [value, fit]);
     useEffect(() => {
@@ -311,6 +334,9 @@ export function Tabs<T extends string>({ value, onChange, tabs, className }: { v
 
 // ─── Modal ───────────────────────────────────────────────────────────────────
 
+/** Open dialogs, oldest first, so Escape closes only the top one. */
+const openModals: object[] = [];
+
 export function Modal({
   open,
   onClose,
@@ -326,12 +352,23 @@ export function Modal({
   footer?: ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
 }) {
+  const closeRef = useRef(onClose);
+  useLayoutEffect(() => {
+    closeRef.current = onClose;
+  });
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    // Only the dialog on top closes (one opened over Settings, say). Kept
+    // in opening order, so a dialog re-rendering doesn't jump the queue.
+    const token = {};
+    openModals.push(token);
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && openModals[openModals.length - 1] === token && closeRef.current();
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      openModals.splice(openModals.indexOf(token), 1);
+    };
+  }, [open]);
   if (!open) return null;
   const width = { sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl', xl: 'max-w-5xl', full: 'max-w-[96vw] h-[92vh]' }[size];
   return createPortal(

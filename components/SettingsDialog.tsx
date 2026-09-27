@@ -1,16 +1,22 @@
 'use client';
 
 import { create } from 'zustand';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSessionStore } from '@/store/sessionStore';
 import { useConfigStore, useUiStore, toast } from '@/store/uiStore';
 import { useLlmStore, requestConnection } from '@/store/llmStore';
-import type { LlmConnection, ProviderKind, SamplerParams } from '@/types/llm';
+import { REASONING_EFFORTS, type LlmConnection, type ProviderKind, type SamplerParams } from '@/types/llm';
 import { api, streamLlm } from '@/lib/api';
 import { Button, IconButton, Modal, NumberInput, Select, Tabs, Toggle, cx, inputClass } from '@/components/ui';
 import { AssistPresetPicker, PresetPicker } from '@/components/llm/PresetManager';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { PersonaManager } from '@/components/llm/Personas';
+import { MessageList, inspectAssistRun } from '@/components/llm/AssistTrace';
+import { useAssistLog } from '@/store/assistLog';
+import { assistRequest } from '@/hooks/useLlmStream';
+import { ASSIST_JOBS } from '@/lib/assist';
+import { newCard } from '@/lib/cardSpec';
+import { useProjectStore } from '@/store/projectStore';
 import { AccountStatus } from '@/components/AccountStatus';
 
 type SettingsTab = 'general' | 'folders' | 'llm' | 'chat' | 'assist' | 'personas';
@@ -398,6 +404,19 @@ function ConnectionEditor({ connection: c }: { connection: LlmConnection }) {
             {num('min_p', 'Min P')}
             {num('frequency_penalty', 'Frequency penalty')}
             {num('presence_penalty', 'Presence penalty')}
+            {c.kind === 'openai' && (
+              <label className="flex flex-col gap-0.5 text-xs text-slate-400" title="For reasoning models. Sent as reasoning_effort (reasoning.effort to OpenRouter); models that don't reason may ignore or refuse it.">
+                Reasoning effort
+                <select value={c.params.reasoning_effort ?? ''} onChange={(e) => setParam({ reasoning_effort: (e.target.value || undefined) as SamplerParams['reasoning_effort'] })} className={cx(inputClass, 'py-1')}>
+                  <option value="">server default</option>
+                  {REASONING_EFFORTS.map((x) => (
+                    <option key={x} value={x}>
+                      {x}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </>
         ) : (
           <>
@@ -423,6 +442,7 @@ function ConnectionEditor({ connection: c }: { connection: LlmConnection }) {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="col-span-2 flex items-end pb-1 sm:col-span-4">
             <Toggle checked={!!c.params.enable_thinking} onChange={(enable_thinking) => setParam({ enable_thinking })} label="Thinking (enable_thinking)" />
+            <span className="ml-3 text-[11px] text-slate-500">NovelAI&apos;s API has thinking on or off, with no effort level.</span>
           </div>
           {num('unified_linear', 'Unified: linear', 0.01, "NovelAI's unified sampler")}
           {num('unified_quadratic', 'Unified: quadratic')}
@@ -491,6 +511,64 @@ function AssistTab() {
       </p>
       <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant model" />
       <AssistPresetPicker />
+      <RecentAssistRuns />
+      <AssistPromptPreview />
+    </div>
+  );
+}
+
+/** This session's assistant requests, each openable to its prompt,
+ *  reasoning and reply. */
+function RecentAssistRuns() {
+  const runs = useAssistLog((s) => s.runs);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="text-xs font-semibold tracking-wide text-slate-400 uppercase">Recent requests</div>
+      {runs.length === 0 ? (
+        <p className="text-xs text-slate-500">None yet this session. Each ✨ you run shows up here, with exactly what was sent and what came back.</p>
+      ) : (
+        <div className="flex max-h-56 flex-col overflow-y-auto rounded-md border border-slate-800">
+          {runs.map((r) => (
+            <button key={r.id} type="button" onClick={() => inspectAssistRun(r.id)} className="flex items-center gap-2 border-b border-slate-800 px-2.5 py-1.5 text-left text-xs last:border-0 hover:bg-slate-800/60">
+              <span className="min-w-0 flex-1 truncate text-slate-200">{r.label}</span>
+              {r.reasoning && <span title="Has reasoning">🧠</span>}
+              {r.error && <span className="text-red-400">failed</span>}
+              {r.running && <span className="animate-pulse text-violet-300">running</span>}
+              <span className="flex-shrink-0 text-slate-500">
+                {r.model || r.connection} · {new Date(r.at).toLocaleTimeString([], { timeStyle: 'short' })}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Any job's prompt, as it would be sent now: for the open card, through
+ *  the assistant's preset if one is on. */
+function AssistPromptPreview() {
+  const [job, setJob] = useState(0);
+  const card = useProjectStore((s) => s.project?.card.data);
+  // Re-read when the preset or its switches change.
+  const settings = useLlmStore((s) => s.assistSettings);
+  const presets = useLlmStore((s) => s.presets);
+  const built = useMemo(() => assistRequest(ASSIST_JOBS[job].build(card ?? newCard().data)), [job, card, settings, presets]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="text-xs font-semibold tracking-wide text-slate-400 uppercase">What each job sends</div>
+      <p className="text-xs text-slate-500">
+        {card ? 'Built from the open card' : 'No card is open, so this uses an empty one'}
+        {built.preset ? `, wrapped in the "${built.preset}" preset` : ''}. Your instructions go where it says so.
+      </p>
+      <select value={job} onChange={(e) => setJob(Number(e.target.value))} className={cx(inputClass, 'py-1 text-xs')}>
+        {ASSIST_JOBS.map((j, i) => (
+          <option key={j.label} value={i}>
+            {j.label}
+          </option>
+        ))}
+      </select>
+      <MessageList messages={built.messages} />
     </div>
   );
 }

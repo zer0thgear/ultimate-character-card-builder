@@ -13,6 +13,7 @@ import { findPattern, findReplace, nameToMacro, purgeAsterisks, straightenQuotes
 import { fieldLabel, listTextFields, type FieldGroup } from '@/lib/cardPath';
 import { useTextTokens, formatTokens } from '@/lib/textTokens';
 import { buildChatPrompt } from '@/lib/chatPrompt';
+import { AssistReasoning, AssistTraceButton } from '@/components/llm/AssistTrace';
 
 // ─── Prompts ─────────────────────────────────────────────────────────────────
 
@@ -36,10 +37,10 @@ export function CreatorPanel() {
   const [creator, setCreator] = useCardField('creator');
   const [version, setVersion] = useCardField('character_version');
   const { assistConnectionId, setAssistConnection } = useLlmStore();
-  const { runAssist, running } = useLlmStream();
+  const { runAssist, runId, running } = useLlmStream();
   if (!card) return null;
   const suggestTags = async () => {
-    const r = await runAssist(cardTagsMessages(card));
+    const r = await runAssist(cardTagsMessages(card), undefined, '✨ Card tags');
     if (r.error) return toast(r.error, 'error');
     const tags = r.text.split(',').map((t) => t.trim().replace(/^["'#]|["'.]$/g, '').toLowerCase()).filter(Boolean);
     updateCard((d) => ({ ...d, tags: [...new Set([...d.tags, ...tags])] }));
@@ -59,9 +60,12 @@ export function CreatorPanel() {
       <Section
         title="Tags"
         actions={
-          <Button size="sm" disabled={running} onClick={() => void suggestTags()} title="Ask the assistant for tags">
-            {running ? 'Thinking…' : '✨ Suggest'}
-          </Button>
+          <>
+            <AssistTraceButton runId={runId} />
+            <Button size="sm" disabled={running} onClick={() => void suggestTags()} title="Ask the assistant for tags">
+              {running ? 'Thinking…' : '✨ Suggest'}
+            </Button>
+          </>
         }
       >
         <ChipInput values={card.tags} onChange={(tags) => updateCard((d) => ({ ...d, tags }))} placeholder="Type a tag and press Enter" />
@@ -111,7 +115,7 @@ export function NotesPanel() {
   const setNotes = useProjectStore((s) => s.setNotes);
   const card = useProjectStore((s) => s.project?.card.data);
   const { assistConnectionId, setAssistConnection } = useLlmStore();
-  const { runAssist, stop, text, running, error } = useLlmStream();
+  const { runAssist, runId, stop, text, running, error } = useLlmStream();
   return (
     <div className="flex flex-col gap-5">
       <Section title="Notes" actions={<TokenBadge text={notes} />}>
@@ -126,7 +130,7 @@ export function NotesPanel() {
               Stop
             </Button>
           ) : (
-            <Button size="sm" disabled={!card} onClick={() => card && void runAssist(critiqueMessages(card))}>
+            <Button size="sm" disabled={!card} onClick={() => card && void runAssist(critiqueMessages(card), undefined, '✨ Card review')}>
               ✨ Review the card
             </Button>
           )
@@ -134,6 +138,7 @@ export function NotesPanel() {
       >
         <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant model" />
         {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
+        <AssistReasoning runId={runId} />
         {text && (
           <>
             <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm whitespace-pre-wrap text-slate-300">{text}</div>

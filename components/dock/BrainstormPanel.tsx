@@ -6,9 +6,10 @@ import { useProjectStore } from '@/store/projectStore';
 import { useLlmStore } from '@/store/llmStore';
 import { toast } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
-import { cardContext } from '@/lib/assist';
+import { brainstormMessages } from '@/lib/assist';
 import type { LlmMessage } from '@/types/llm';
-import { AutoTextarea, Button, IconButton, cx } from '@/components/ui';
+import { AutoTextarea, Button, IconButton, cx, enterSends } from '@/components/ui';
+import { AssistReasoning } from '@/components/llm/AssistTrace';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { copyText } from '@/lib/clipboard';
 
@@ -16,19 +17,21 @@ import { copyText } from '@/lib/clipboard';
 // names, backstory, "what would she wear to a funeral". It always sees the
 // card as it is right now. Kept per card for the session.
 
-const useBrainstorm = create<{ threads: Record<string, LlmMessage[]>; set: (id: string, m: LlmMessage[]) => void }>((set) => ({
+/** A message, and for a reply, the assist-log run that wrote it. */
+type Thought = LlmMessage & { runId?: string };
+
+const useBrainstorm = create<{ threads: Record<string, Thought[]>; set: (id: string, m: Thought[]) => void }>((set) => ({
   threads: {},
   set: (id, m) => set((s) => ({ threads: { ...s.threads, [id]: m } })),
 }));
 
-const SYSTEM = `You are a creative partner helping a creator develop a roleplay character card. You can see the card as it currently is. Brainstorm freely, be specific and concrete, offer options when asked for ideas, and when you write text meant for the card, match its voice and keep {{char}}/{{user}} macros. Be concise unless asked for more.`;
 
 export function BrainstormPanel() {
   const project = useProjectStore((s) => s.project);
   const setNotes = useProjectStore((s) => s.setNotes);
   const { threads, set } = useBrainstorm();
   const { assistConnectionId, setAssistConnection } = useLlmStore();
-  const { runAssist, stop, running, text } = useLlmStream();
+  const { runAssist, runId, stop, running, text } = useLlmStream();
   const [input, setInput] = useState('');
   const bottom = useRef<HTMLDivElement>(null);
   const messages = project ? (threads[project.id] ?? []) : [];
@@ -43,15 +46,16 @@ export function BrainstormPanel() {
   const send = async () => {
     const q = input.trim();
     if (!q || running) return;
-    const next: LlmMessage[] = [...messages, { role: 'user', content: q }];
+    const next: Thought[] = [...messages, { role: 'user', content: q }];
     set(project.id, next);
     setInput('');
     const card = useProjectStore.getState().project?.card.data ?? project.card.data;
-    const r = await runAssist([
-      { role: 'system', content: `${SYSTEM}\n\n<card>\n${cardContext(card, undefined, 20000)}\n</card>` },
-      ...next,
-    ]);
-    if (r.text.trim()) set(project.id, [...next, { role: 'assistant', content: r.text.trim() }]);
+    const r = await runAssist(
+      brainstormMessages(card, next.map(({ role, content }) => ({ role, content }))),
+      undefined,
+      '✨ Brainstorm',
+    );
+    if (r.text.trim()) set(project.id, [...next, { role: 'assistant', content: r.text.trim(), runId: r.runId }]);
     if (r.error) toast(r.error, 'error');
   };
 
@@ -79,6 +83,7 @@ export function BrainstormPanel() {
         <div className="flex flex-col gap-3">
           {messages.map((m, i) => (
             <div key={i} className={cx('group rounded-lg px-3 py-2 text-sm whitespace-pre-wrap', m.role === 'user' ? 'ml-8 bg-sky-500/10 text-slate-200' : 'mr-4 bg-slate-900 text-slate-300')}>
+              {m.role === 'assistant' && m.runId && <AssistReasoning runId={m.runId} className="mb-1.5 whitespace-normal" />}
               {m.content}
               {m.role === 'assistant' && (
                 <div className="mt-1 flex justify-end gap-1 opacity-0 group-hover:opacity-100 touch:opacity-100">
@@ -99,7 +104,12 @@ export function BrainstormPanel() {
               )}
             </div>
           ))}
-          {running && <div className="mr-4 rounded-lg bg-slate-900 px-3 py-2 text-sm whitespace-pre-wrap text-slate-300">{text || <span className="animate-pulse">…</span>}</div>}
+          {running && (
+            <div className="mr-4 rounded-lg bg-slate-900 px-3 py-2 text-sm whitespace-pre-wrap text-slate-300">
+              <AssistReasoning runId={runId} className="mb-1.5 whitespace-normal" />
+              {text || <span className="animate-pulse">…</span>}
+            </div>
+          )}
           <div ref={bottom} />
         </div>
       </div>
@@ -108,7 +118,7 @@ export function BrainstormPanel() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+            if (enterSends(e)) {
               e.preventDefault();
               void send();
             }

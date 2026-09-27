@@ -9,6 +9,7 @@ import { FIELD_ACTIONS, fieldActionMessages, type FieldAction } from '@/lib/assi
 import { useLlmStream } from '@/hooks/useLlmStream';
 import { AutoTextarea, Button, IconButton, Modal, TextField, TokenBadge, cx, inputClass } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
+import { AssistReasoning } from '@/components/llm/AssistTrace';
 
 // Every card text field gets the same two helpers: ✨ the writing
 // assistant, and ⤢ a full-screen editor for long fields.
@@ -82,13 +83,13 @@ function AssistDialog({ path, onClose }: { path: string; onClose: () => void }) 
   const [action, setAction] = useState<FieldAction>(current.trim() ? 'rewrite' : 'draft');
   const [instruction, setInstruction] = useState('');
   const [edited, setDraft] = useState('');
-  const { runAssist, stop, text, reasoning, running, error } = useLlmStream();
+  const { runAssist, runId, stop, text, running, error } = useLlmStream();
   const draft = running ? text : edited;
 
   if (!card) return null;
   const label = fieldLabel(card, path);
   const go = async () => {
-    const r = await runAssist(fieldActionMessages(card, path, action, instruction));
+    const r = await runAssist(fieldActionMessages(card, path, action, instruction), undefined, `✨ ${label} (${FIELD_ACTIONS.find((a) => a.value === action)?.label ?? action})`);
     setDraft(r.text.trim());
   };
   const apply = (mode: 'replace' | 'append') => {
@@ -155,12 +156,7 @@ function AssistDialog({ path, onClose }: { path: string; onClose: () => void }) 
         </div>
         <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant model" />
         {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
-        {reasoning && (
-          <details className="rounded-md bg-slate-950 px-3 py-2 text-xs text-slate-400">
-            <summary className="cursor-pointer">Reasoning</summary>
-            <div className="mt-2 whitespace-pre-wrap">{reasoning}</div>
-          </details>
-        )}
+        <AssistReasoning runId={runId} />
         <div className="grid gap-3 md:grid-cols-2">
           <div className="flex flex-col gap-1">
             <span className="text-xs text-slate-500">Current</span>

@@ -8,6 +8,30 @@ import { useProjectStore } from '@/store/projectStore';
 import { resolvePersona, usePersonaStore } from '@/store/personaStore';
 import { presetParams } from '@/lib/stPreset';
 import { wrapWithPreset } from '@/lib/assistPreset';
+import { useAssistLog } from '@/store/assistLog';
+import { uuid } from '@/lib/uuid';
+
+/**
+ * A writing-assistant request as it will be sent: the assistant's
+ * connection, the job's messages wrapped in its SillyTavern preset (if one
+ * is set, with prompts on), and the preset's samplers (if on).
+ */
+export function assistRequest(messages: LlmMessage[]): { connection: LlmConnection | null; messages: LlmMessage[]; params: Partial<SamplerParams>; preset?: string } {
+  const { connections, assistConnectionId, assistSettings: a, presets, chatSettings } = useLlmStore.getState();
+  const connection = connections.find((c) => c.id === assistConnectionId) ?? null;
+  const preset = a.presetId ? presets.find((p) => p.id === a.presetId) : undefined;
+  if (!preset || !connection) return { connection, messages, params: {} };
+  const me = resolvePersona(usePersonaStore.getState().personas, chatSettings);
+  const wrapped = a.prompts
+    ? wrapWithPreset(messages, preset, {
+        card: useProjectStore.getState().project?.card.data,
+        userName: me.name,
+        persona: me.description,
+        excluded: a.excluded[preset.id] ?? [],
+      })
+    : messages;
+  return { connection, messages: wrapped, params: a.samplers ? presetParams(preset, connection.kind) : {}, preset: preset.name };
+}
 
 export interface StreamResult {
   text: string;
@@ -30,7 +54,7 @@ export function useLlmStream() {
     onText?: (full: string) => void,
     /** `prefill`: the last message starts the reply. `params` override the
      *  connection's (a preset's samplers). */
-    opts: { prefill?: boolean; params?: Partial<SamplerParams> } = {},
+    opts: { prefill?: boolean; params?: Partial<SamplerParams>; onReasoning?: (full: string) => void } = {},
   ): Promise<StreamResult> => {
     abortRef.current?.abort();
     setText('');
@@ -61,6 +85,7 @@ export function useLlmStream() {
           } else if (e.type === 'reasoning') {
             result.reasoning += e.text;
             setReasoning(result.reasoning);
+            opts.onReasoning?.(result.reasoning);
           } else if (e.type === 'done') {
             result.stopReason = e.stopReason;
           } else if (e.type === 'error') {
@@ -80,24 +105,41 @@ export function useLlmStream() {
     return result;
   }, []);
 
-  /** A writing-assistant request: the assistant's connection, and its
-   *  SillyTavern preset (prompts and samplers) if one is set. */
+  /** The id of this hook's latest assistant run, in the assist log. */
+  const [runId, setRunId] = useState<string | null>(null);
+
+  /** A writing-assistant request (see assistRequest), logged under `label`
+   *  so its reasoning and prompt can be looked at. */
   const runAssist = useCallback(
-    (messages: LlmMessage[], onText?: (full: string) => void) => {
-      const { connections, assistConnectionId, assistSettings: a, presets, chatSettings } = useLlmStore.getState();
-      const connection = connections.find((c) => c.id === assistConnectionId) ?? null;
-      const preset = a.presetId ? presets.find((p) => p.id === a.presetId) : undefined;
-      if (!preset || !connection) return run(connection, messages, onText);
-      const me = resolvePersona(usePersonaStore.getState().personas, chatSettings);
-      const wrapped = a.prompts
-        ? wrapWithPreset(messages, preset, {
-            card: useProjectStore.getState().project?.card.data,
-            userName: me.name,
-            persona: me.description,
-            excluded: a.excluded[preset.id] ?? [],
-          })
-        : messages;
-      return run(connection, wrapped, onText, { params: a.samplers ? presetParams(preset, connection.kind) : {} });
+    async (messages: LlmMessage[], onText?: (full: string) => void, label = 'Assistant'): Promise<StreamResult & { runId: string }> => {
+      const req = assistRequest(messages);
+      const id = uuid();
+      const log = useAssistLog.getState();
+      log.add({
+        id,
+        label,
+        at: Date.now(),
+        connection: req.connection?.name ?? '(none)',
+        model: req.connection?.model ?? '',
+        messages: req.messages,
+        params: { ...req.connection?.params, ...req.params },
+        preset: req.preset,
+        text: '',
+        reasoning: '',
+        running: true,
+      });
+      setRunId(id);
+      const r = await run(
+        req.connection,
+        req.messages,
+        (full) => {
+          useAssistLog.getState().update(id, { text: full });
+          onText?.(full);
+        },
+        { params: req.params, onReasoning: (reasoning) => useAssistLog.getState().update(id, { reasoning }) },
+      );
+      useAssistLog.getState().update(id, { running: false, text: r.text, reasoning: r.reasoning, error: r.error });
+      return { ...r, runId: id };
     },
     [run],
   );
@@ -109,5 +151,5 @@ export function useLlmStream() {
     setError(null);
   }, []);
 
-  return { run, runAssist, stop, reset, text, reasoning, running, error };
+  return { run, runAssist, runId, stop, reset, text, reasoning, running, error };
 }

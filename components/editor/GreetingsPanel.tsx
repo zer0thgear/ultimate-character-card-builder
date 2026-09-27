@@ -10,6 +10,7 @@ import { AutoTextarea, Button, IconButton, Modal, TokenBadge, confirmDialog, Sec
 import { useLlmStream } from '@/hooks/useLlmStream';
 import { newGreetingMessages } from '@/lib/assist';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
+import { AssistReasoning } from '@/components/llm/AssistTrace';
 
 // First message, alternate greetings and group-only greetings, with the
 // reordering and promoting tavern-card-editor had, plus test-chat and
@@ -197,12 +198,12 @@ function NewGreetingDialog({ onClose }: { onClose: () => void }) {
   const updateCard = useProjectStore((s) => s.updateCard);
   const { assistConnectionId, setAssistConnection } = useLlmStore();
   const [instruction, setInstruction] = useState('');
-  const { runAssist, stop, text, running, error } = useLlmStream();
+  const { runAssist, runId, stop, text, running, error } = useLlmStream();
   const [draft, setDraft] = useState<string | null>(null);
   if (!card) return null;
   const go = async () => {
     setDraft(null);
-    const r = await runAssist(newGreetingMessages(card, instruction));
+    const r = await runAssist(newGreetingMessages(card, instruction), undefined, '✨ New greeting');
     setDraft(r.text.trim());
   };
   const shown = draft ?? text;
@@ -248,6 +249,7 @@ function NewGreetingDialog({ onClose }: { onClose: () => void }) {
         </div>
         <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant model" />
         {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
+        <AssistReasoning runId={runId} />
         <AutoTextarea value={shown} onChange={(e) => setDraft(e.target.value)} minRows={10} maxRows={28} placeholder="The new greeting appears here. You can edit it before adding." />
       </div>
     </Modal>

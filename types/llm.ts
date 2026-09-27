@@ -4,6 +4,9 @@
 
 export type ProviderKind = 'novelai' | 'openai' | 'anthropic';
 
+export const REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
+
 export interface SamplerParams {
   max_tokens: number;
   temperature?: number;
@@ -23,6 +26,10 @@ export interface SamplerParams {
   unified_quadratic?: number;
   unified_cubic?: number;
   unified_increase_linear_with_entropy?: number;
+  /** OpenAI-compatible: how hard a reasoning model thinks. Sent as
+   *  `reasoning_effort` (OpenAI and most servers), or `reasoning.effort` to
+   *  OpenRouter. NovelAI only has thinking on or off. */
+  reasoning_effort?: ReasoningEffort;
   /** Anthropic: adaptive thinking on, and how hard to think. */
   thinking?: boolean;
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';

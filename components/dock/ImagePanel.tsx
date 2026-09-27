@@ -33,6 +33,7 @@ import { ImageViewer } from '@/components/dock/ImageViewer';
 import { openSettings } from '@/components/SettingsDialog';
 import type { CharacterPromptEntry, NovelAIModel, NovelAINoiseSchedule } from '@/types/novelai';
 import { uuid } from '@/lib/uuid';
+import { AssistTraceButton } from '@/components/llm/AssistTrace';
 
 const promptClass = cx(inputClass, 'min-h-16 resize-y font-mono text-[13px] leading-relaxed');
 
@@ -449,12 +450,12 @@ function SceneSection({ text, onChange, model, apiKey, meter }: { text: string; 
   const card = useProjectStore((s) => s.project?.card.data);
   const illustrate = useBridgeStore((s) => s.illustrate);
   const clearIllustrate = useBridgeStore((s) => s.clearIllustrate);
-  const { runAssist, running, stop } = useLlmStream();
+  const { runAssist, runId, running, stop } = useLlmStream();
   const [pickOpen, setPickOpen] = useState(false);
 
   const fromText = async (scene: string) => {
     if (!card) return;
-    const r = await runAssist(sceneTagsMessages(card, scene, ''));
+    const r = await runAssist(sceneTagsMessages(card, scene, ''), undefined, '✨ Scene prompt');
     if (r.error) return toast(r.error, 'error');
     const tags = cleanTags(r.text);
     if (tags) {
@@ -480,7 +481,8 @@ function SceneSection({ text, onChange, model, apiKey, meter }: { text: string; 
         <span className="text-xs font-semibold tracking-wide text-slate-300 uppercase">
           Scene <span className="font-normal text-slate-500 normal-case">(base prompt: framing, pose, setting)</span>
         </span>
-        <div className="relative">
+        <div className="relative flex items-center gap-1">
+          <AssistTraceButton runId={runId} />
           {running ? (
             <Button size="sm" variant="danger" onClick={stop}>
               Stop
@@ -521,7 +523,7 @@ function CharactersSection({ counts }: { counts: Record<string, { prompt: number
   const { characters, set, model, useCoords } = useSettingsStore();
   const apiKey = useSessionStore((s) => s.apiKey);
   const card = useProjectStore((s) => s.project?.card.data);
-  const { runAssist, running, stop } = useLlmStream();
+  const { runAssist, runId, running, stop } = useLlmStream();
   const [openUc, setOpenUc] = useState<Set<string>>(new Set());
   const max = maxCharacters(model);
   const active = characters.filter((c) => !c.archived);
@@ -532,7 +534,7 @@ function CharactersSection({ counts }: { counts: Record<string, { prompt: number
 
   const appearance = async (target?: CharacterPromptEntry) => {
     if (!card) return;
-    const r = await runAssist(appearanceTagsMessages(card, ''));
+    const r = await runAssist(appearanceTagsMessages(card, ''), undefined, '✨ Character prompt');
     if (r.error) return toast(r.error, 'error');
     const tags = cleanTags(r.text);
     if (!tags) return;
@@ -551,6 +553,7 @@ function CharactersSection({ counts }: { counts: Record<string, { prompt: number
         </span>
         <div className="flex items-center gap-1">
           {active.length > 1 && <Toggle checked={useCoords} onChange={(v) => set('useCoords', v)} label={<span className="text-xs">Positions</span>} />}
+          <AssistTraceButton runId={runId} />
           {running ? (
             <Button size="sm" variant="danger" onClick={stop}>
               Stop

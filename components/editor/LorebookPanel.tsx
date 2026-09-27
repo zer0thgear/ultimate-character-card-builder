@@ -14,6 +14,7 @@ import { SortableList, arrayMove, remapIndex } from '@/components/SortableList';
 import { FieldActions, useCardField } from '@/components/editor/fieldTools';
 import { AutoTextarea, Button, ChipInput, Empty, IconButton, Modal, NumberInput, Section, TokenBadge, Toggle, confirmDialog, cx, downloadBlob, fileBytes, inputClass, pickFiles } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
+import { AssistReasoning } from '@/components/llm/AssistTrace';
 
 export function LorebookPanel() {
   const book = useProjectStore((s) => s.project?.card.data.character_book);
@@ -288,9 +289,10 @@ function WriteEntryDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (e: 
   const card = useProjectStore((s) => s.project?.card.data);
   const { assistConnectionId, setAssistConnection } = useLlmStore();
   const [topic, setTopic] = useState('');
-  const { runAssist, stop, text, running, error } = useLlmStream();
+  const { runAssist, runId, stop, text, running, error } = useLlmStream();
   const parsed = parseLorebookEntry(text);
   if (!card) return null;
+  const write = () => void runAssist(lorebookEntryMessages(card, topic), undefined, '✨ Lorebook entry');
   return (
     <Modal
       open
@@ -325,7 +327,7 @@ function WriteEntryDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (e: 
             autoFocus
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && topic.trim() && !running && void runAssist(lorebookEntryMessages(card, topic))}
+            onKeyDown={(e) => e.key === 'Enter' && topic.trim() && !running && write()}
             placeholder='What about? e.g. "her hometown", "the royal guard"'
             className={inputClass}
           />
@@ -334,13 +336,14 @@ function WriteEntryDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (e: 
               Stop
             </Button>
           ) : (
-            <Button variant="primary" disabled={!topic.trim()} onClick={() => void runAssist(lorebookEntryMessages(card, topic))}>
+            <Button variant="primary" disabled={!topic.trim()} onClick={write}>
               Write
             </Button>
           )}
         </div>
         <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant model" />
         {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
+        <AssistReasoning runId={runId} />
         {text && (
           <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm">
             {parsed ? (

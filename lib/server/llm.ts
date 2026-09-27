@@ -6,7 +6,7 @@ import { sseData, toAnthropic } from '@/lib/llmShape';
 
 // The providers behind /api/llm/chat, each turned into the same stream of
 // LlmEvents. Keys arrive with each request from the browser (which keeps
-// them in localStorage) and are only ever sent to the provider itself.
+// them in data/settings.json) and are only ever sent to the provider itself.
 
 const trimSlash = (s: string) => s.replace(/\/+$/, '');
 
@@ -19,11 +19,15 @@ function baseUrlFor(req: LlmRequest): string {
 
 /** The sampler fields an OpenAI-compatible body takes. Unset ones are left
  *  out so each server uses its own defaults. */
-function openAiParams(kind: 'novelai' | 'openai', p: SamplerParams) {
+function openAiParams(kind: 'novelai' | 'openai', p: SamplerParams, baseUrl: string) {
   const body: Record<string, unknown> = { max_tokens: p.max_tokens };
   const copy = ['temperature', 'top_p', 'top_k', 'min_p', 'top_a', 'frequency_penalty', 'presence_penalty', 'repetition_penalty', 'seed'] as const;
   for (const k of copy) if (typeof p[k] === 'number') body[k] = p[k];
   if (p.stop?.length) body.stop = p.stop;
+  if (kind === 'openai' && p.reasoning_effort) {
+    if (/openrouter\.ai/i.test(baseUrl)) body.reasoning = { effort: p.reasoning_effort };
+    else body.reasoning_effort = p.reasoning_effort;
+  }
   if (kind === 'novelai') {
     if (p.enable_thinking !== undefined) body.enable_thinking = p.enable_thinking;
     const unified = ['unified_linear', 'unified_quadratic', 'unified_cubic', 'unified_increase_linear_with_entropy'] as const;
@@ -44,7 +48,8 @@ async function errorText(res: Response): Promise<string> {
 
 async function* openAiStream(req: LlmRequest, signal: AbortSignal): AsyncGenerator<LlmEvent> {
   const kind = req.connection.kind === 'novelai' ? 'novelai' : 'openai';
-  const res = await fetch(`${baseUrlFor(req)}/chat/completions`, {
+  const base = baseUrlFor(req);
+  const res = await fetch(`${base}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -54,7 +59,7 @@ async function* openAiStream(req: LlmRequest, signal: AbortSignal): AsyncGenerat
       model: req.connection.model,
       messages: req.messages,
       stream: true,
-      ...openAiParams(kind, req.connection.params),
+      ...openAiParams(kind, req.connection.params, base),
     }),
     signal,
   });

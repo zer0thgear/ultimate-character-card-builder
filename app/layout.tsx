@@ -11,11 +11,14 @@ export const metadata: Metadata = {
 };
 
 // viewport-fit=cover lets the phone layout's bottom bar pad itself clear of
-// the home indicator (env(safe-area-inset-bottom)).
+// the home indicator (env(safe-area-inset-bottom)). resizes-content has
+// Chrome shrink the page to fit above the on-screen keyboard, instead of
+// covering its bottom, so what you type stays in view.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  interactiveWidget: "resizes-content",
   themeColor: "#020617",
 };
 

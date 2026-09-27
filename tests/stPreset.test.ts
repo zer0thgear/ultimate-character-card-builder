@@ -110,6 +110,10 @@ describe('parseStPreset', () => {
     const p = parseStPreset({ ...ST_PRESET, reasoning_effort: 'high' });
     expect(presetParams(p, 'openai')).toMatchObject({ temperature: 1.1, top_k: 40, max_tokens: 50 });
     expect(presetParams(p, 'anthropic')).toEqual({ max_tokens: 50, effort: 'high' });
+    expect(presetParams(p, 'openai').reasoning_effort).toBe('high');
+    expect(presetParams(p, 'novelai').reasoning_effort).toBeUndefined(); // NovelAI has no effort
+    expect(presetParams(parseStPreset({ ...ST_PRESET, reasoning_effort: 'auto' }), 'openai').reasoning_effort).toBeUndefined();
+    expect(presetParams(parseStPreset({ ...ST_PRESET, reasoning_effort: 'min' }), 'openai').reasoning_effort).toBe('minimal');
   });
 });
 
