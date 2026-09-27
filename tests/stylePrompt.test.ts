@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { composeFinalPrompts, styleText } from '@/lib/imageRequest';
-import { withoutStyle } from '@/lib/genRequest';
+import { reuseFromMetadata, withoutStyle } from '@/lib/genRequest';
+import { takeDatasetTags } from '@/lib/assist';
+import { GEN_DEFAULTS } from '@/store/settingsStore';
+import type { ParsedNaiMetadata } from '@/lib/naiMetadata';
 
 const resolved = (baseText: string) => ({ baseText, negativePrompt: '', characters: [], picks: {} }) as unknown as Parameters<typeof composeFinalPrompts>[1];
 const mods = { furMode: false, nsfwMode: false, transparentBg: false, model: 'nai-diffusion-4-5-full' as const, qualityPreset: 'none' as const, ucPreset: 'none' as const };
@@ -42,3 +45,24 @@ describe('Reuse and the style', () => {
     expect(withoutStyle('artist:foo, smile', '')).toBe('artist:foo, smile');
   });
 });
+
+describe('the dataset switches', () => {
+  it("takes nsfw and fur dataset out of a writer's tags, to turn the switches on", () => {
+    expect(takeDatasetTags('nsfw, fur dataset, 1girl, smile')).toEqual({ tags: '1girl, smile', nsfw: true, fur: true });
+    expect(takeDatasetTags('{nsfw}, cowboy shot')).toEqual({ tags: 'cowboy shot', nsfw: true, fur: false });
+    expect(takeDatasetTags('cowboy shot, nsfw')).toEqual({ tags: 'cowboy shot', nsfw: true, fur: false });
+  });
+
+  it('leaves text with neither exactly as it was', () => {
+    expect(takeDatasetTags('1girl,  smile,\nfur trim')).toEqual({ tags: '1girl,  smile,\nfur trim', nsfw: false, fur: false });
+  });
+
+  it('moves them onto the switches on Reuse, so the switch adds them back once', () => {
+    const form = { ...GEN_DEFAULTS, stylePrompt: 'artist:foo' };
+    const meta = { prompt: 'fur dataset, nsfw, artist:foo, smile', characters: [], negativePrompt: '' } as unknown as ParsedNaiMetadata;
+    const out = reuseFromMetadata(meta, form, { prompt: true, characters: false, negative: false, settings: false, seed: false });
+    expect(out.basePrompts?.[0].text).toBe('smile');
+    expect(out).toMatchObject({ nsfwMode: true, furMode: true });
+  });
+});
+

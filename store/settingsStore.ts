@@ -55,7 +55,7 @@ export interface FormSettings {
 }
 
 /** The fields that belong to a card rather than to the generator. */
-export const PROJECT_GEN_KEYS = ['stylePrompt', 'basePrompts', 'characters', 'negativePrompt', 'negativeTidbits'] as const;
+export const PROJECT_GEN_KEYS = ['stylePrompt', 'nsfwMode', 'furMode', 'basePrompts', 'characters', 'negativePrompt', 'negativeTidbits'] as const;
 
 interface SettingsState extends FormSettings {
   set: <K extends keyof FormSettings>(key: K, value: FormSettings[K]) => void;

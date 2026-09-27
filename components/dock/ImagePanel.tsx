@@ -23,7 +23,7 @@ import { calculateAnlasCost, opusStatus, MAX_GENERATION_PIXELS } from '@/lib/anl
 import { hasVariety } from '@/lib/variety';
 import { blobToBase64, getImageDimensions } from '@/lib/imageUtils';
 import { eraseStealthMarks } from '@/lib/requestImage';
-import { appearanceTagsMessages, cleanTags, sceneTagsMessages } from '@/lib/assist';
+import { appearanceTagsMessages, cleanTags, sceneTagsMessages, takeDatasetTags } from '@/lib/assist';
 import { greetingText } from '@/lib/chatPrompt';
 import { saveSessionImage } from '@/lib/imageActions';
 import { TagAutocompleteField } from '@/components/TagAutocompleteField';
@@ -307,6 +307,12 @@ function PromptForm() {
         apiKey={apiKey}
         meter={counts && basePrompt ? <TokenMeter own={counts.base[basePrompt.id] ?? 0} others={counts.characterPromptTotal} budget={counts.budget} othersLabel="Characters" /> : null}
       />
+      {/* NovelAI's dataset switches, put first in the prompt; the card's own.
+          ✨ turns them on when it judges the scene or character needs them. */}
+      <div className="-mt-2 flex flex-wrap gap-x-4 gap-y-1">
+        <Toggle checked={form.nsfwMode} onChange={(v) => set('nsfwMode', v)} label={<span className="text-xs" title="Puts nsfw first in the prompt">NSFW</span>} />
+        <Toggle checked={form.furMode} onChange={(v) => set('furMode', v)} label={<span className="text-xs" title="Puts fur dataset first in the prompt (NovelAI's furry data)">Fur dataset</span>} />
+      </div>
 
       {!isV3 && <CharactersSection counts={counts?.characters ?? {}} />}
 
@@ -436,7 +442,6 @@ function PromptForm() {
             {form.model.startsWith('nai-diffusion-5') && <Toggle checked={form.transparentBg} onChange={(v) => set('transparentBg', v)} label={<span className="text-xs">Transparent background</span>} />}
             {isV3 && <Toggle checked={form.smea} onChange={(v) => set('smea', v)} label={<span className="text-xs">SMEA</span>} />}
             {isV3 && form.smea && <Toggle checked={form.smeaDyn} onChange={(v) => set('smeaDyn', v)} label={<span className="text-xs">DYN</span>} />}
-            <Toggle checked={form.furMode} onChange={(v) => set('furMode', v)} label={<span className="text-xs">Fur dataset</span>} />
             <Toggle checked={form.streamingMode} onChange={(v) => set('streamingMode', v)} label={<span className="text-xs">Live preview (streaming)</span>} />
           </div>
         </div>
@@ -447,6 +452,22 @@ function PromptForm() {
 }
 
 // ─── Scene (base prompt), with "illustrate a greeting" ───────────────────────
+
+/** Turns on the dataset switches a prompt writer asked for (never off: that
+ *  stays your call), and says which, for the toast. */
+function switchedOn(nsfw: boolean, fur: boolean): string {
+  const form = useSettingsStore.getState();
+  const on: string[] = [];
+  if (nsfw && !form.nsfwMode) {
+    form.set('nsfwMode', true);
+    on.push('NSFW');
+  }
+  if (fur && !form.furMode) {
+    form.set('furMode', true);
+    on.push('Fur dataset');
+  }
+  return on.length ? ` ${on.join(' and ')} turned on, as it suggested.` : '';
+}
 
 /** The card's style: artist and style tags in front of every prompt, which
  *  the ✨ writers leave alone. */
@@ -472,10 +493,10 @@ function SceneSection({ text, onChange, model, apiKey, meter }: { text: string; 
     if (!card) return;
     const r = await runAssist(sceneTagsMessages(card, scene, ''), undefined, '✨ Scene prompt');
     if (r.error) return toast(r.error, 'error');
-    const tags = cleanTags(r.text);
+    const { tags, nsfw, fur } = takeDatasetTags(cleanTags(r.text));
     if (tags) {
       onChange(tags);
-      toast('Scene prompt written from the greeting. Tweak it, then Generate.', 'success');
+      toast(`Scene prompt written from the greeting.${switchedOn(nsfw, fur)} Tweak it, then Generate.`, 'success');
     }
   };
 
@@ -551,11 +572,11 @@ function CharactersSection({ counts }: { counts: Record<string, { prompt: number
     if (!card) return;
     const r = await runAssist(appearanceTagsMessages(card, ''), undefined, '✨ Character prompt');
     if (r.error) return toast(r.error, 'error');
-    const tags = cleanTags(r.text);
+    const { tags, nsfw, fur } = takeDatasetTags(cleanTags(r.text));
     if (!tags) return;
     if (target) update(target.id, { prompt: tags });
     else add(tags);
-    toast("Character prompt written from the card's description.", 'success');
+    toast(`Character prompt written from the card's description.${switchedOn(nsfw, fur)}`, 'success');
   };
 
   const positions = useMemo(() => POSITIONS.flatMap((y) => POSITIONS.map((x) => ({ x, y }))), []);

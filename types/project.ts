@@ -12,6 +12,9 @@ import type { BasePrompt, CharacterPromptEntry, NovelAIModel, NovelAIParameters,
 export interface ProjectGen {
   /** Style and artist tags, put in front of every prompt for this card. */
   stylePrompt?: string;
+  /** NovelAI's nsfw and fur dataset switches, for this card. */
+  nsfwMode?: boolean;
+  furMode?: boolean;
   basePrompts: BasePrompt[];
   characters: CharacterPromptEntry[];
   negativePrompt: string;

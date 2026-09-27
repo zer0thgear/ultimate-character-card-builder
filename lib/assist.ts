@@ -28,7 +28,7 @@ export const FIELD_ACTIONS: { value: FieldAction; label: string; hint: string }[
 
 const WRITER = `You are an expert character card writer helping a creator build a roleplay character card (the SillyTavern / Chub "Tavern card" format). You write vivid, specific, well-structured prose, match the card's established voice and formatting conventions (for example *actions in asterisks* and "quoted speech" if the card uses them), and keep {{char}} and {{user}} macros exactly as written. You never add commentary, headings or quotation marks around your answer unless the field itself calls for them.`;
 
-const TAG_RULES = `NovelAI's image models are prompted with Danbooru-style tags: lowercase, comma-separated, most important first, using real Danbooru tag names (e.g. "long hair", "blue eyes", "hair between eyes", "black thighhighs", "looking at viewer"). Use {tag} to emphasise and [tag] to de-emphasise only when it matters. No sentences, no names of the character, no quality tags like "masterpiece", and no artist or art-style tags: the style has its own field.`;
+const TAG_RULES = `NovelAI's image models are prompted with Danbooru-style tags: lowercase, comma-separated, most important first, using real Danbooru tag names (e.g. "long hair", "blue eyes", "hair between eyes", "black thighhighs", "looking at viewer"). Use {tag} to emphasise and [tag] to de-emphasise only when it matters. No sentences, no names of the character, no quality tags like "masterpiece", and no artist or art-style tags: the style has its own field. Two exceptions go first when they apply: "nsfw" if the image should show nudity or sexual content, and "fur dataset" if the character is anthro or furry (an animal-person, not a human with animal ears or a tail).`;
 
 export interface AssistTemplate {
   key: string;
@@ -434,6 +434,26 @@ export const ASSIST_JOBS: { label: string; build: (card: CardData) => LlmMessage
   { label: '✨ From an image: greeting (+ the picture)', build: (card) => visionMessages(card, 'greeting', '(your guidance)', []) },
   { label: '✨ From an image: ask (+ the picture)', build: (card) => visionMessages(card, 'ask', '(your question)', []) },
 ];
+
+/** NovelAI's dataset switches, when a prompt writer put them in its tags:
+ *  they're taken out (the form's switches add them, in the right place)
+ *  and reported, for the switches to be turned on. */
+export function takeDatasetTags(tags: string): { tags: string; nsfw: boolean; fur: boolean } {
+  let nsfw = false;
+  let fur = false;
+  const kept = tags
+    .split(',')
+    .map((t) => t.trim())
+    .filter((t) => {
+      // Emphasis around it ({nsfw}, [fur dataset]) still counts.
+      const bare = t.replace(/^[\s{}[\]()]+|[\s{}[\]()]+$/g, '').toLowerCase();
+      if (bare === 'nsfw') return !(nsfw = true);
+      if (bare === 'fur dataset') return !(fur = true);
+      return t !== '';
+    });
+  // Nothing taken out: the text exactly as it was.
+  return { tags: nsfw || fur ? kept.join(', ') : tags, nsfw, fur };
+}
 
 /** Tidies a tag reply: one line, no trailing period or stray quotes. */
 export function cleanTags(text: string): string {

@@ -74,6 +74,8 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     applyingGen = true;
     useSettingsStore.getState().patch({
       stylePrompt: p.gen.stylePrompt ?? '',
+      nsfwMode: p.gen.nsfwMode ?? false,
+      furMode: p.gen.furMode ?? false,
       basePrompts: p.gen.basePrompts.length ? p.gen.basePrompts : [{ id: 'p-default', label: 'Prompt 1', text: '', selected: true }],
       characters: p.gen.characters,
       negativePrompt: p.gen.negativePrompt || DEFAULT_NEGATIVE,
@@ -278,7 +280,7 @@ if (typeof window !== 'undefined') {
     useProjectStore.setState({
       project: {
         ...project,
-        gen: { stylePrompt: s.stylePrompt, basePrompts: s.basePrompts, characters: s.characters, negativePrompt: s.negativePrompt, negativeTidbits: s.negativeTidbits },
+        gen: { stylePrompt: s.stylePrompt, nsfwMode: s.nsfwMode, furMode: s.furMode, basePrompts: s.basePrompts, characters: s.characters, negativePrompt: s.negativePrompt, negativeTidbits: s.negativeTidbits },
       },
       status: 'dirty',
     });

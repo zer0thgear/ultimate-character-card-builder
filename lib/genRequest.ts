@@ -4,6 +4,7 @@ import type { FormSettings } from '@/store/settingsStore';
 import type { NovelAIGenerateRequest, CharacterPromptEntry, NovelAIModel, NovelAISampler } from '@/types/novelai';
 import { buildImageRequest, composeFinalPrompts, formSampling, resolveSelectedPrompt, styleText } from '@/lib/imageRequest';
 import { joinPromptParts } from '@/lib/promptText';
+import { takeDatasetTags } from '@/lib/assist';
 import { hasInpaintStrength, toInpaintingModel } from '@/lib/inpaint';
 import { varietySigma } from '@/lib/variety';
 import type { ParsedNaiMetadata } from '@/lib/naiMetadata';
@@ -100,7 +101,11 @@ export function reuseFromMetadata(
   const out: Partial<FormSettings> = {};
   if (opts.prompt) {
     const [first, ...rest] = form.basePrompts;
-    out.basePrompts = [{ ...(first ?? { id: 'p-default', label: 'Prompt 1', selected: true }), text: withoutStyle(m.prompt, form.stylePrompt), tidbits: [] }, ...rest];
+    // The dataset tags go onto their switches (which add them back, once).
+    const { tags, nsfw, fur } = takeDatasetTags(withoutStyle(m.prompt, form.stylePrompt));
+    out.basePrompts = [{ ...(first ?? { id: 'p-default', label: 'Prompt 1', selected: true }), text: tags, tidbits: [] }, ...rest];
+    if (nsfw) out.nsfwMode = true;
+    if (fur) out.furMode = true;
   }
   if (opts.characters && m.characters.length) {
     out.characters = m.characters.map(
