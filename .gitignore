@@ -3,6 +3,8 @@
 
 # next.js
 /.next/
+# a second copy's build (UCCB_DIST_DIR)
+/.next-*/
 /out/
 next-env.d.ts
 *.tsbuildinfo

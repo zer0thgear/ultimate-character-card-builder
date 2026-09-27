@@ -14,8 +14,8 @@ export default defineConfig({
       // Lets tests import server modules (lib/server/*).
       'server-only': fileURLToPath(new URL('./tests/stubs/server-only.ts', import.meta.url)),
       // Local extensions, as in next.config.ts.
-      '@local/client': local('local/client.tsx', 'lib/extensions/noClient.ts'),
-      '@local/server': local('local/server.ts', 'lib/extensions/noServer.ts'),
+      '@local/client': local('local/client.tsx', 'lib/extensions/fallback/client.ts'),
+      '@local/server': local('local/server.ts', 'lib/extensions/fallback/server.ts'),
     },
   },
   test: {

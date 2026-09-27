@@ -12,8 +12,8 @@ import path from "node:path";
 // Adding or removing the folder needs a restart.
 const pick = (file: string, fallback: string) => (existsSync(path.join(process.cwd(), file)) ? `./${file}` : `./${fallback}`);
 const extensions = {
-  "@local/client": pick("local/client.tsx", "lib/extensions/noClient.ts"),
-  "@local/server": pick("local/server.ts", "lib/extensions/noServer.ts"),
+  "@local/client": pick("local/client.tsx", "lib/extensions/fallback/client.ts"),
+  "@local/server": pick("local/server.ts", "lib/extensions/fallback/server.ts"),
 };
 
 const nextConfig: NextConfig = {

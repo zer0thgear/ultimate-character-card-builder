@@ -9,7 +9,7 @@ import type { ComponentType } from 'react';
 //
 // next.config.ts, tsconfig.json and vitest.config.mts point `@local/client`
 // and `@local/server` at those files when they exist, and at the empty
-// ones beside this file when they don't.
+// ones in fallback/ when they don't.
 
 /** A picture an extension's image action is run on. */
 export interface ExtensionImage {

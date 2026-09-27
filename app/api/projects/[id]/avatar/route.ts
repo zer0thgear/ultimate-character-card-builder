@@ -1,7 +1,6 @@
 import { promises as fs } from 'node:fs';
 import sharp from 'sharp';
-import { gunzipSync } from 'node:zlib';
-import { readStealth } from '@/lib/genMetadata';
+import { hasStealth, scrubbed } from '@/lib/server/pngScrub';
 import { avatarPath, updateProject, writeFileAtomic } from '@/lib/server/storage';
 import { bytesResponse, handle } from '@/lib/server/http';
 
@@ -34,31 +33,6 @@ export async function GET(req: Request, { params }: Ctx) {
     // original; then the original wins.
     return bytesResponse(!max && !scrub && compress === 'lossless' && out.length >= original.length ? original : out, 'image/png');
   });
-}
-
-async function hasStealth(png: Buffer): Promise<boolean> {
-  try {
-    const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-    return (await readStealth({ width: info.width, height: info.height, data }, async (b) => gunzipSync(b))) !== null;
-  } catch {
-    return false;
-  }
-}
-
-/** The picture without its hidden metadata: an opaque picture loses its
- *  alpha channel altogether; otherwise near-opaque and near-clear alpha
- *  (where the bits hide) is snapped to fully opaque and fully clear, as
- *  NovelAI's own canvas does. */
-async function scrubbed(png: Buffer) {
-  const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  let opaque = true;
-  for (let i = 3; i < data.length; i += 4) {
-    if (data[i] < 254) opaque = false;
-    if (data[i] === 254) data[i] = 255;
-    else if (data[i] === 1) data[i] = 0;
-  }
-  const img = sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } });
-  return opaque ? img.removeAlpha() : img;
 }
 
 /** Sets the avatar from any image the browser sends; it's stored as PNG,
