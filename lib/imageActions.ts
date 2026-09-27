@@ -24,9 +24,11 @@ export async function setAsAvatar(blob: Blob) {
   }
 }
 
-export async function keepImage(img: SessionImage, label?: string) {
+/** Keeps a gen with the open card; true if it worked. `quiet` skips the
+ *  success toast (for a batch, which reports once). */
+export async function keepImage(img: SessionImage, label?: string, quiet = false): Promise<boolean> {
   const p = useProjectStore.getState().project;
-  if (!p) return;
+  if (!p) return false;
   try {
     const id = img.id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60) || uuid();
     const kept = await useProjectStore.getState().keep(img.blob, {
@@ -41,9 +43,11 @@ export async function keepImage(img: SessionImage, label?: string) {
       label,
     });
     useSessionStore.getState().updateImages([img.id], { keptFile: kept.file, pinned: true });
-    toast(`Kept with ${p.card.data.name || 'the card'}.`, 'success');
+    if (!quiet) toast(`Kept with ${p.card.data.name || 'the card'}.`, 'success');
+    return true;
   } catch (err) {
     toast(`Couldn't keep it: ${(err as Error).message}`, 'error');
+    return false;
   }
 }
 
@@ -70,9 +74,10 @@ export async function saveToFolder(blob: Blob, filename: string, quiet = false):
   }
 }
 
-export async function saveSessionImage(img: SessionImage, quiet = false) {
+export async function saveSessionImage(img: SessionImage, quiet = false): Promise<string | null> {
   const path = await saveToFolder(img.blob, genFileName(img), quiet);
   if (path) useSessionStore.getState().updateImages([img.id], { savedPath: path });
+  return path;
 }
 
 /** Loads an image's prompt (and optionally its settings) into the image

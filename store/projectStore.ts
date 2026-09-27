@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import type { CardData, CharacterCard } from '@/types/card';
 import type { CardProject, KeptImage, ProjectSummary } from '@/types/project';
 import { api } from '@/lib/api';
+import { useSessionStore } from '@/store/sessionStore';
 import { PROJECT_GEN_KEYS, useSettingsStore, DEFAULT_NEGATIVE } from '@/store/settingsStore';
 
 // The open card project: loading, editing with undo/redo, and saving it
@@ -220,6 +221,10 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       await api.unkeep(p.id, file);
       const cur = get().project;
       if (cur?.id === p.id) set({ project: { ...cur, kept: cur.kept.filter((k) => k.file !== file) } });
+      // This session's copy (if it's still here) can be kept again.
+      const session = useSessionStore.getState();
+      const ids = session.images.filter((i) => i.projectId === p.id && i.keptFile === file).map((i) => i.id);
+      if (ids.length) session.updateImages(ids, { keptFile: undefined, pinned: false });
     },
 
     updateKept: (file, patch) => {
