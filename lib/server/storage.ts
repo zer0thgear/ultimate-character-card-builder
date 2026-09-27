@@ -54,7 +54,8 @@ export async function writeFileAtomic(file: string, data: string | Uint8Array) {
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 export async function getConfig(): Promise<AppConfig> {
-  return { ...DEFAULT_CONFIG, ...((await readJson<Partial<AppConfig>>(path.join(DATA_DIR, 'config.json'))) ?? {}) };
+  const saved = (await readJson<Partial<AppConfig>>(path.join(DATA_DIR, 'config.json'))) ?? {};
+  return { ...DEFAULT_CONFIG, ...saved, ddns: { ...DEFAULT_CONFIG.ddns, ...(saved.ddns ?? {}) } };
 }
 
 export async function setConfig(patch: Partial<AppConfig>): Promise<AppConfig> {

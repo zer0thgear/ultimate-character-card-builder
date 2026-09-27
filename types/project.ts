@@ -112,6 +112,23 @@ export interface AppConfig {
   outputPerCard: boolean;
   /** Folders the gen library browses (GenBrowser's library/, downloads…). */
   libraryFolders: string[];
+  /** A dynamic-DNS name kept pointing at this machine's LAN address. The
+   *  token never leaves the server (see app/api/network). */
+  ddns: DdnsSettings;
+}
+
+export interface DdnsSettings {
+  provider: 'off' | 'duckdns' | 'custom';
+  /** DuckDNS: the name (with or without .duckdns.org). */
+  domain: string;
+  token: string;
+  /** Custom: an update URL with {ip} where the address goes, and the name it sets. */
+  customUrl: string;
+  hostname: string;
+  lastIp?: string;
+  lastUpdated?: number;
+  /** 'ok', or what went wrong. */
+  lastResult?: string;
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -119,4 +136,5 @@ export const DEFAULT_CONFIG: AppConfig = {
   autoSaveGens: false,
   outputPerCard: true,
   libraryFolders: [],
+  ddns: { provider: 'off', domain: '', token: '', customUrl: '', hostname: '' },
 };

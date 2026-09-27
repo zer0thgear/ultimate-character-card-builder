@@ -100,7 +100,19 @@ On a narrow screen (or a phone on its side) UCCB becomes one screen at a time, a
 - Dialogs, the Edit/Inpaint canvas included, fill the screen; text fields are 16px so iPhone Safari doesn't zoom in.
 - The chat's toolbar wraps to two rows, and greetings keep their actions inside the unfolded greeting.
 
-To use it from your phone, run UCCB on your computer and open `http://<computer's LAN address>:3210` on the phone, on a network you trust (see the README's note on exposing it).
+To use it from your phone, see **Other devices** below.
+
+## Other devices
+
+Settings → **Other devices** shows the address other devices on the same network open UCCB at, with a QR code to scan. That address can change when the router hands out a new one, so UCCB can also keep a **dynamic-DNS name** pointed at it:
+
+- **DuckDNS** (free): sign in at duckdns.org, add a sub domain, paste it and your token. Or **another provider** with an update link (put `{ip}` where the address goes).
+- UCCB checks every few minutes (and at start) and updates the name when the address changes. The phone bookmarks `http://yourname.duckdns.org:3210` once.
+- The name points at a private address, which only devices on your network can reach; nothing is opened to the internet, and no router settings are needed. The token stays on the server, never sent to a browser.
+- Some routers refuse names that point at local addresses. The tab checks what the name resolves to from this computer; if the phone can't open it, set the phone's own DNS (Android: Settings → Network → Private DNS → `dns.google`), which bypasses the router's.
+- Windows must allow Node.js through its firewall on private networks, and see the Wi-Fi as a private network; the tab says where.
+
+For outside your home network, Tailscale or ZeroTier are still the way.
 
 ## Keyboard
 

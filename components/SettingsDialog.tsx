@@ -11,8 +11,9 @@ import { Button, IconButton, Modal, NumberInput, Tabs, Toggle, cx, inputClass } 
 import { AssistPresetPicker, PresetPicker } from '@/components/llm/PresetManager';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { PersonaManager } from '@/components/llm/Personas';
+import { NetworkTab } from '@/components/NetworkTab';
 
-type SettingsTab = 'general' | 'folders' | 'llm' | 'chat' | 'assist' | 'personas';
+type SettingsTab = 'general' | 'folders' | 'llm' | 'chat' | 'assist' | 'personas' | 'network';
 
 const useSettingsDialog = create<{ tab: SettingsTab | null; set: (t: SettingsTab | null) => void }>((set) => ({ tab: null, set: (tab) => set({ tab }) }));
 export const openSettings = (tab: SettingsTab = 'general') => useSettingsDialog.getState().set(tab);
@@ -33,6 +34,7 @@ export function SettingsDialog() {
           { value: 'chat', label: 'Chat preset' },
           { value: 'assist', label: 'Assistant' },
           { value: 'personas', label: 'Personas' },
+          { value: 'network', label: 'Other devices' },
         ]}
       />
       {tab === 'general' && <GeneralTab />}
@@ -40,6 +42,7 @@ export function SettingsDialog() {
       {tab === 'llm' && <LlmTab />}
       {tab === 'assist' && <AssistTab />}
       {tab === 'personas' && <PersonaManager />}
+      {tab === 'network' && <NetworkTab />}
       {tab === 'chat' && (
         <div className="flex flex-col gap-3">
           <p className="text-xs text-slate-500">

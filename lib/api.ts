@@ -1,4 +1,12 @@
-import type { AppConfig, CardProject, ChatSession, ChatSummary, KeptImage, Persona, ProjectSummary, AvatarInfo } from '@/types/project';
+import type { AppConfig, CardProject, ChatSession, ChatSummary, DdnsSettings, KeptImage, Persona, ProjectSummary, AvatarInfo } from '@/types/project';
+
+/** GET /api/network: how other devices reach this one (the token stays on the server). */
+export interface NetworkStatus {
+  port: number;
+  primary: string | null;
+  addresses: { name: string; address: string; virtual: boolean }[];
+  ddns: Omit<DdnsSettings, 'token'> & { hasToken: boolean; resolvesTo: string | null };
+}
 import type { LlmEvent, LlmRequest } from '@/types/llm';
 import type { LibraryItem } from '@/lib/librarySearch';
 
@@ -53,6 +61,10 @@ export const api = {
 
   importStPersonas: (folder: string) =>
     call<{ added: number; skipped: number; pictures: number; from: string; defaultName: string | null }>('/api/personas/import-st', json('POST', { folder })),
+
+  network: () => call<NetworkStatus>('/api/network'),
+  saveNetwork: (d: Partial<DdnsSettings>) => call<NetworkStatus>('/api/network', json('PUT', d)),
+  updateNetwork: () => call<NetworkStatus>('/api/network', { method: 'POST' }),
 
   getConfig: () => call<AppConfig>('/api/config'),
   setConfig: (patch: Partial<AppConfig>) => call<AppConfig>('/api/config', json('PUT', patch)),
