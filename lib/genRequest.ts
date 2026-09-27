@@ -2,7 +2,8 @@
 
 import type { FormSettings } from '@/store/settingsStore';
 import type { NovelAIGenerateRequest, CharacterPromptEntry, NovelAIModel, NovelAISampler } from '@/types/novelai';
-import { buildImageRequest, composeFinalPrompts, formSampling, resolveSelectedPrompt } from '@/lib/imageRequest';
+import { buildImageRequest, composeFinalPrompts, formSampling, resolveSelectedPrompt, styleText } from '@/lib/imageRequest';
+import { joinPromptParts } from '@/lib/promptText';
 import { hasInpaintStrength, toInpaintingModel } from '@/lib/inpaint';
 import { varietySigma } from '@/lib/variety';
 import type { ParsedNaiMetadata } from '@/lib/naiMetadata';
@@ -70,6 +71,25 @@ export const SIZE_PRESETS = [
 /** Grid positions for V4+ characters (NovelAI's 5×5 grid centres). */
 export const POSITIONS = [0.1, 0.3, 0.5, 0.7, 0.9];
 
+/** A reused prompt without the style in front, when it's this card's
+ *  style (it'd be added again on the next gen). Dataset switches (fur
+ *  dataset, nsfw) in front of it are kept as they are. */
+export function withoutStyle(prompt: string, style: string | undefined): string {
+  const tags = styleText(style);
+  if (!tags) return prompt;
+  const norm = (t: string) => t.replace(/\s+/g, ' ').trim().toLowerCase();
+  const want = tags.split(',').map(norm);
+  const parts = prompt.split(',');
+  // Find the style's run of tags, allowing a dataset switch or two before it.
+  for (let start = 0; start <= Math.min(2, parts.length - want.length); start++) {
+    if (want.every((w, i) => norm(parts[start + i]) === w)) {
+      return joinPromptParts(...parts.slice(0, start), ...parts.slice(start + want.length));
+    }
+    if (!/^\s*(fur dataset|nsfw)\s*$/i.test(parts[start] ?? '')) break;
+  }
+  return prompt;
+}
+
 /** The form fields "Reuse" sets from an image's metadata. Only what the
  *  image actually carries is replaced. */
 export function reuseFromMetadata(
@@ -80,7 +100,7 @@ export function reuseFromMetadata(
   const out: Partial<FormSettings> = {};
   if (opts.prompt) {
     const [first, ...rest] = form.basePrompts;
-    out.basePrompts = [{ ...(first ?? { id: 'p-default', label: 'Prompt 1', selected: true }), text: m.prompt, tidbits: [] }, ...rest];
+    out.basePrompts = [{ ...(first ?? { id: 'p-default', label: 'Prompt 1', selected: true }), text: withoutStyle(m.prompt, form.stylePrompt), tidbits: [] }, ...rest];
   }
   if (opts.characters && m.characters.length) {
     out.characters = m.characters.map(

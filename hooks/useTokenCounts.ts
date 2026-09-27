@@ -24,6 +24,7 @@ export interface TokenCounts {
 
 type Inputs = Pick<
   FormSettings,
+  | 'stylePrompt'
   | 'model'
   | 'basePrompts'
   | 'characters'
@@ -102,19 +103,19 @@ export function useTokenCounts(form: Inputs): TokenCounts | null {
     };
   }, [kind]);
 
-  const { model, basePrompts, characters, negativePrompt, negativeTidbits, tidbitLibrary } = form;
+  const { stylePrompt, model, basePrompts, characters, negativePrompt, negativeTidbits, tidbitLibrary } = form;
   const { furMode, nsfwMode, transparentBg, qualityPreset, ucPreset } = form;
   useEffect(() => {
     if (!budget || counter?.kind !== budget.kind) return;
     const timer = setTimeout(() => {
-      const inputs = { model, basePrompts, characters, negativePrompt, negativeTidbits, tidbitLibrary };
+      const inputs = { stylePrompt, model, basePrompts, characters, negativePrompt, negativeTidbits, tidbitLibrary };
       const modifiers = { furMode, nsfwMode, transparentBg, qualityPreset, ucPreset };
       setCounts(computeCounts({ ...inputs, ...modifiers }, budget, counter.count));
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
     // `budget` is derived from `model`, which is listed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [counter, model, basePrompts, characters, negativePrompt, negativeTidbits, tidbitLibrary, furMode, nsfwMode, transparentBg, qualityPreset, ucPreset]);
+  }, [counter, stylePrompt, model, basePrompts, characters, negativePrompt, negativeTidbits, tidbitLibrary, furMode, nsfwMode, transparentBg, qualityPreset, ucPreset]);
 
   // Hide stale numbers from another model family until the recount lands.
   return budget && counts?.budget.kind === budget.kind ? { ...counts, budget } : null;

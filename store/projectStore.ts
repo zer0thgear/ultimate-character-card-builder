@@ -73,6 +73,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
   const loadGen = (p: CardProject) => {
     applyingGen = true;
     useSettingsStore.getState().patch({
+      stylePrompt: p.gen.stylePrompt ?? '',
       basePrompts: p.gen.basePrompts.length ? p.gen.basePrompts : [{ id: 'p-default', label: 'Prompt 1', text: '', selected: true }],
       characters: p.gen.characters,
       negativePrompt: p.gen.negativePrompt || DEFAULT_NEGATIVE,
@@ -112,10 +113,14 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     },
 
     create: async (init) => {
+      // A new card starts in the style that's showing, so a look carries on
+      // from card to card until it's changed.
+      const style = useSettingsStore.getState().stylePrompt;
       await get().flush();
       const p = await api.createProject(init);
       upsertSummary(p);
       await get().open(p.id);
+      if (style.trim() && !p.gen.stylePrompt?.trim() && get().project?.id === p.id) useSettingsStore.getState().set('stylePrompt', style);
       return p;
     },
 
@@ -273,7 +278,7 @@ if (typeof window !== 'undefined') {
     useProjectStore.setState({
       project: {
         ...project,
-        gen: { basePrompts: s.basePrompts, characters: s.characters, negativePrompt: s.negativePrompt, negativeTidbits: s.negativeTidbits },
+        gen: { stylePrompt: s.stylePrompt, basePrompts: s.basePrompts, characters: s.characters, negativePrompt: s.negativePrompt, negativeTidbits: s.negativeTidbits },
       },
       status: 'dirty',
     });

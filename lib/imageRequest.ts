@@ -38,7 +38,7 @@ export const isV3Model = (model: NovelAIModel) =>
 type PromptModifiers = Pick<
   FormSettings,
   'furMode' | 'nsfwMode' | 'transparentBg' | 'model' | 'qualityPreset' | 'ucPreset'
->;
+> & Partial<Pick<FormSettings, 'stylePrompt'>>;
 
 /** Rolls the form's selected base prompt, replaying an image's picks when
  *  reworking that image so it doesn't re-roll. */
@@ -68,6 +68,13 @@ export function resolveReworkPrompt(form: FormSettings, image: GeneratedImage): 
   return { ...resolved, picks: { ...image.wildcardPicks, ...resolved.picks } };
 }
 
+/** The style field as one run of tags: its lines joined like any other
+ *  parts, and doubled commas inside it squashed, so however it's typed it
+ *  adds no stray commas. */
+export function styleText(style: string | undefined): string {
+  return joinPromptParts(...(style ?? '').split(/\n+/).map((line) => line.replace(/\s*,(?:\s*,)+\s*/g, ', ')));
+}
+
 /** Applies the prompt modifiers to resolved text as NovelAI's client does:
  *  fur/nsfw prefixes, then transparent background and the quality preset
  *  (see composeWithQuality for where they go), an optional flow-specific
@@ -81,8 +88,10 @@ export function composeFinalPrompts(
   if (form.furMode) prefixes.push('fur dataset');
   if (form.nsfwMode) prefixes.push('nsfw');
 
+  // The style (the card's artist and style tags) goes first, after only the
+  // dataset switches, which NovelAI wants at the very start.
   let input = composeWithQuality(
-    joinPromptParts(...prefixes, resolved.baseText),
+    joinPromptParts(...prefixes, styleText(form.stylePrompt), resolved.baseText),
     form.model,
     form.qualityPreset,
     form.transparentBg,

@@ -20,6 +20,10 @@ import { serverStorage } from '@/lib/serverSettings';
 // global, kept on the server so every device shares them (lib/serverSettings.ts).
 
 export interface FormSettings {
+  /** Style and artist tags, in front of the prompt on every gen (the card's;
+   *  lib/imageRequest.ts composeFinalPrompts). The ✨ prompt writers leave
+   *  it alone, so the style holds whatever they write. */
+  stylePrompt: string;
   basePrompts: BasePrompt[];
   promptMode: PromptMode;
   furMode: boolean;
@@ -51,7 +55,7 @@ export interface FormSettings {
 }
 
 /** The fields that belong to a card rather than to the generator. */
-export const PROJECT_GEN_KEYS = ['basePrompts', 'characters', 'negativePrompt', 'negativeTidbits'] as const;
+export const PROJECT_GEN_KEYS = ['stylePrompt', 'basePrompts', 'characters', 'negativePrompt', 'negativeTidbits'] as const;
 
 interface SettingsState extends FormSettings {
   set: <K extends keyof FormSettings>(key: K, value: FormSettings[K]) => void;
@@ -62,6 +66,7 @@ export const DEFAULT_NEGATIVE =
   'lowres, {bad}, error, fewer, extra, missing, worst quality, jpeg artifacts, bad quality, watermark, unfinished, displeasing, chromatic aberration, signature, extra digits, artistic error, username, scan, [abstract]';
 
 export const GEN_DEFAULTS: FormSettings = {
+  stylePrompt: '',
   basePrompts: [{ id: 'p-default', label: 'Prompt 1', text: '', selected: true }],
   promptMode: 'single',
   furMode: false,

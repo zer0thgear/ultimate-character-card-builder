@@ -10,6 +10,8 @@ import type { BasePrompt, CharacterPromptEntry, NovelAIModel, NovelAIParameters,
  *  cards switches what's drawn. Model, size, sampler and the rest stay
  *  global (store/settingsStore.ts). */
 export interface ProjectGen {
+  /** Style and artist tags, put in front of every prompt for this card. */
+  stylePrompt?: string;
   basePrompts: BasePrompt[];
   characters: CharacterPromptEntry[];
   negativePrompt: string;

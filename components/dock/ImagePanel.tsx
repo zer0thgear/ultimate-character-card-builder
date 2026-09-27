@@ -298,6 +298,8 @@ function PromptForm() {
         />
       )}
 
+      <StyleSection text={form.stylePrompt} onChange={(v) => set('stylePrompt', v)} model={form.model} apiKey={apiKey} />
+
       <SceneSection
         text={basePrompt?.text ?? ''}
         onChange={setBasePrompt}
@@ -445,6 +447,19 @@ function PromptForm() {
 }
 
 // ─── Scene (base prompt), with "illustrate a greeting" ───────────────────────
+
+/** The card's style: artist and style tags in front of every prompt, which
+ *  the ✨ writers leave alone. */
+function StyleSection({ text, onChange, model, apiKey }: { text: string; onChange: (v: string) => void; model: NovelAIModel; apiKey: string }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-semibold tracking-wide text-slate-300 uppercase">
+        Style <span className="font-normal text-slate-500 normal-case">(artist and style tags, first in every prompt; ✨ leaves it alone)</span>
+      </span>
+      <TagAutocompleteField value={text} onChange={onChange} model={model} apiKey={apiKey} className={promptClass} rows={2} placeholder="artist:name, 0.8::artist:other::, watercolor, flat color" />
+    </div>
+  );
+}
 
 function SceneSection({ text, onChange, model, apiKey, meter }: { text: string; onChange: (v: string) => void; model: NovelAIModel; apiKey: string; meter: React.ReactNode }) {
   const card = useProjectStore((s) => s.project?.card.data);
