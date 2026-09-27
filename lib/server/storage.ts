@@ -237,3 +237,27 @@ export function updatePersonas(change: (list: Persona[]) => Persona[] | Promise<
 }
 
 export const personaAvatarPath = (id: string) => path.join(PERSONAS, `${checkId(id)}.png`);
+
+// ─── Settings shared by every device ─────────────────────────────────────────
+//   data/settings.json   { gen, llm, naiKey }: what browsers used to keep in
+//   localStorage, kept here so every device (and every address this one is
+//   opened at) shares them. Layout preferences stay in each browser.
+
+export const SETTINGS_SECTIONS = ['gen', 'llm', 'naiKey'] as const;
+export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+let settingsLock: Promise<unknown> = Promise.resolve();
+
+export async function getSettings(): Promise<Partial<Record<SettingsSection, unknown>>> {
+  return (await readJson<Partial<Record<SettingsSection, unknown>>>(SETTINGS_FILE)) ?? {};
+}
+
+export function setSettingsSection(section: SettingsSection, value: unknown) {
+  const next = settingsLock.catch(() => {}).then(async () => {
+    const all = await getSettings();
+    all[section] = value;
+    await writeFileAtomic(SETTINGS_FILE, JSON.stringify(all, null, 2));
+  });
+  settingsLock = next;
+  return next;
+}

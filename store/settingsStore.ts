@@ -11,12 +11,13 @@ import {
   PromptTidbit,
 } from '@/types/novelai';
 import { QualityLevel, UcLevel } from '@/lib/naiPresets';
+import { serverStorage } from '@/lib/serverSettings';
 
 // The image generator's settings, in the same shape as NovelFrontEnd's so
 // its request builder (lib/imageRequest.ts) works unchanged. The prompt
 // fields (base prompts, characters, negative) belong to the open card and
 // are swapped in and out with it (see store/projectStore.ts); the rest are
-// global and persist in localStorage.
+// global, kept on the server so every device shares them (lib/serverSettings.ts).
 
 export interface FormSettings {
   basePrompts: BasePrompt[];
@@ -97,8 +98,10 @@ export const useSettingsStore = create<SettingsState>()(
       patch: (values) => setState((state) => ({ ...state, ...values })),
     }),
     {
-      name: 'uccb-gen-settings',
-      storage: createJSONStorage(() => localStorage),
+      name: 'gen',
+      storage: createJSONStorage(() => serverStorage),
+      // Loaded by lib/hydrate.ts before the app renders.
+      skipHydration: true,
       // The card's prompt fields are saved with the card, not here.
       partialize: (s) =>
         Object.fromEntries(

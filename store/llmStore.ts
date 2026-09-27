@@ -7,8 +7,9 @@ import { DEFAULT_PARAMS } from '@/types/llm';
 import { DEFAULT_CHAT_SETTINGS, type ChatPromptSettings } from '@/lib/chatPrompt';
 import type { ChatPreset } from '@/lib/stPreset';
 import { useSessionStore } from '@/store/sessionStore';
+import { serverStorage } from '@/lib/serverSettings';
 
-// LLM connections (keys included, in localStorage like the NovelAI key),
+// LLM connections (keys included, on the server like the NovelAI key),
 // which one the test chat and the writing assistant each use, and the
 // chat's prompt settings.
 
@@ -102,8 +103,11 @@ export const useLlmStore = create<LlmState>()(
       setChatSettings: (patch) => set((s) => ({ chatSettings: { ...s.chatSettings, ...patch } })),
     }),
     {
-      name: 'uccb-llm',
-      storage: createJSONStorage(() => localStorage),
+      // On the server, so every device shares connections, presets and
+      // chat settings (lib/serverSettings.ts); loaded by lib/hydrate.ts.
+      name: 'llm',
+      storage: createJSONStorage(() => serverStorage),
+      skipHydration: true,
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<LlmState>;
         return {

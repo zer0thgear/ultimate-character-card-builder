@@ -112,6 +112,9 @@ export interface AppConfig {
   outputPerCard: boolean;
   /** Folders the gen library browses (GenBrowser's library/, downloads…). */
   libraryFolders: string[];
+  /** Let devices on the home network in, not only this computer and
+   *  Tailscale devices (see server.mjs). */
+  allowLan: boolean;
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -119,4 +122,5 @@ export const DEFAULT_CONFIG: AppConfig = {
   autoSaveGens: false,
   outputPerCard: true,
   libraryFolders: [],
+  allowLan: false,
 };

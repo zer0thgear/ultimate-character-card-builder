@@ -66,6 +66,7 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
 
 function GeneralTab() {
   const { apiKey, setApiKey } = useSessionStore();
+  const { config, update } = useConfigStore();
   const { theme, setTheme, exportKeepsMetadata, setExportKeepsMetadata, exportMaxSize, exportCompression, setExportImage } = useUiStore();
   const [show, setShow] = useState(false);
   return (
@@ -77,7 +78,15 @@ function GeneralTab() {
             {show ? 'Hide' : 'Show'}
           </Button>
         </div>
-        <p className="text-xs text-slate-500">Kept in this browser&apos;s localStorage. Don&apos;t use UCCB on a shared computer.</p>
+        <p className="text-xs text-slate-500">Kept on this computer (data/settings.json) and shared by every device you open UCCB on, like your connections and presets.</p>
+      </Row>
+      <Row label="Who can connect" hint="UCCB always accepts this computer and your Tailscale devices. Changes apply within a few seconds.">
+        <Toggle checked={config.allowLan} onChange={(allowLan) => void update({ allowLan })} label="Also allow devices on the home network" />
+        <p className="text-xs text-slate-500">
+          {config.allowLan
+            ? 'Anyone on this Wi-Fi can open UCCB, use your API keys and change your cards.'
+            : 'Other devices on the Wi-Fi are turned away; use Tailscale to reach UCCB from your phone.'}
+        </p>
       </Row>
       <Row label="Theme">
         <div className="flex gap-2">

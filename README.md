@@ -21,7 +21,15 @@ npm install
 npm run dev
 ```
 
-Then open <http://localhost:3210>. For a faster production server: `npm run build` once, then `npm start`.
+Then open <http://localhost:3210>. For a faster production server: `npm run build` once, then `npm start`. Both run `server.mjs`, which starts Next.js behind a check on who's connecting (see below).
+
+### From your other devices
+
+Install [Tailscale](https://tailscale.com) on this computer and your phone or laptop, and open `http://<this computer's name>:3210` (MagicDNS; the server prints the name when it starts), at home or away. For HTTPS, which the browser needs for things like the Copy buttons, run `tailscale serve --bg 3210` once and use the `https://…ts.net` address it gives.
+
+UCCB only accepts connections from this computer and your Tailscale devices; other devices on the Wi-Fi get a page saying so. Settings → General → **Also allow devices on the home network** lets them in too. The check is on the connection's real address, not a header, so it can't be faked.
+
+Your settings (NovelAI key, LLM connections, presets, models, chat and assistant settings) are kept on this computer and shared by every device and address you open UCCB at. Layout (theme, panels, tabs) stays per device.
 
 In **Settings** (⚙, top right):
 
@@ -34,7 +42,8 @@ In **Settings** (⚙, top right):
 Everything is on this machine, under `data/` (gitignored):
 
 ```
-data/config.json                     output folder, library folders
+data/config.json                     output folder, library folders, home-network access
+data/settings.json                   keys, connections, presets, gen/chat settings (shared by your devices)
 data/projects/<id>/project.json      the card, its image prompts, notes
 data/projects/<id>/avatar.png        the card's picture
 data/projects/<id>/gallery/          gens you kept with the card

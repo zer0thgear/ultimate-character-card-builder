@@ -2,12 +2,13 @@
 
 import { create } from 'zustand';
 import type { GeneratedImage } from '@/types/novelai';
+import { writeSection } from '@/lib/serverSettings';
 
 // This session's gens, kept in memory as NovelFrontEnd keeps them: they go
 // when the page closes unless they're kept with a card or saved to the
-// output folder. Also holds the NovelAI key (in localStorage).
+// output folder. Also holds the NovelAI key (saved on the server, shared by
+// every device; see lib/serverSettings.ts).
 
-const API_KEY_KEY = 'uccb-nai-key';
 
 export interface SessionImage extends GeneratedImage {
   /** The card that was open when it was made. */
@@ -21,6 +22,8 @@ export interface SessionImage extends GeneratedImage {
 interface SessionState {
   apiKey: string;
   setApiKey: (key: string) => void;
+  /** Sets the key as loaded from the server, without saving it back. */
+  loadApiKey: (key: string) => void;
   images: SessionImage[];
   addImages: (images: SessionImage[]) => void;
   updateImages: (ids: string[], patch: Partial<SessionImage>) => void;
@@ -38,16 +41,12 @@ interface SessionState {
 }
 
 export const useSessionStore = create<SessionState>((set) => ({
-  apiKey: typeof window !== 'undefined' ? (localStorage.getItem(API_KEY_KEY) ?? '') : '',
+  apiKey: '',
   setApiKey: (key) => {
-    try {
-      if (key) localStorage.setItem(API_KEY_KEY, key);
-      else localStorage.removeItem(API_KEY_KEY);
-    } catch {
-      /* private mode: the key lasts this session only */
-    }
+    writeSection('naiKey', key);
     set({ apiKey: key });
   },
+  loadApiKey: (key) => set({ apiKey: key }),
 
   images: [],
   addImages: (images) => set((s) => ({ images: [...images, ...s.images], selectedId: images[0]?.id ?? s.selectedId })),
