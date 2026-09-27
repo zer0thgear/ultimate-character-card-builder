@@ -127,7 +127,12 @@ export function macroExpander(card: CardData, history: ChatMessage[], settings: 
     mesExamples: plain(card.mes_example),
   };
   const x = (text: string, original?: string) => expandMacros(text ?? '', { ...base, original }).trim();
-  return { x, char, user, texts };
+  /** Adds what's only known later in the build: the lorebook entries that
+   *  fired, for {{wiBefore}} / {{wiAfter}} and {{#if wiBefore}}. */
+  const setFields = (patch: NonNullable<MacroContext['fields']>) => {
+    base.fields = { ...base.fields, ...patch };
+  };
+  return { x, char, user, texts, setFields };
 }
 
 export type LorePlace = 'before' | 'after' | 'depth';
@@ -202,19 +207,22 @@ export function buildChatPrompt(card: CardData, history: ChatMessage[], settings
   const mode = opts.mode ?? 'reply';
   // Continuing: the reply being continued is the prefill, not history.
   const chat = mode === 'continue' ? history.slice(0, -1) : history;
-  const { x, char, user, texts } = macroExpander(card, chat, settings, opts);
+  const { x, char, user, texts, setFields } = macroExpander(card, chat, settings, opts);
 
   const parts: PromptPart[] = [];
   const sys = (label: string, content: string) => {
     if (content.trim()) parts.push({ label, role: 'system', content });
   };
 
+  // The lorebook first, so the main prompt's {{#if wiBefore}} knows what fired.
+  const lore = settings.useLorebook ? scanLorebook(card.character_book, texts) : { active: [], dropped: [] };
+  const loreAt = (place: LorePlace) => lore.active.filter((a) => lorePlace(a.entry) === place).map((a) => ({ name: describeEntry(a), content: x(a.entry.content) }));
+  setFields({ wiBefore: loreAt('before').map((e) => e.content).filter(Boolean).join('\n'), wiAfter: loreAt('after').map((e) => e.content).filter(Boolean).join('\n') });
+
   const main = x(settings.mainPrompt);
   const cardSystem = settings.useCardSystemPrompt && card.system_prompt.trim();
   sys(cardSystem ? 'System prompt (card)' : 'Main prompt', cardSystem ? x(card.system_prompt, main) : main);
 
-  const lore = settings.useLorebook ? scanLorebook(card.character_book, texts) : { active: [], dropped: [] };
-  const loreAt = (place: LorePlace) => lore.active.filter((a) => lorePlace(a.entry) === place).map((a) => ({ name: describeEntry(a), content: x(a.entry.content) }));
   for (const e of loreAt('before')) sys(`Lorebook: ${e.name}`, e.content);
 
   sys('Description', x(card.description));

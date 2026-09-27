@@ -41,7 +41,7 @@ export function buildPresetPrompt(card: CardData, history: ChatMessage[], settin
   // Continuing with a prefill: the reply being continued isn't history.
   const prefillContinue = continuing && preset.continuePrefill;
   let chat = prefillContinue ? history.slice(0, -1) : history;
-  const { x, char, user, texts } = macroExpander(card, chat, settings, opts);
+  const { x, char, user, texts, setFields } = macroExpander(card, chat, settings, opts);
 
   const lore = settings.useLorebook ? scanLorebook(card.character_book, texts) : { active: [], dropped: [] };
   const loreText = (place: 'before' | 'after') =>
@@ -50,6 +50,8 @@ export function buildPresetPrompt(card: CardData, history: ChatMessage[], settin
       .map((a) => x(a.entry.content))
       .filter(Boolean)
       .join('\n');
+  // For {{wiBefore}} / {{wiAfter}} and {{#if wiBefore}} in the preset.
+  setFields({ wiBefore: loreText('before'), wiAfter: loreText('after') });
 
   // Chat-positioned prompts, the card's note and at-depth lore all go into
   // the history at their depths.
