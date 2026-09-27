@@ -126,6 +126,10 @@ export function mergeCast(
     let slot = find(member.name);
     // A lone character and a lone slot are the same one, whatever it's called.
     if (!slot && cast.length === 1 && live.length === 1 && !used.has(live[0].id)) slot = out.find((c) => c.id === live[0].id);
+    // A slot nobody named (a new one, or one named after the card, from
+    // before it had a prompt per character) goes to the next newcomer, rather
+    // than staying beside them. Not if it's someone else's by name.
+    if (!slot) slot = out.find((c) => !c.archived && !used.has(c.id) && placeholderLabel(c.label, opts.cardName ?? '') && !cast.some((m) => m !== member && (norm(m.name) === norm(c.label) || firstWord(m.name) === firstWord(c.label))));
     if (slot) {
       used.add(slot.id);
       slot.prompt = member.tags;

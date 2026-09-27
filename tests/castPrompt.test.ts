@@ -78,4 +78,19 @@ describe('mergeCast', () => {
     expect(r.dropped).toEqual(['B']);
     expect(r.characters).toHaveLength(1);
   });
+
+  it("gives a slot named after the card (one blended prompt from before) to the first newcomer", () => {
+    const r = mergeCast([slot('Fairy Girlfriends', 'girl, red hair, blonde hair')], [{ name: 'Edith', tags: 'girl, red hair' }, { name: 'Betilla', tags: 'girl, blonde hair' }], { scene: false, max: 6, cardName: 'Fairy Girlfriends' });
+    expect(r.characters.map((c) => [c.id, c.label, c.prompt])).toEqual([
+      ['Fairy Girlfriends', 'Edith', 'girl, red hair'],
+      [expect.any(String), 'Betilla', 'girl, blonde hair'],
+    ]);
+    expect(r).toMatchObject({ updated: ['Edith'], added: ['Betilla'] });
+  });
+
+  it("doesn't hand a named slot to someone else", () => {
+    const r = mergeCast([slot('Guard', 'boy, armor')], [{ name: 'Edith', tags: 'girl' }, { name: 'Betilla', tags: 'girl' }], { scene: true, max: 6 });
+    expect(r.characters.find((c) => c.label === 'Guard')).toMatchObject({ prompt: 'boy, armor', enabled: false });
+  });
 });
+
