@@ -16,6 +16,8 @@ import { useAssistLog } from '@/store/assistLog';
 import { assistRequest } from '@/hooks/useLlmStream';
 import { ASSIST_JOBS, ASSIST_TEMPLATES, DEFAULT_TEMPLATES } from '@/lib/assist';
 import { newCard } from '@/lib/cardSpec';
+import { useModelPrices } from '@/hooks/useModelPrices';
+import { formatPrice, isOpenRouter, priceLabel } from '@/lib/modelPricing';
 import { useProjectStore } from '@/store/projectStore';
 import { AccountStatus } from '@/components/AccountStatus';
 
@@ -257,24 +259,41 @@ function FoldersTab() {
 const KIND_LABELS: Record<ProviderKind, string> = { novelai: 'NovelAI', openai: 'OpenAI-compatible', anthropic: 'Anthropic (Claude)' };
 
 function LlmTab() {
-  const { connections, addConnection, chatConnectionId, assistConnectionId, setChatConnection, setAssistConnection } = useLlmStore();
+  const { connections, addConnection, chatConnectionId, assistConnectionId, visionConnectionId, setChatConnection, setAssistConnection, setVisionConnection, priceUnit, setPriceUnit } = useLlmStore();
   const [openId, setOpenId] = useState<string | null>(connections[0]?.id ?? null);
+  const anyOpenRouter = connections.some(isOpenRouter);
+  const prices = useModelPrices(anyOpenRouter);
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-slate-500">
-        Connections are used by the test chat and the writing assistant; each can use its own. Keys are kept in this browser and sent only to the provider, through UCCB&apos;s local server.
+        Connections are used by the test chat, the writing assistant and Write from image; each can use its own. Keys are kept on this computer (data/settings.json) and sent only to the provider, through UCCB&apos;s local server.
       </p>
+      {anyOpenRouter && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+          OpenRouter prices per
+          <div className="flex overflow-hidden rounded-md border border-slate-700">
+            {(['1M', '1K'] as const).map((u) => (
+              <button key={u} type="button" onClick={() => setPriceUnit(u)} className={cx('px-2 py-0.5', priceUnit === u ? 'bg-violet-600 text-white' : 'text-slate-300 hover:bg-slate-800')}>
+                {u === '1M' ? '1M tokens' : '1K tokens'}
+              </button>
+            ))}
+          </div>
+          <span className="text-slate-500">(from OpenRouter&apos;s model list, in US dollars)</span>
+        </div>
+      )}
       {connections.map((c) => (
         <div key={c.id} className="rounded-md border border-slate-800">
           <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left" onClick={() => setOpenId(openId === c.id ? null : c.id)}>
             <span className="text-xs text-slate-500">{openId === c.id ? '▾' : '▸'}</span>
             <span className="font-medium text-slate-200">{c.name}</span>
-            <span className="text-xs text-slate-500">
+            <span className="min-w-0 truncate text-xs text-slate-500">
               {KIND_LABELS[c.kind]} · {c.model || 'no model'}
+              {isOpenRouter(c) && prices?.[c.model] && <span className="text-emerald-300/80"> · {priceLabel(prices[c.model], priceUnit)}</span>}
             </span>
-            <span className="ml-auto flex gap-1 text-[10px]">
+            <span className="ml-auto flex flex-shrink-0 gap-1 text-[10px]">
               {chatConnectionId === c.id && <span className="rounded bg-sky-500/15 px-1.5 text-sky-300">chat</span>}
               {assistConnectionId === c.id && <span className="rounded bg-violet-500/15 px-1.5 text-violet-300">assistant</span>}
+              {visionConnectionId === c.id && <span className="rounded bg-amber-500/15 px-1.5 text-amber-300">vision</span>}
             </span>
           </button>
           {openId === c.id && (
@@ -286,6 +305,9 @@ function LlmTab() {
                 </Button>
                 <Button size="sm" disabled={assistConnectionId === c.id} onClick={() => setAssistConnection(c.id)}>
                   Use for assistant
+                </Button>
+                <Button size="sm" disabled={visionConnectionId === c.id} onClick={() => setVisionConnection(c.id)} title="For ✨ Write from image; needs a model that can see images">
+                  Use for vision
                 </Button>
               </div>
             </div>
@@ -310,6 +332,10 @@ function ConnectionEditor({ connection: c }: { connection: LlmConnection }) {
   const [showKey, setShowKey] = useState(false);
   const set = (patch: Partial<LlmConnection>) => updateConnection(c.id, patch);
   const setParam = (patch: Partial<SamplerParams>) => updateConnection(c.id, { params: patch as SamplerParams });
+  const priceUnit = useLlmStore((s) => s.priceUnit);
+  const prices = useModelPrices(isOpenRouter(c));
+  const price = isOpenRouter(c) ? prices?.[c.model] : undefined;
+  const listPrice = (m: string) => (isOpenRouter(c) && prices?.[m] ? ` · ${priceLabel(prices[m], priceUnit)}` : '');
 
   const fetchModels = async () => {
     try {
@@ -383,10 +409,18 @@ function ConnectionEditor({ connection: c }: { connection: LlmConnection }) {
               {models.map((m) => (
                 <option key={m} value={m}>
                   {m}
+                  {listPrice(m)}
                 </option>
               ))}
             </select>
           )}
+          {price && (
+            <span className="text-[11px] text-emerald-300/80" title="OpenRouter's price for this model, in US dollars">
+              {priceLabel(price, priceUnit)}
+              {price.cacheRead !== undefined && price.cacheRead >= 0 && ` · cached input ${formatPrice(price.cacheRead, priceUnit)}`}
+            </span>
+          )}
+          {isOpenRouter(c) && c.model && prices && !price && <span className="text-[11px] text-slate-500">No price listed for this model id on OpenRouter.</span>}
         </label>
       </div>
 

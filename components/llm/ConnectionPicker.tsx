@@ -3,10 +3,15 @@
 import { useLlmStore } from '@/store/llmStore';
 import { cx, inputClass } from '@/components/ui';
 import { openSettings } from '@/components/SettingsDialog';
+import { useModelPrices } from '@/hooks/useModelPrices';
+import { isOpenRouter, priceLabel } from '@/lib/modelPricing';
 
-/** Which LLM connection a feature uses, with a shortcut to add one. */
+/** Which LLM connection a feature uses, with a shortcut to add one. An
+ *  OpenRouter connection shows its model's price. */
 export function ConnectionPicker({ value, onChange, label, className }: { value: string | null; onChange: (id: string) => void; label?: string; className?: string }) {
   const connections = useLlmStore((s) => s.connections);
+  const unit = useLlmStore((s) => s.priceUnit);
+  const prices = useModelPrices(connections.some(isOpenRouter));
   if (connections.length === 0) {
     return (
       <div className={cx('flex items-center gap-2 text-xs text-slate-400', className)}>
@@ -17,6 +22,11 @@ export function ConnectionPicker({ value, onChange, label, className }: { value:
       </div>
     );
   }
+  const price = (id: string) => {
+    const c = connections.find((x) => x.id === id);
+    const p = c && isOpenRouter(c) ? prices?.[c.model] : undefined;
+    return p ? ` · ${priceLabel(p, unit)}` : '';
+  };
   return (
     <label className={cx('flex items-center gap-2 text-xs text-slate-400', className)}>
       {label && <span className="whitespace-nowrap">{label}</span>}
@@ -25,6 +35,7 @@ export function ConnectionPicker({ value, onChange, label, className }: { value:
         {connections.map((c) => (
           <option key={c.id} value={c.id}>
             {c.name} — {c.model || 'no model'}
+            {price(c.id)}
           </option>
         ))}
       </select>

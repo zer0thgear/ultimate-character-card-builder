@@ -10,6 +10,7 @@ import { useSessionStore } from '@/store/sessionStore';
 import { serverStorage } from '@/lib/serverSettings';
 import { uuid } from '@/lib/uuid';
 import { setTemplateOverrides } from '@/lib/assist';
+import type { PriceUnit } from '@/lib/modelPricing';
 
 // LLM connections (keys included, on the server like the NovelAI key),
 // which one the test chat and the writing assistant each use, and the
@@ -52,6 +53,9 @@ interface LlmState {
    *  see. Unset, the assistant's connection. */
   visionConnectionId: string | null;
   setVisionConnection: (id: string | null) => void;
+  /** OpenRouter model prices, per million tokens or per thousand. */
+  priceUnit: PriceUnit;
+  setPriceUnit: (unit: PriceUnit) => void;
   chatSettings: ChatPromptSettings;
   assistSettings: AssistSettings;
   setAssistSettings: (patch: Partial<AssistSettings>) => void;
@@ -112,6 +116,8 @@ export const useLlmStore = create<LlmState>()(
       setAssistConnection: (id) => set({ assistConnectionId: id }),
       visionConnectionId: null,
       setVisionConnection: (id) => set({ visionConnectionId: id }),
+      priceUnit: '1M',
+      setPriceUnit: (priceUnit) => set({ priceUnit }),
       setChatSettings: (patch) => set((s) => ({ chatSettings: { ...s.chatSettings, ...patch } })),
     }),
     {

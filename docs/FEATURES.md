@@ -110,7 +110,9 @@ Settings → LLM connections:
 - **OpenAI-compatible**: any base URL (OpenRouter, DeepSeek, KoboldCpp, llama.cpp, LM Studio, vLLM…). Reasoning in `reasoning_content`, `reasoning` or `<think>` tags is shown apart from the reply. **Reasoning effort** (none to xhigh) is sent as `reasoning_effort`, or as `reasoning.effort` to OpenRouter; a SillyTavern preset's effort applies when its samplers are on. Extra body fields can be added as JSON.
 - **Anthropic**: Claude through the official SDK, with prompt caching on (the card is the same at the start of every turn), adaptive thinking and effort. The chat is reshaped for Claude's rules (system prompt apart, alternating turns).
 
-Each connection has its own max tokens, sampler settings and stop sequences, and a **Test connection** button. The test chat and the assistant each pick their own connection.
+Each connection has its own max tokens, sampler settings and stop sequences, and a **Test connection** button. The test chat, the assistant and Write from image each pick their own connection (**Use for chat / assistant / vision**).
+
+**OpenRouter prices**: an OpenRouter connection shows its model's price (input and output, in US dollars, from OpenRouter's public model list) in the connection list, under its model (with the cached-input price where there is one), beside each model **List** fetches, and in the model pickers around the app. Settings → LLM connections switches between per **1M tokens** and per **1K tokens**. Free models say so; OpenRouter's routers, whose price depends on the model they pick, say it varies.
 
 ## On a phone
 
