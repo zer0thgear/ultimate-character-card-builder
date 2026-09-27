@@ -13,6 +13,8 @@ import { SettingsDialog, openSettings } from '@/components/SettingsDialog';
 import { FieldToolsHost } from '@/components/editor/fieldTools';
 import { CardEditor } from '@/components/editor/CardEditor';
 import { Dock } from '@/components/dock/Dock';
+import { LibraryPanel } from '@/components/dock/LibraryPanel';
+import { Tabs } from '@/components/ui';
 import { useMediaQuery, PHONE_QUERY } from '@/hooks/useMediaQuery';
 import { useSessionStore as useGenSession } from '@/store/sessionStore';
 
@@ -134,7 +136,7 @@ export function Shell() {
               </aside>
             </>
           ) : (
-            <Welcome loading={loading} />
+            <Home loading={loading} />
           )}
         </div>
       </div>
@@ -197,6 +199,11 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
       <IconButton title={phone ? 'Cards' : sidebarOpen ? 'Hide the card list' : 'Show the card list'} onClick={onMenu}>
         ☰
       </IconButton>
+      {project && (
+        <IconButton title="Close this card (back to the home screen)" onClick={() => void useProjectStore.getState().close()}>
+          ⌂
+        </IconButton>
+      )}
       {!(phone && project) && <span className="text-sm font-semibold tracking-tight text-violet-300">UCCB</span>}
       {project && (
         <>
@@ -302,6 +309,18 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
   };
   return (
     <nav className={cx('flex h-full w-60 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950 pt-[env(safe-area-inset-top)]', className)}>
+      {onPicked && project && (
+        <button
+          type="button"
+          className="mx-2 mt-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-300 hover:bg-slate-900"
+          onClick={async () => {
+            await useProjectStore.getState().close();
+            onPicked();
+          }}
+        >
+          ⌂ Home
+        </button>
+      )}
       <div className="flex gap-1.5 p-2">
         <Button size="sm" variant="primary" className="flex-1" onClick={() => void create()}>
           + New card
@@ -351,25 +370,78 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
   );
 }
 
-function Welcome({ loading }: { loading: boolean }) {
-  const create = useProjectStore((s) => s.create);
+/** No card open: your cards, and the gen library. */
+function Home({ loading }: { loading: boolean }) {
+  const { homeTab, setHomeTab } = useUiStore();
+  if (loading) return <div className="flex flex-1 items-center justify-center text-slate-500">Opening…</div>;
   return (
-    <div className="flex flex-1 items-center justify-center p-8">
-      {loading ? (
-        <span className="text-slate-500">Opening…</span>
-      ) : (
-        <div className="max-w-md text-center">
-          <h1 className="text-2xl font-semibold text-slate-100">Ultimate Character Card Builder</h1>
-          <p className="mt-2 text-sm text-slate-400">Write the card, draw it with NovelAI, and chat with it to test, all side by side.</p>
-          <div className="mt-6 flex justify-center gap-2">
-            <Button variant="primary" onClick={() => void create()}>
-              Start a new card
-            </Button>
-            <Button onClick={() => openSettings()}>Settings</Button>
-          </div>
-          <p className="mt-4 text-xs text-slate-500">Or drop a PNG, JSON or CHARX card anywhere to import it.</p>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <Tabs
+        value={homeTab}
+        onChange={setHomeTab}
+        className="flex-shrink-0 px-2"
+        tabs={[
+          { value: 'cards', label: '🗂 Cards' },
+          { value: 'library', label: '📚 Gen library' },
+        ]}
+      />
+      <div className="min-h-0 flex-1">{homeTab === 'library' ? <LibraryPanel /> : <CardsHome />}</div>
+    </div>
+  );
+}
+
+function CardsHome() {
+  const { summaries, open, create, setAvatar } = useProjectStore();
+  const setHomeTab = useUiStore((s) => s.setHomeTab);
+  const importFile = async () => {
+    const [file] = await pickFiles('.png,.json,.charx');
+    if (!file) return;
+    try {
+      const imported = await importAsProject(file, create, setAvatar);
+      toast(`Imported ${imported.card.data.name || 'the card'}.`, 'success');
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    }
+  };
+  return (
+    <div className="h-full overflow-y-auto p-4 phone:p-3">
+      <div className="mx-auto flex max-w-5xl flex-col gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-100">Ultimate Character Card Builder</h1>
+          <p className="mt-1 text-sm text-slate-400">Write the card, draw it with NovelAI, and chat with it to test, all side by side.</p>
         </div>
-      )}
+        <div className="flex flex-wrap gap-2">
+          <Button variant="primary" onClick={() => void create()}>
+            + New card
+          </Button>
+          <Button onClick={() => void importFile()}>Import a card…</Button>
+          <Button onClick={() => setHomeTab('library')}>📚 Browse the gen library</Button>
+          <Button variant="ghost" onClick={() => openSettings()}>
+            Settings
+          </Button>
+        </div>
+        {summaries.length === 0 ? (
+          <p className="text-sm text-slate-500">No cards yet. Start one, import one, or drop a PNG, JSON or CHARX card anywhere. You can also start one from a picture in the gen library.</p>
+        ) : (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3 phone:grid-cols-[repeat(auto-fill,minmax(104px,1fr))] phone:gap-2">
+            {summaries.map((s) => {
+              const url = api.avatarUrl(s.id, s.avatar);
+              return (
+                <button key={s.id} type="button" onClick={() => void open(s.id)} className="group flex flex-col overflow-hidden rounded-md border border-slate-800 bg-slate-900 text-left hover:border-violet-500">
+                  <div className="checker aspect-[2/3] w-full">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {url ? <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" /> : <div className="flex h-full items-center justify-center text-3xl text-slate-600">{(s.name.trim()[0] ?? '?').toUpperCase()}</div>}
+                  </div>
+                  <div className="px-2 py-1.5">
+                    <div className="truncate text-sm text-slate-200">{s.name || <em className="text-slate-500">Unnamed</em>}</div>
+                    <div className="truncate text-[10px] text-slate-500">{new Date(s.updatedAt).toLocaleDateString()}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

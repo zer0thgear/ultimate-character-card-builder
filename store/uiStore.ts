@@ -22,6 +22,9 @@ interface UiState {
   /** On a phone, which one screen shows: the card editor or the dock. */
   phoneView: 'card' | 'dock';
   setPhoneView: (v: 'card' | 'dock') => void;
+  /** The home screen (no card open): the card list, or the gen library. */
+  homeTab: 'cards' | 'library';
+  setHomeTab: (t: 'cards' | 'library') => void;
   /** The dock's share of the workspace width, 0.25–0.75. */
   dockWidth: number;
   setDockWidth: (w: number) => void;
@@ -57,6 +60,8 @@ export const useUiStore = create<UiState>()(
       setDockTab: (dockTab) => set({ dockTab, phoneView: 'dock' }),
       phoneView: 'card',
       setPhoneView: (phoneView) => set({ phoneView }),
+      homeTab: 'cards',
+      setHomeTab: (homeTab) => set({ homeTab }),
       dockWidth: 0.45,
       setDockWidth: (w) => set({ dockWidth: Math.min(0.75, Math.max(0.25, w)) }),
       sidebarOpen: true,

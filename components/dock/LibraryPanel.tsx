@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useConfigStore, toast } from '@/store/uiStore';
 import { api } from '@/lib/api';
 import type { LibraryItem } from '@/lib/librarySearch';
-import { setAsAvatar, reusePrompt, saveToFolder } from '@/lib/imageActions';
+import { newCardFromImage, setAsAvatar, reusePrompt, saveToFolder } from '@/lib/imageActions';
 import { Button, Empty, IconButton, Modal, cx, inputClass } from '@/components/ui';
 import { sendToImg2Img } from '@/components/dock/ImageViewer';
 import { openSettings } from '@/components/SettingsDialog';
@@ -233,17 +233,23 @@ function LibraryViewer({ item, onClose, onStep, onSearch }: { item: LibraryItem;
           <Button variant="ghost" onClick={() => onStep(1)}>
             Next →
           </Button>
-          {item.info.source && (
+          {hasProject && item.info.source && (
             <>
               <Button onClick={async () => { await reusePrompt(await blob()); onClose(); }}>Reuse prompt</Button>
               <Button onClick={async () => { await reusePrompt(await blob(), { settings: true }); onClose(); }}>Reuse all</Button>
             </>
           )}
-          <Button onClick={async () => { sendToImg2Img(await blob()); onClose(); }}>Img2Img base</Button>
+          {hasProject && <Button onClick={async () => { sendToImg2Img(await blob()); onClose(); }}>Img2Img base</Button>}
           <Button onClick={async () => void saveToFolder(await blob(), item.name)}>Copy to output</Button>
-          <Button variant="primary" disabled={!hasProject} onClick={async () => { await setAsAvatar(await blob()); onClose(); }}>
-            Set as avatar
-          </Button>
+          {hasProject ? (
+            <Button variant="primary" onClick={async () => { await setAsAvatar(await blob()); onClose(); }}>
+              Set as avatar
+            </Button>
+          ) : (
+            <Button variant="primary" title="A new card with this as its picture, and its prompt in the art settings" onClick={async () => { const b = await blob(); onClose(); await newCardFromImage(b); }}>
+              New card from this image
+            </Button>
+          )}
         </>
       }
     >

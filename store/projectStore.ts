@@ -130,6 +130,12 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     close: async () => {
       await get().flush();
       set({ project: null, past: [], future: [] });
+      // Back home stays home on the next visit, too.
+      try {
+        localStorage.removeItem('uccb-last-project');
+      } catch {
+        /* private mode */
+      }
     },
 
     updateCard: (change, key) => {

@@ -86,3 +86,22 @@ export async function reusePrompt(blob: Blob, opts: { settings?: boolean; seed?:
   useUiStore.getState().setDockTab('image');
   toast(opts.settings ? 'Prompt and settings loaded.' : 'Prompt loaded into the generator.', 'success');
 }
+
+/** Starts a new card from an image: it becomes the avatar, and its
+ *  NovelAI prompt (if it has one) goes into the card's art prompts. */
+export async function newCardFromImage(blob: Blob) {
+  try {
+    await useProjectStore.getState().create();
+    await useProjectStore.getState().setAvatar(blob);
+    const { parsed } = await readNaiMetadata(blob);
+    if (parsed) {
+      const form = useSettingsStore.getState();
+      useSettingsStore.getState().patch(reuseFromMetadata(parsed, form, { prompt: true, characters: true, negative: true, settings: false, seed: false }));
+    }
+    useUiStore.getState().setEditorTab('basics');
+    useUiStore.getState().setPhoneView('card');
+    toast(parsed ? 'New card started from the image, with its prompt in the art settings.' : 'New card started with the image as its avatar.', 'success');
+  } catch (err) {
+    toast(`Couldn't start a card from it: ${(err as Error).message}`, 'error');
+  }
+}

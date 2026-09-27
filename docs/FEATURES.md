@@ -4,6 +4,7 @@ A tour of what UCCB does. For setup, see the [README](../README.md).
 
 ## Cards
 
+- **The home screen** (⌂ in the header closes the open card and comes back here, and stays here on the next visit): your cards as a grid of pictures, and the **Gen library**, usable without a card open. From the library, **New card from this image** starts a card with that picture as its avatar and its prompt in the art settings.
 - **One project per card.** The left sidebar lists them with their pictures; **+ New card**, **Import**, or drop a PNG, JSON or CHARX card anywhere to import it as a new one. Deleting moves the project to `data/trash`.
 - **Autosave.** Every change is saved to disk a moment later (Ctrl+S saves at once). The header shows Saved / Unsaved / Saving….
 - **Undo and redo** for the whole card (↶ ↷ in the header, or Ctrl+Z / Ctrl+Y when you're not typing in a box; text boxes keep their own undo). Quick typing in one field is one step; every button action (delete, promote, macro, overwrite) is its own step.
@@ -94,7 +95,7 @@ Each connection has its own max tokens, sampler settings and stop sequences, and
 
 On a narrow screen (or a phone on its side) UCCB becomes one screen at a time, as NovelFrontEnd does: a bar along the bottom switches between the **Card** and the dock's **Image**, **Gallery**, **Library**, **Chat** and **Ideas** (Brainstorm). Both stay loaded, so a generation or a reply carries on while you look at the other. Anything that opens a dock tab (🎨 or 💬 on a greeting, Img2Img, Inpaint) switches to it.
 
-- ☰ opens the card list as a drawer; picking a card closes it.
+- ☰ opens the card list as a drawer; picking a card closes it, and **⌂ Home** at its top closes the open card.
 - The header keeps what fits: undo/redo, Export (which gains **Overwrite from a file…**) and Settings; the theme switch is in Settings → General.
 - Controls that otherwise show on hover (deleting a card, message actions, thumbnail actions) are always shown on a touch screen. Drag handles don't scroll the page.
 - Dialogs, the Edit/Inpaint canvas included, fill the screen; text fields are 16px so iPhone Safari doesn't zoom in.
