@@ -23,7 +23,8 @@ import { calculateAnlasCost, opusStatus, MAX_GENERATION_PIXELS } from '@/lib/anl
 import { hasVariety } from '@/lib/variety';
 import { blobToBase64, getImageDimensions } from '@/lib/imageUtils';
 import { eraseStealthMarks } from '@/lib/requestImage';
-import { appearanceTagsMessages, cleanTags, sceneTagsMessages, takeDatasetTags } from '@/lib/assist';
+import { appearanceTagsMessages, castSceneMessages, cleanTags, sceneTagsMessages, takeDatasetTags } from '@/lib/assist';
+import { mergeCast, parseCast, type MergeResult } from '@/lib/castPrompt';
 import { greetingText } from '@/lib/chatPrompt';
 import { saveSessionImage } from '@/lib/imageActions';
 import { TagAutocompleteField } from '@/components/TagAutocompleteField';
@@ -453,6 +454,18 @@ function PromptForm() {
 
 // ─── Scene (base prompt), with "illustrate a greeting" ───────────────────────
 
+/** What a cast did to the character slots, for the toast. */
+function castSummary(m: MergeResult): string {
+  const list = (names: string[]) => names.join(', ');
+  const parts = [
+    m.updated.length ? `updated ${list(m.updated)}` : '',
+    m.added.length ? `added ${list(m.added)}` : '',
+    m.setAside.length ? `switched off ${list(m.setAside)} (not in this scene)` : '',
+    m.dropped.length ? `no room for ${list(m.dropped)}` : '',
+  ].filter(Boolean);
+  return parts.length ? ` Characters: ${parts.join('; ')}.` : '';
+}
+
 /** Turns on the dataset switches a prompt writer asked for (never off: that
  *  stays your call), and says which, for the toast. */
 function switchedOn(nsfw: boolean, fur: boolean): string {
@@ -489,15 +502,40 @@ function SceneSection({ text, onChange, model, apiKey, meter }: { text: string; 
   const { runAssist, runId, running, stop } = useLlmStream();
   const [pickOpen, setPickOpen] = useState(false);
 
+  const placeCharacters = useSettingsStore((s) => s.placeCharacters);
+  const setForm = useSettingsStore((s) => s.set);
+  const castModel = !isV3Model(model);
+
   const fromText = async (scene: string) => {
     if (!card) return;
-    const r = await runAssist(sceneTagsMessages(card, scene, ''), undefined, '✨ Scene prompt');
-    if (r.error) return toast(r.error, 'error');
-    const { tags, nsfw, fur } = takeDatasetTags(cleanTags(r.text));
-    if (tags) {
-      onChange(tags);
-      toast(`Scene prompt written from the greeting.${switchedOn(nsfw, fur)} Tweak it, then Generate.`, 'success');
+    // V3 has no character prompts: everything goes in the one prompt.
+    if (!castModel) {
+      const r = await runAssist(sceneTagsMessages(card, scene, ''), undefined, '✨ Scene prompt');
+      if (r.error) return toast(r.error, 'error');
+      const { tags, nsfw, fur } = takeDatasetTags(cleanTags(r.text));
+      if (tags) {
+        onChange(tags);
+        toast(`Scene prompt written from the greeting.${switchedOn(nsfw, fur)} Tweak it, then Generate.`, 'success');
+      }
+      return;
     }
+    // V4 and later: the main prompt and a prompt for each character in it.
+    const form = useSettingsStore.getState();
+    const place = form.placeCharacters;
+    const r = await runAssist(castSceneMessages(card, scene, '', form.characters.filter((c) => !c.archived), place), undefined, '✨ Scene prompt');
+    if (r.error) return toast(r.error, 'error');
+    const cast = parseCast(r.text);
+    if (!cast.scene && !cast.characters.length) return toast("The assistant's reply had no prompts in it (🔍 shows what it said).", 'error');
+    if (cast.scene) onChange(cast.scene);
+    let summary = '';
+    if (cast.characters.length) {
+      const now = useSettingsStore.getState();
+      const m = mergeCast(now.characters, cast.characters, { scene: true, max: maxCharacters(now.model), cardName: card.name });
+      now.set('characters', m.characters);
+      if (place && cast.characters.some((c) => c.center)) now.set('useCoords', true);
+      summary = castSummary(m);
+    }
+    toast(`Scene written from the greeting.${summary}${switchedOn(cast.nsfw, cast.fur)} Tweak it, then Generate.`, 'success');
   };
 
   // A greeting's 🎨 in the editor lands here.
@@ -530,6 +568,11 @@ function SceneSection({ text, onChange, model, apiKey, meter }: { text: string; 
           )}
           {pickOpen && (
             <div className="absolute right-0 z-30 mt-1 max-h-72 w-72 overflow-y-auto rounded-md border border-slate-700 bg-slate-900 p-1 shadow-xl" onMouseLeave={() => setPickOpen(false)}>
+              {castModel && (
+                <div className="border-b border-slate-800 px-2 pt-1 pb-2" title="Also place each character on NovelAI's grid (turns Positions on). Off, NovelAI decides where they go.">
+                  <Toggle checked={placeCharacters} onChange={(v) => setForm('placeCharacters', v)} label={<span className="text-xs">Place characters too</span>} />
+                </div>
+              )}
               {greetings.map((g) => (
                 <button
                   key={g.i}
@@ -568,15 +611,20 @@ function CharactersSection({ counts }: { counts: Record<string, { prompt: number
   const add = (prompt = '') =>
     set('characters', [...characters, { id: uuid(), label: active.length === 0 ? card?.name || 'Character' : `Character ${active.length + 1}`, prompt, uc: '', center: { x: 0.5, y: 0.5 }, enabled: true }]);
 
-  const appearance = async (target?: CharacterPromptEntry) => {
+  /** Every character the card describes, each into the slot of that name
+   *  (a card about several gets several). */
+  const appearance = async () => {
     if (!card) return;
-    const r = await runAssist(appearanceTagsMessages(card, ''), undefined, '✨ Character prompt');
+    const r = await runAssist(appearanceTagsMessages(card, '', active.map((c) => c.label ?? '')), undefined, '✨ Character prompt');
     if (r.error) return toast(r.error, 'error');
-    const { tags, nsfw, fur } = takeDatasetTags(cleanTags(r.text));
-    if (!tags) return;
-    if (target) update(target.id, { prompt: tags });
-    else add(tags);
-    toast(`Character prompt written from the card's description.${switchedOn(nsfw, fur)}`, 'success');
+    const cast = parseCast(r.text);
+    // A reply without CHARACTER lines is one character's tags.
+    const members = cast.characters.length ? cast.characters : cast.scene ? [{ name: active[0]?.label || card.name || 'Character', tags: cast.scene }] : [];
+    if (!members.length) return;
+    const now = useSettingsStore.getState();
+    const m = mergeCast(now.characters, members, { scene: false, max: maxCharacters(now.model), cardName: card.name });
+    set('characters', m.characters);
+    toast(`${members.length === 1 ? 'Character prompt' : 'Character prompts'} written from the card's description.${castSummary(m)}${switchedOn(cast.nsfw, cast.fur)}`, 'success');
   };
 
   const positions = useMemo(() => POSITIONS.flatMap((y) => POSITIONS.map((x) => ({ x, y }))), []);
@@ -595,7 +643,7 @@ function CharactersSection({ counts }: { counts: Record<string, { prompt: number
               Stop
             </Button>
           ) : (
-            <Button size="sm" disabled={!card?.description.trim()} onClick={() => void appearance(active[0])} title="Write the first character's prompt from the card's description">
+            <Button size="sm" disabled={!card?.description.trim()} onClick={() => void appearance()} title="Write each character's prompt from the card's description (one per character, for a card about several)">
               ✨ From description
             </Button>
           )}

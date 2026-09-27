@@ -161,23 +161,54 @@ Review this card as an experienced card creator would. Point out, concisely and 
     key: 'appearance.user',
     group: '✨ Character prompt (art)',
     label: 'Request',
-    vars: ['card', 'instruction'],
-    note: 'The reply becomes one line of tags.',
+    vars: ['card', 'names', 'instruction'],
+    note: "Keep the CHARACTER <name>: reply format; each line goes to the character slot of that name. {{names}} lists the slots there already.",
     text: `<card>
 {{card}}
 </card>
 
-Write the character prompt for this character's default look: gender/count tag first (e.g. "1girl"), then body, face, hair, eyes, notable features, then default outfit. Leave out pose, expression, background and setting.
+Write the character prompt for each character this card is about, for their default look: "girl", "boy" or "other" first, then body, face, hair, eyes, notable features, then default outfit. Leave out pose, expression, background and setting. A card about one character gets one prompt; a card about several (a duo, a group) gets one each.
+
+The character prompts so far are named: {{names}}. Use those names for the same characters.
 
 Also: {{instruction}}
 
-Reply with only the tags.`,
+Reply with one line per character, in exactly this form and nothing else:
+CHARACTER <name>: <tags>`,
   },
   { key: 'scene.system', group: '✨ Scene prompt (art)', label: 'System prompt', vars: [], text: `You turn roleplay scenes into image-generation prompts. ${TAG_RULES}` },
   {
+    key: 'cast.user',
+    group: '✨ Scene prompt (art)',
+    label: 'Request (V4 and later: a prompt per character)',
+    vars: ['card', 'scene', 'characters', 'positions', 'instruction'],
+    note: "Keep the SCENE: / CHARACTER <name>: reply format; that's how it's read back. {{characters}} is the character prompts so far; {{positions}} is the placing rule, when Place characters is on.",
+    text: `<card>
+{{card}}
+</card>
+
+<scene>
+{{scene}}
+</scene>
+
+<current_characters>
+{{characters}}
+</current_characters>
+
+Write the prompts for an illustration of this moment. First the main prompt: the count tags (e.g. "1girl", "2girls", "1girl, 1boy"), then framing (e.g. "cowboy shot", "upper body"), location, lighting and background. Then a prompt for each character shown: "girl", "boy" or "other" first, then their look (keeping the tags of their current prompt above, changing only what this moment changes, like clothes), then their pose, expression and action. When characters interact, tag it on both: "source#hug" on the one doing it, "target#hug" on the one it's done to, "mutual#hug" when they do it together. Leave out characters who aren't in the moment, and give each character the name they have above.
+
+{{positions}}
+
+Also: {{instruction}}
+
+Reply in exactly this form and nothing else:
+SCENE: <tags>
+CHARACTER <name>: <tags>`,
+  },
+  {
     key: 'scene.user',
     group: '✨ Scene prompt (art)',
-    label: 'Request',
+    label: 'Request (V3: one prompt)',
     vars: ['card', 'scene', 'instruction'],
     note: '{{scene}} is the greeting being illustrated. The reply becomes one line of tags.',
     text: `<card>
@@ -293,8 +324,8 @@ export function fillTemplate(text: string, vars: Record<string, string>): string
     .trim();
 }
 
-const job = (name: string, vars: Record<string, string>): LlmMessage[] => {
-  const system = fillTemplate(template(`${name}.system`), vars);
+const job = (name: string, vars: Record<string, string>, systemOf = name): LlmMessage[] => {
+  const system = fillTemplate(template(`${systemOf}.system`), vars);
   const user = fillTemplate(template(`${name}.user`), vars);
   return [...(system ? [{ role: 'system' as const, content: system }] : []), { role: 'user' as const, content: user }];
 };
@@ -388,8 +419,24 @@ export function critiqueMessages(card: CardData): LlmMessage[] {
 }
 
 /** The character's look, as tags for their character prompt. */
-export function appearanceTagsMessages(card: CardData, instruction: string): LlmMessage[] {
-  return job('appearance', { card: cardContext(card, undefined, 8000), instruction: instruction.trim() });
+export function appearanceTagsMessages(card: CardData, instruction: string, names: string[] = []): LlmMessage[] {
+  return job('appearance', { card: cardContext(card, undefined, 8000), names: names.filter(Boolean).join(', '), instruction: instruction.trim() });
+}
+
+/** Where the cast writer puts characters, when asked to (NovelAI's grid). */
+const POSITION_RULE =
+  'Also place each character on NovelAI\'s 5×5 grid, columns A to E from left to right and rows 1 to 5 from top to bottom (C3 is the centre), with a line POSITION <name>: <cell> after their CHARACTER line.';
+
+/** A greeting's moment as a V4+ prompt set: the main prompt and one per
+ *  character in it (read with lib/castPrompt.ts). */
+export function castSceneMessages(card: CardData, greeting: string, instruction: string, current: { label?: string; prompt: string }[], positions: boolean): LlmMessage[] {
+  return job('cast', {
+    card: cardContext(card, undefined, 5000),
+    scene: clip(greeting, 4000),
+    characters: current.filter((c) => c.prompt.trim()).map((c) => `${c.label || 'Unnamed'}: ${c.prompt.trim()}`).join('\n'),
+    positions: positions ? POSITION_RULE : '',
+    instruction: instruction.trim(),
+  }, 'scene');
 }
 
 /** A greeting's scene (pose, expression, setting, framing) as tags for the
@@ -428,7 +475,9 @@ export const ASSIST_JOBS: { label: string; build: (card: CardData) => LlmMessage
   { label: '✨ Card tags', build: (card) => cardTagsMessages(card) },
   { label: '✨ Card review', build: (card) => critiqueMessages(card) },
   { label: '✨ Character prompt (art)', build: (card) => appearanceTagsMessages(card, '') },
-  { label: '✨ Scene prompt (art, from the first message)', build: (card) => sceneTagsMessages(card, card.first_mes, '') },
+  { label: '✨ Scene prompt (art, V4+, from the first message)', build: (card) => castSceneMessages(card, card.first_mes, '', [], false) },
+  { label: '✨ Scene prompt (art, V4+, placing characters)', build: (card) => castSceneMessages(card, card.first_mes, '', [], true) },
+  { label: '✨ Scene prompt (art, V3, from the first message)', build: (card) => sceneTagsMessages(card, card.first_mes, '') },
   { label: '✨ Brainstorm', build: (card) => brainstormMessages(card, [{ role: 'user', content: '(your message)' }]) },
   { label: '✨ From an image: physical description (+ the picture)', build: (card) => visionMessages(card, 'appearance', '(your guidance)', []) },
   { label: '✨ From an image: greeting (+ the picture)', build: (card) => visionMessages(card, 'greeting', '(your guidance)', []) },

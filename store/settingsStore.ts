@@ -52,6 +52,9 @@ export interface FormSettings {
   tidbitLibrary: LibraryTidbit[];
   /** How many images one Generate makes (queued one after another). */
   copies: number;
+  /** ✨ From greeting also places the characters (grid positions). Off,
+   *  NovelAI decides where they go. */
+  placeCharacters: boolean;
 }
 
 /** The fields that belong to a card rather than to the generator. */
@@ -93,6 +96,7 @@ export const GEN_DEFAULTS: FormSettings = {
   streamingMode: false,
   tidbitLibrary: [],
   copies: 1,
+  placeCharacters: false,
 };
 
 export const useSettingsStore = create<SettingsState>()(
