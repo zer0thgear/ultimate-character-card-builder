@@ -55,7 +55,7 @@ data/library-index.json, thumbs/     the gen library's cache (safe to delete)
 
 Gens themselves stay in memory until you **keep** them with a card or **save** them to the output folder (or turn on auto-save), as on NovelAI's own site. The page warns before closing with unsaved gens.
 
-API keys are kept in the browser's localStorage. NovelAI image calls go straight from the browser to NovelAI, as in NovelFrontEnd; LLM calls go through UCCB's local server (which avoids CORS problems) and on to the provider. **This is a local app**: its server can read any folder you add to the library, so don't expose it to a network you don't trust.
+API keys are kept on this computer, in data/settings.json. NovelAI image calls go straight from the browser to NovelAI, as in NovelFrontEnd; LLM calls go through UCCB's local server (which avoids CORS problems) and on to the provider. **This is a local app**: anyone who can reach it can use your keys, read and change your cards, and see the library folders, which is why it only lets in this computer and your Tailscale devices unless you allow the home network.
 
 ## Development
 
