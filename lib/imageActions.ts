@@ -1,7 +1,7 @@
 'use client';
 
 import { useProjectStore } from '@/store/projectStore';
-import { useSessionStore, type SessionImage } from '@/store/sessionStore';
+import { imageBlob, useSessionStore, type SessionImage } from '@/store/sessionStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useConfigStore, useUiStore, toast } from '@/store/uiStore';
 import { api } from '@/lib/api';
@@ -31,7 +31,7 @@ export async function keepImage(img: SessionImage, label?: string, quiet = false
   if (!p) return false;
   try {
     const id = img.id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60) || uuid();
-    const kept = await useProjectStore.getState().keep(img.blob, {
+    const kept = await useProjectStore.getState().keep(await imageBlob(img), {
       id,
       width: img.parameters.width,
       height: img.parameters.height,
@@ -75,7 +75,14 @@ export async function saveToFolder(blob: Blob, filename: string, quiet = false):
 }
 
 export async function saveSessionImage(img: SessionImage, quiet = false): Promise<string | null> {
-  const path = await saveToFolder(img.blob, genFileName(img), quiet);
+  let blob: Blob;
+  try {
+    blob = await imageBlob(img);
+  } catch (err) {
+    toast((err as Error).message, 'error');
+    return null;
+  }
+  const path = await saveToFolder(blob, genFileName(img), quiet);
   if (path) useSessionStore.getState().updateImages([img.id], { savedPath: path });
   return path;
 }
@@ -110,4 +117,10 @@ export async function newCardFromImage(blob: Blob) {
   } catch (err) {
     toast(`Couldn't start a card from it: ${(err as Error).message}`, 'error');
   }
+}
+
+/** Runs `fn` on a gen's PNG, fetching it from the server if it isn't in
+ *  memory; says so if it's gone. */
+export function withImage(img: SessionImage, fn: (blob: Blob) => unknown) {
+  imageBlob(img).then(fn, (err: Error) => toast(err.message, 'error'));
 }

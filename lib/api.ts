@@ -40,6 +40,18 @@ export const api = {
   patchKept: (id: string, file: string, patch: Partial<KeptImage>) => call<KeptImage>(`/api/projects/${id}/kept/${file}`, json('PATCH', patch)),
   unkeep: (id: string, file: string) => call<{ ok: true }>(`/api/projects/${id}/kept/${file}`, { method: 'DELETE' }),
 
+  recentGens: () => call<Record<string, unknown>[]>('/api/recent-gens'),
+  recentGenStats: () => call<{ count: number; bytes: number }>('/api/recent-gens?stats'),
+  recentGenUrl: (id: string) => `/api/recent-gens/${id}`,
+  addRecentGen: (image: Blob, meta: Record<string, unknown>) => {
+    const form = new FormData();
+    form.append('image', image, 'gen.png');
+    form.append('meta', JSON.stringify(meta));
+    return call<{ ok: true }>('/api/recent-gens', { method: 'POST', body: form });
+  },
+  patchRecentGen: (id: string, patch: Record<string, unknown>) => call<unknown>(`/api/recent-gens/${id}`, json('PATCH', patch)),
+  deleteRecentGens: (ids: string[]) => call<{ ok: true }>('/api/recent-gens', json('DELETE', { ids })),
+
   listChats: (id: string) => call<ChatSummary[]>(`/api/projects/${id}/chats`),
   getChat: (id: string, chatId: string) => call<ChatSession>(`/api/projects/${id}/chats/${chatId}`),
   saveChat: (id: string, chat: ChatSession) => call<ChatSession>(`/api/projects/${id}/chats/${chat.id}`, json('PUT', chat)),

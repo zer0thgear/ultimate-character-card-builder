@@ -3,17 +3,18 @@
 import { useEffect, useRef, useState } from 'react';
 import JSZip from 'jszip';
 import { useProjectStore } from '@/store/projectStore';
-import { useSessionStore, type SessionImage } from '@/store/sessionStore';
+import { imageBlob, useSessionStore, type SessionImage } from '@/store/sessionStore';
 import { useUiStore, toast } from '@/store/uiStore';
 import { api } from '@/lib/api';
-import { setAsAvatar, keepImage, saveSessionImage, saveToFolder, reusePrompt, genFileName } from '@/lib/imageActions';
+import { setAsAvatar, keepImage, saveSessionImage, saveToFolder, reusePrompt, genFileName, withImage } from '@/lib/imageActions';
 import { Button, Empty, IconButton, Modal, Section, confirmDialog, cx, downloadBlob, inputClass } from '@/components/ui';
 import { sendToImg2Img } from '@/components/dock/ImageViewer';
 import type { KeptImage } from '@/types/project';
 import { openLightbox } from '@/components/Lightbox';
 
-// This card's pictures: gens kept with it (saved in the project) and this
-// session's gens (in memory until kept, saved or cleared).
+// This card's pictures: gens kept with it (saved in the project) and recent
+// gens (on the server for Settings → Folders' number of days; see
+// store/sessionStore.ts).
 //
 // Either section can be put into selecting (its Select button, or a long
 // press on a picture) to act on several at once from the bar at the bottom.
@@ -109,13 +110,13 @@ export function GalleryPanel() {
         for (const img of pickedSession) if (!img.keptFile && (await keepImage(img, undefined, true))) n++;
         if (n) toast(`Kept ${plural(n)} with ${project.card.data.name || 'the card'}.`, 'success');
       }),
-    save: () => run(() => saveAll(pickedSession.map((img) => ({ blob: async () => img.blob, save: () => saveSessionImage(img, true) })))),
-    download: () => run(() => downloadMany(pickedSession.map((i) => ({ name: genFileName(i), blob: async () => i.blob })), `${cardName}-gens-${stamp}.zip`)),
+    save: () => run(() => saveAll(pickedSession.map((img) => ({ blob: () => imageBlob(img), save: () => saveSessionImage(img, true) })))),
+    download: () => run(() => downloadMany(pickedSession.map((i) => ({ name: genFileName(i), blob: () => imageBlob(i) })), `${cardName}-gens-${stamp}.zip`)),
     remove: () =>
       run(async () => {
         const loose = pickedSession.filter((i) => !i.keptFile && !i.savedPath).length;
         const ok = await confirmDialog({
-          title: `Remove ${plural(pickedSession.length)} from this session?`,
+          title: `Remove ${plural(pickedSession.length)} from recent gens?`,
           body: loose ? `${plural(loose)} haven't been kept or saved anywhere, and will be gone.` : 'Each is kept with the card or saved to a folder, so those copies stay.',
           confirmLabel: 'Remove',
           danger: loose > 0,
@@ -185,7 +186,7 @@ export function GalleryPanel() {
         </Section>
 
         <Section
-          title={`This session (${session.length})`}
+          title={`Recent gens (${session.length})`}
           actions={
             <>
               {selectButtons('session', session.map((i) => i.id))}
@@ -200,7 +201,7 @@ export function GalleryPanel() {
                       variant="ghost"
                       onClick={async () => {
                         const pinned = images.filter((i) => i.pinned).length;
-                        if (await confirmDialog({ title: 'Clear this session?', body: `${images.length - pinned} gens go${pinned ? `; ${pinned} kept ones stay` : ''}. ${unsaved ? `${unsaved} haven't been kept or saved anywhere.` : ''}`, confirmLabel: 'Clear', danger: true })) clearSession();
+                        if (await confirmDialog({ title: 'Clear recent gens?', body: `${plural(images.length - pinned)} go, on every device${pinned ? `; ${pinned} kept ${pinned === 1 ? 'one stays' : 'ones stay'}` : ''}. ${unsaved ? `${unsaved} of them ${unsaved === 1 ? "hasn't" : "haven't"} been kept or saved anywhere.` : ''}`, confirmLabel: 'Clear', danger: true })) clearSession();
                       }}
                     >
                       Clear
@@ -212,7 +213,7 @@ export function GalleryPanel() {
           }
         >
           {session.length === 0 ? (
-            <Empty>Nothing generated yet this session. Gens live in memory until you keep them, save them or close the page.</Empty>
+            <Empty>No recent gens. New ones stay here for the days set in Settings → Folders (on every device), until you keep them with a card, save them or clear them.</Empty>
           ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(96px,1fr))] gap-2">
               {session.map((img) => (
@@ -248,7 +249,7 @@ export function GalleryPanel() {
               <Button size="sm" disabled={busy || !count} onClick={() => void sessionActions.download()} title="Download (several come as a zip)">
                 ⬇ Download
               </Button>
-              <Button size="sm" variant="danger" disabled={busy || !count} onClick={() => void sessionActions.remove()} title="Remove them from this session">
+              <Button size="sm" variant="danger" disabled={busy || !count} onClick={() => void sessionActions.remove()} title="Remove them from recent gens (on every device)">
                 🗑 Remove
               </Button>
             </>
@@ -343,7 +344,7 @@ function SessionThumb({ img, selecting, picked, onOpen, onToggle, onLongPress }:
         <Check on={picked} />
       ) : (
         <div className="absolute inset-x-0 bottom-0 flex justify-center gap-0.5 bg-black/70 opacity-0 group-hover:opacity-100 touch:opacity-100">
-          <IconButton title="Set as avatar" className="text-white" onClick={() => void setAsAvatar(img.blob)}>
+          <IconButton title="Set as avatar" className="text-white" onClick={() => withImage(img, setAsAvatar)}>
             👤
           </IconButton>
           <IconButton title={img.keptFile ? 'Kept' : 'Keep with the card'} className="text-white" disabled={!!img.keptFile} onClick={() => void keepImage(img)}>

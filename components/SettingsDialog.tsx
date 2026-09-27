@@ -1,13 +1,13 @@
 'use client';
 
 import { create } from 'zustand';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSessionStore } from '@/store/sessionStore';
 import { useConfigStore, useUiStore, toast } from '@/store/uiStore';
 import { useLlmStore, requestConnection } from '@/store/llmStore';
 import type { LlmConnection, ProviderKind, SamplerParams } from '@/types/llm';
 import { api, streamLlm } from '@/lib/api';
-import { Button, IconButton, Modal, NumberInput, Tabs, Toggle, cx, inputClass } from '@/components/ui';
+import { Button, IconButton, Modal, NumberInput, Select, Tabs, Toggle, cx, inputClass } from '@/components/ui';
 import { AssistPresetPicker, PresetPicker } from '@/components/llm/PresetManager';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { PersonaManager } from '@/components/llm/Personas';
@@ -155,6 +155,46 @@ function FolderInput({ value, onChange, title, placeholder }: { value: string; o
   );
 }
 
+const RECENT_DAYS = [
+  { value: '1', label: '1 day' },
+  { value: '3', label: '3 days' },
+  { value: '7', label: '7 days' },
+  { value: '14', label: '14 days' },
+  { value: '30', label: '30 days' },
+  { value: '0', label: 'Until I clear them' },
+];
+
+const formatBytes = (n: number) => (n < 1024 ** 2 ? `${Math.round(n / 1024)} KB` : n < 1024 ** 3 ? `${(n / 1024 ** 2).toFixed(1)} MB` : `${(n / 1024 ** 3).toFixed(2)} GB`);
+
+function RecentGensRow() {
+  const { config, update } = useConfigStore();
+  const [stats, setStats] = useState<{ count: number; bytes: number } | null>(null);
+  const days = String(config.recentGensDays);
+  useEffect(() => {
+    let live = true;
+    void api.recentGenStats().then((s) => live && setStats(s), () => {});
+    return () => {
+      live = false;
+    };
+  }, [config.recentGensDays]);
+  return (
+    <Row label="Recent gens" hint="Every gen is kept on this computer (data/recent-gens) so a closed or frozen tab doesn't lose it, and your other devices see it too. Keep or save the ones you want for good.">
+      <label className="flex items-center gap-2 text-sm text-slate-300">
+        Delete after
+        <Select
+          value={RECENT_DAYS.some((o) => o.value === days) ? days : '7'}
+          onChange={(v) => void update({ recentGensDays: Number(v) })}
+          options={RECENT_DAYS}
+          className="w-44"
+        />
+      </label>
+      <p className="text-xs text-slate-500">
+        {stats ? `${stats.count} gen${stats.count === 1 ? '' : 's'}, ${formatBytes(stats.bytes)}. ` : ''}Counted from when each was made, and cleared automatically once they&apos;re older. Gallery → Recent gens → Clear removes them sooner.
+      </p>
+    </Row>
+  );
+}
+
 function FoldersTab() {
   const { config, update } = useConfigStore();
   const [adding, setAdding] = useState('');
@@ -165,6 +205,7 @@ function FoldersTab() {
         <Toggle checked={config.outputPerCard} onChange={(outputPerCard) => void update({ outputPerCard })} label="Put each card's gens in a subfolder named after it" />
         <Toggle checked={config.autoSaveGens} onChange={(autoSaveGens) => void update({ autoSaveGens })} disabled={!config.outputDir} label="Save every gen as it arrives" />
       </Row>
+      <RecentGensRow />
       <Row label="Gen library folders" hint="Folders the Library tab browses: GenBrowser's library, a downloads folder, the output folder… Subfolders are included.">
         {config.libraryFolders.map((f) => (
           <div key={f} className="flex items-center gap-2 rounded-md bg-slate-950 px-2.5 py-1.5 text-sm">

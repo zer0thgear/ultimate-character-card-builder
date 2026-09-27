@@ -6,7 +6,7 @@ import { fetchWithRetry, NovelAIError, novelAIError } from '@/lib/apiRetry';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { NovelAIGenerateRequest, PromptSource, SweepCellInfo, WildcardPicks } from '@/types/novelai';
-import type { SessionImage as GeneratedImage } from '@/store/sessionStore';
+import { imageBlob, type SessionImage as GeneratedImage } from '@/store/sessionStore';
 import { uuid } from '@/lib/uuid';
 
 interface GenerateOptions {
@@ -300,7 +300,7 @@ export function useGenerate(): UseGenerateReturn {
     if (images && sent.parameters.upscaled_enhance) {
       return Promise.all(
         images.map(async (img) => {
-          const { width, height } = await getImageDimensions(img.blob);
+          const { width, height } = await getImageDimensions(await imageBlob(img));
           const parameters = { ...img.parameters, width, height };
           updateImages([img.id], { parameters });
           return { ...img, parameters };

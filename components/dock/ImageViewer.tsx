@@ -4,7 +4,7 @@ import { useSessionStore, type SessionImage } from '@/store/sessionStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import type { EditorMode } from '@/lib/editorResult';
-import { setAsAvatar, keepImage, saveSessionImage, reusePrompt, genFileName } from '@/lib/imageActions';
+import { setAsAvatar, keepImage, saveSessionImage, reusePrompt, genFileName, withImage } from '@/lib/imageActions';
 import { downloadBlob, IconButton, Button, cx } from '@/components/ui';
 import { openLightbox } from '@/components/Lightbox';
 
@@ -41,7 +41,7 @@ export function ImageViewer({ image, all = [], preview, generating }: { image?: 
       </div>
       {image && (
         <div className="flex flex-shrink-0 flex-wrap items-center gap-1 border-t border-slate-800 bg-slate-950 px-2 py-1">
-          <Button size="sm" variant="primary" onClick={() => void setAsAvatar(image.blob)} title="Make this the card's picture">
+          <Button size="sm" variant="primary" onClick={() => withImage(image, setAsAvatar)} title="Make this the card's picture">
             Set as avatar
           </Button>
           <Button size="sm" onClick={() => void keepImage(image)} disabled={!!image.keptFile} title="Keep it with the card (saved in the project, shown in Gallery)">
@@ -54,19 +54,19 @@ export function ImageViewer({ image, all = [], preview, generating }: { image?: 
             <IconButton title="Full screen" onClick={() => fullscreen(image)}>
               ⛶
             </IconButton>
-            <IconButton title="Download" onClick={() => downloadBlob(image.blob, genFileName(image), 'image/png')}>
+            <IconButton title="Download" onClick={() => withImage(image, (b) => downloadBlob(b, genFileName(image), 'image/png'))}>
               ⬇
             </IconButton>
-            <IconButton title="Use as the Img2Img base" onClick={() => sendToImg2Img(image.blob)}>
+            <IconButton title="Use as the Img2Img base" onClick={() => withImage(image, (b) => sendToImg2Img(b))}>
               ⎘
             </IconButton>
-            <IconButton title="Inpaint: mark part of it to regenerate" onClick={() => sendToImg2Img(image.blob, 'mask')}>
+            <IconButton title="Inpaint: mark part of it to regenerate" onClick={() => withImage(image, (b) => sendToImg2Img(b, 'mask'))}>
               🖌
             </IconButton>
             <IconButton title={`Use this seed (${image.seed})`} onClick={() => set('seed', image.seed)}>
               🌱
             </IconButton>
-            <IconButton title="Load this image's prompt back into the form" onClick={() => void reusePrompt(image.blob)}>
+            <IconButton title="Load this image's prompt back into the form" onClick={() => withImage(image, reusePrompt)}>
               ♻
             </IconButton>
             <IconButton title="Remove from this session" tone="danger" onClick={() => removeImages([image.id])}>

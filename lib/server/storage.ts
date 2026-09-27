@@ -15,6 +15,7 @@ import { normalizeCard } from '@/lib/cardSpec';
 //   data/projects/<id>/chats/<id>.json  test chats
 //   data/trash/<id>-<time>/             deleted projects, recoverable by hand
 //   data/library-index.json             the gen library's metadata cache
+//   data/recent-gens/<id>.png + .json   recent gens, until kept, cleared or expired
 
 export const DATA_DIR = path.resolve(process.env.UCCB_DATA_DIR ?? path.join(process.cwd(), 'data'));
 const PROJECTS = path.join(DATA_DIR, 'projects');
@@ -60,6 +61,7 @@ export async function getConfig(): Promise<AppConfig> {
 export async function setConfig(patch: Partial<AppConfig>): Promise<AppConfig> {
   const next = { ...(await getConfig()), ...patch };
   next.libraryFolders = [...new Set(next.libraryFolders.map((f) => f.trim()).filter(Boolean))];
+  next.recentGensDays = Math.max(0, Math.round(Number(next.recentGensDays) || 0));
   await writeFileAtomic(path.join(DATA_DIR, 'config.json'), JSON.stringify(next, null, 2));
   return next;
 }
@@ -260,4 +262,72 @@ export function setSettingsSection(section: SettingsSection, value: unknown) {
   });
   settingsLock = next;
   return next;
+}
+
+// ─── Recent gens ─────────────────────────────────────────────────────────────
+// Each gen as it arrives, so a closed, reloaded or frozen tab doesn't lose it
+// and every device sees it. The details are the browser's own (lib/api.ts
+// strips the Img2Img images out); only the id and timestamp matter here.
+// Gens older than config.recentGensDays are deleted when the list is read.
+
+const RECENT = path.join(DATA_DIR, 'recent-gens');
+
+export interface RecentGenMeta {
+  id: string;
+  timestamp: number;
+  [key: string]: unknown;
+}
+
+export const recentGenPath = (id: string) => path.join(RECENT, `${checkId(id)}.png`);
+const recentMetaPath = (id: string) => path.join(RECENT, `${checkId(id)}.json`);
+
+export async function deleteRecentGens(ids: string[]) {
+  await Promise.all(ids.map((id) => Promise.all([fs.rm(recentGenPath(id), { force: true }), fs.rm(recentMetaPath(id), { force: true })])));
+}
+
+/** Every recent gen, newest first, after deleting expired ones. */
+export async function listRecentGens(): Promise<RecentGenMeta[]> {
+  const { recentGensDays } = await getConfig();
+  let files: string[];
+  try {
+    files = await fs.readdir(RECENT);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
+  }
+  const metas = (
+    await Promise.all(files.filter((f) => f.endsWith('.json')).map((f) => readJson<RecentGenMeta>(path.join(RECENT, f)).catch(() => null)))
+  ).filter((m): m is RecentGenMeta => !!m && typeof m.id === 'string' && ID_RE.test(m.id));
+  const cutoff = recentGensDays > 0 ? Date.now() - recentGensDays * 86_400_000 : -Infinity;
+  const expired = metas.filter((m) => m.timestamp < cutoff);
+  if (expired.length) await deleteRecentGens(expired.map((m) => m.id));
+  return metas.filter((m) => m.timestamp >= cutoff).sort((a, b) => b.timestamp - a.timestamp);
+}
+
+export async function addRecentGen(meta: RecentGenMeta, png: Uint8Array) {
+  checkId(meta.id);
+  if (typeof meta.timestamp !== 'number') throw new BadRequestError('A recent gen needs a timestamp.');
+  await writeFileAtomic(recentGenPath(meta.id), png);
+  await writeFileAtomic(recentMetaPath(meta.id), JSON.stringify(meta));
+}
+
+/** Merges into a gen's details; a gen that's gone (cleared elsewhere) is left gone. */
+export async function patchRecentGen(id: string, patch: Record<string, unknown>) {
+  const meta = await readJson<RecentGenMeta>(recentMetaPath(id));
+  if (!meta) return null;
+  const next = { ...meta, ...patch, id: meta.id, timestamp: meta.timestamp };
+  await writeFileAtomic(recentMetaPath(id), JSON.stringify(next));
+  return next;
+}
+
+/** How many there are and how much room they take. */
+export async function recentGenStats(): Promise<{ count: number; bytes: number }> {
+  let files: string[];
+  try {
+    files = await fs.readdir(RECENT);
+  } catch {
+    return { count: 0, bytes: 0 };
+  }
+  const sizes = await Promise.all(files.map((f) => fs.stat(path.join(RECENT, f)).then((s) => s.size, () => 0)));
+  return { count: files.filter((f) => f.endsWith('.png')).length, bytes: sizes.reduce((a, b) => a + b, 0) };
 }

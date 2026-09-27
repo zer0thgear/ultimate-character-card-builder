@@ -6,8 +6,8 @@ import { useSessionStore } from '@/store/sessionStore';
 import { changedElsewhere, loadSettings, readSection } from '@/lib/serverSettings';
 
 // Loads the settings every device shares before the app first renders, and
-// picks up changes made on another device when this one comes back into
-// focus.
+// picks up changes made on another device (settings, recent gens) when this
+// one comes back into focus.
 
 async function loadNaiKey() {
   const key = await readSection('naiKey');
@@ -17,8 +17,11 @@ async function loadNaiKey() {
 export async function hydrateSettings() {
   await loadSettings();
   await Promise.all([useSettingsStore.persist.rehydrate(), useLlmStore.persist.rehydrate(), loadNaiKey()]);
+  // Recent gens come in behind the first render; they're only pictures.
+  void useSessionStore.getState().syncStored();
 
   const refresh = async () => {
+    void useSessionStore.getState().syncStored();
     for (const s of await changedElsewhere()) {
       if (s === 'gen') void useSettingsStore.persist.rehydrate();
       else if (s === 'llm') void useLlmStore.persist.rehydrate();

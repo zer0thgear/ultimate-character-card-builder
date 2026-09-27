@@ -53,7 +53,7 @@ data/trash/                          deleted cards (recover by moving them back)
 data/library-index.json, thumbs/     the gen library's cache (safe to delete)
 ```
 
-Gens themselves stay in memory until you **keep** them with a card or **save** them to the output folder (or turn on auto-save), as on NovelAI's own site. The page warns before closing with unsaved gens.
+New gens go to `data/recent-gens` as they arrive, so a reload or a frozen phone tab doesn't lose them and every device sees them, and they're deleted after a number of days you choose (Settings → Folders; 7 by default). To keep one for good, **keep** it with a card or **save** it to the output folder (or turn on auto-save). The page only warns before closing while a gen is still uploading.
 
 API keys are kept on this computer, in data/settings.json. NovelAI image calls go straight from the browser to NovelAI, as in NovelFrontEnd; LLM calls go through UCCB's local server (which avoids CORS problems) and on to the provider. **This is a local app**: anyone who can reach it can use your keys, read and change your cards, and see the library folders, which is why it only lets in this computer and your Tailscale devices unless you allow the home network.
 
@@ -75,6 +75,6 @@ components/dock/    Image, Gallery, Library, Test chat, Brainstorm
 lib/                card spec and files, prompts, lorebook scanning, macros,
                     library search, assistant prompts, NovelAI (ported)
 lib/server/         disk storage, library index, LLM providers
-store/              Zustand stores (project + undo, gen settings, session gens,
+store/              Zustand stores (project + undo, gen settings, recent gens,
                     LLM connections, chats, UI)
 ```

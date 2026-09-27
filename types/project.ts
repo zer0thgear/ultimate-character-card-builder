@@ -115,6 +115,9 @@ export interface AppConfig {
   /** Let devices on the home network in, not only this computer and
    *  Tailscale devices (see server.mjs). */
   allowLan: boolean;
+  /** Days recent gens (the Gallery's session gens) stay on the server
+   *  before they're cleaned up; 0 keeps them until cleared. */
+  recentGensDays: number;
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -123,4 +126,5 @@ export const DEFAULT_CONFIG: AppConfig = {
   outputPerCard: true,
   libraryFolders: [],
   allowLan: false,
+  recentGensDays: 7,
 };
