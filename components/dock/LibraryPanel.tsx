@@ -11,6 +11,7 @@ import { openSettings } from '@/components/SettingsDialog';
 import { useProjectStore } from '@/store/projectStore';
 import { copyText } from '@/lib/clipboard';
 import { openLightbox } from '@/components/Lightbox';
+import { openVisionWrite } from '@/components/VisionWriteDialog';
 
 // Older gens, from any folders set in Settings (GenBrowser's library, a
 // downloads folder…), searchable by prompt like GenBrowser: for
@@ -242,6 +243,7 @@ function LibraryViewer({ item, onClose, onStep, onSearch, onFullscreen }: { item
             </>
           )}
           {hasProject && <Button onClick={async () => { sendToImg2Img(await blob()); onClose(); }}>Img2Img base</Button>}
+          {hasProject && <Button onClick={async () => openVisionWrite(await blob())} title="A physical description, a greeting, or ask about it (vision model)">✨ Write from image</Button>}
           <Button onClick={async () => void saveToFolder(await blob(), item.name)}>Copy to output</Button>
           {hasProject ? (
             <Button variant="primary" onClick={async () => { await setAsAvatar(await blob()); onClose(); }}>

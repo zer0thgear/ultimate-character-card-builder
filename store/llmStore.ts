@@ -48,6 +48,10 @@ interface LlmState {
   connections: LlmConnection[];
   chatConnectionId: string | null;
   assistConnectionId: string | null;
+  /** For jobs that send a picture (✨ Write from an image): a model that can
+   *  see. Unset, the assistant's connection. */
+  visionConnectionId: string | null;
+  setVisionConnection: (id: string | null) => void;
   chatSettings: ChatPromptSettings;
   assistSettings: AssistSettings;
   setAssistSettings: (patch: Partial<AssistSettings>) => void;
@@ -101,10 +105,13 @@ export const useLlmStore = create<LlmState>()(
             connections,
             chatConnectionId: s.chatConnectionId === id ? fallback : s.chatConnectionId,
             assistConnectionId: s.assistConnectionId === id ? fallback : s.assistConnectionId,
+            visionConnectionId: s.visionConnectionId === id ? null : s.visionConnectionId,
           };
         }),
       setChatConnection: (id) => set({ chatConnectionId: id }),
       setAssistConnection: (id) => set({ assistConnectionId: id }),
+      visionConnectionId: null,
+      setVisionConnection: (id) => set({ visionConnectionId: id }),
       setChatSettings: (patch) => set((s) => ({ chatSettings: { ...s.chatSettings, ...patch } })),
     }),
     {

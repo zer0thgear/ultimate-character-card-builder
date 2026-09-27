@@ -50,9 +50,17 @@ export interface LlmConnection {
   params: SamplerParams;
 }
 
+/** A picture sent with a message, for vision models: base64, no data: prefix. */
+export interface LlmImage {
+  mediaType: 'image/jpeg' | 'image/png' | 'image/webp';
+  data: string;
+}
+
 export interface LlmMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
+  /** Pictures shown with it (user messages), for models that can see. */
+  images?: LlmImage[];
 }
 
 /** What the proxy sends the browser, one JSON object per line. */

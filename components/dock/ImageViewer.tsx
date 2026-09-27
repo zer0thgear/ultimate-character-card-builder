@@ -7,6 +7,7 @@ import type { EditorMode } from '@/lib/editorResult';
 import { setAsAvatar, keepImage, saveSessionImage, reusePrompt, genFileName, withImage } from '@/lib/imageActions';
 import { downloadBlob, IconButton, Button, cx } from '@/components/ui';
 import { openLightbox } from '@/components/Lightbox';
+import { openVisionWrite } from '@/components/VisionWriteDialog';
 
 /** Makes this picture the image panel's Img2Img base, optionally opening
  *  the Edit Image or Inpaint canvas on it. */
@@ -65,6 +66,9 @@ export function ImageViewer({ image, all = [], preview, generating }: { image?: 
             </IconButton>
             <IconButton title={`Use this seed (${image.seed})`} onClick={() => set('seed', image.seed)}>
               🌱
+            </IconButton>
+            <IconButton title="✨ Write from this image: a physical description, a greeting, or ask about it (vision model)" onClick={() => withImage(image, openVisionWrite)}>
+              ✍
             </IconButton>
             <IconButton title="Load this image's prompt back into the form" onClick={() => withImage(image, reusePrompt)}>
               ♻

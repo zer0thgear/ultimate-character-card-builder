@@ -6,12 +6,16 @@ import type { LlmMessage } from '@/types/llm';
 import { Button, IconButton, Modal, TokenBadge, cx } from '@/components/ui';
 import { copyText } from '@/lib/clipboard';
 import { formatTokens, useTextTokens } from '@/lib/textTokens';
+import { imageDataUrl } from '@/lib/visionImage';
 
 // What the writing assistant was asked and what it thought: each surface
 // shows its latest run's reasoning inline (AssistReasoning) or behind a 🔍
 // (AssistTraceButton), and the inspector shows the whole request.
 
 export const inspectAssistRun = (id: string) => useAssistLog.getState().inspect(id);
+
+/** For copying a prompt: a picture's base64 as its size, not a wall of text. */
+const elideImages = (key: string, value: unknown) => (key === 'data' && typeof value === 'string' && value.length > 200 ? `(${Math.round((value.length * 0.75) / 1024)} KB)` : value);
 
 /** The run's reasoning, folded, live while it streams; with a link to the
  *  full prompt. Nothing until the surface has run. */
@@ -56,6 +60,14 @@ export function MessageList({ messages }: { messages: LlmMessage[] }) {
             <span className={cx('rounded px-1.5 text-[10px] uppercase', m.role === 'system' ? 'bg-violet-500/15 text-violet-300' : m.role === 'user' ? 'bg-sky-500/15 text-sky-300' : 'bg-emerald-500/15 text-emerald-300')}>{m.role}</span>
             <TokenBadge text={m.content} className="ml-auto" />
           </div>
+          {!!m.images?.length && (
+            <div className="flex flex-wrap gap-1.5 px-2.5 pt-1.5">
+              {m.images.map((im, j) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={j} src={imageDataUrl(im)} alt="Attached" title="Sent with this message" className="h-24 rounded border border-slate-700 object-contain" />
+              ))}
+            </div>
+          )}
           <div className="max-h-64 overflow-y-auto px-2.5 py-1.5 font-mono text-[11px] whitespace-pre-wrap text-slate-400">{m.content}</div>
         </div>
       ))}
@@ -75,13 +87,14 @@ function AssistInspector({ run, onClose }: { run: AssistRun; onClose: () => void
   const all = useMemo(() => run.messages.map((m) => m.content).join('\n\n'), [run.messages]);
   const total = useTextTokens(all, 0);
   const effort = run.params.effort ?? run.params.reasoning_effort;
+  const pictures = run.messages.reduce((n, m) => n + (m.images?.length ?? 0), 0);
   return (
     <Modal
       open
       onClose={onClose}
       title={`${run.label} · ~${formatTokens(total)} tokens`}
       size="lg"
-      footer={<Button onClick={() => void copyText(JSON.stringify(run.messages, null, 2))}>Copy prompt as JSON</Button>}
+      footer={<Button onClick={() => void copyText(JSON.stringify(run.messages, elideImages, 2))}>Copy prompt as JSON</Button>}
     >
       <div className="flex flex-col gap-3">
         <div className="text-xs text-slate-400">
@@ -90,6 +103,7 @@ function AssistInspector({ run, onClose }: { run: AssistRun; onClose: () => void
           {run.preset && ` · preset "${run.preset}"`}
           {effort && ` · effort ${effort}`}
           {(run.params.thinking || run.params.enable_thinking) && ' · thinking on'}
+          {pictures > 0 && ` · ${pictures} picture${pictures === 1 ? '' : 's'} (not in the token count)`}
           {' · '}
           {new Date(run.at).toLocaleTimeString()}
           {run.running && <span className="ml-1.5 animate-pulse text-violet-300">running…</span>}

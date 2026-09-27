@@ -20,6 +20,7 @@ import { Tabs } from '@/components/ui';
 import { useMediaQuery, PHONE_QUERY } from '@/hooks/useMediaQuery';
 import { useKeyboard, watchKeyboard } from '@/hooks/useKeyboard';
 import { useSessionStore as useGenSession } from '@/store/sessionStore';
+import { VisionWriteHost } from '@/components/VisionWriteDialog';
 
 export function Shell() {
   const project = useProjectStore((s) => s.project);
@@ -156,6 +157,7 @@ export function Shell() {
       <SettingsDialog />
       <FieldToolsHost />
       <ConfirmHost />
+      <VisionWriteHost />
       <AssistInspectorHost />
       <Lightbox />
       <Toasts />

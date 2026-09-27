@@ -1,5 +1,5 @@
 import type { CardData } from '@/types/card';
-import type { LlmMessage } from '@/types/llm';
+import type { LlmImage, LlmMessage } from '@/types/llm';
 import { fieldLabel, getPath } from '@/lib/cardPath';
 import { entryName } from '@/lib/cardSpec';
 
@@ -195,6 +195,57 @@ Also: {{instruction}}
 Reply with only the tags.`,
   },
 
+  // Writing from a picture (a vision model sees it with the request)
+  { key: 'vision.system', group: '✨ Write from an image', label: 'System prompt', vars: [], text: WRITER },
+  {
+    key: 'vision.appearance',
+    group: '✨ Write from an image',
+    label: 'Physical description',
+    vars: ['card', 'instruction'],
+    note: 'The picture is sent with it.',
+    text: `<card>
+{{card}}
+</card>
+
+The attached image shows {{char}}. Write a physical description of {{char}} as they look in it, for the card's description: build, face, hair, eyes, skin, notable features, and what they're wearing. Describe what's visible or clearly implied, and don't invent backstory. Match the card's existing voice and format, so it can sit in the description (or replace the part that describes their look).
+
+The creator's instruction: {{instruction}}
+
+Reply with only the description.`,
+  },
+  {
+    key: 'vision.greeting',
+    group: '✨ Write from an image',
+    label: 'Greeting from the scene',
+    vars: ['card', 'greetings', 'instruction'],
+    note: 'The picture is sent with it.',
+    text: `<card>
+{{card}}
+</card>
+
+<existing_greetings>
+{{greetings}}
+</existing_greetings>
+
+Write a new greeting for this card that opens on the moment in the attached image: the place, the situation, {{char}}'s pose, expression and outfit. Written as {{char}}, in the card's prose style and formatting, it sets the scene and leaves {{user}} something to respond to. Never write {{user}}'s actions or words.
+
+The creator's instruction: {{instruction}}
+
+Reply with only the greeting.`,
+  },
+  {
+    key: 'vision.ask',
+    group: '✨ Write from an image',
+    label: 'Ask about it',
+    vars: ['card', 'instruction'],
+    note: 'The picture is sent with it; {{instruction}} is your question.',
+    text: `<card>
+{{card}}
+</card>
+
+The attached image was made for this card. {{instruction}}`,
+  },
+
   // Brainstorm
   {
     key: 'brainstorm.system',
@@ -347,6 +398,21 @@ export function sceneTagsMessages(card: CardData, greeting: string, instruction:
   return job('scene', { card: cardContext(card, undefined, 5000), scene: clip(greeting, 4000), instruction: instruction.trim() });
 }
 
+export type VisionJob = 'appearance' | 'greeting' | 'ask';
+
+/** A job about a picture, sent with the request for a vision model. */
+export function visionMessages(card: CardData, kind: VisionJob, instruction: string, images: LlmImage[]): LlmMessage[] {
+  const existing = [card.first_mes, ...card.alternate_greetings].filter((g) => g.trim());
+  const vars: Record<string, string> = {
+    card: cardContext(card, undefined, 10000),
+    greetings: existing.map((g, i) => `<greeting ${i + 1}>\n${clip(g, 1500)}\n</greeting>`).join('\n'),
+    instruction: instruction.trim(),
+  };
+  const system = fillTemplate(template('vision.system'), vars);
+  const user = fillTemplate(template(`vision.${kind}`), vars);
+  return [...(system ? [{ role: 'system' as const, content: system }] : []), { role: 'user', content: user, images }];
+}
+
 /** Brainstorm (the Ideas tab): a free-form chat that always sees the card. */
 export function brainstormMessages(card: CardData, thread: LlmMessage[]): LlmMessage[] {
   const system = fillTemplate(template('brainstorm.system'), { card: cardContext(card, undefined, 20000) });
@@ -364,6 +430,9 @@ export const ASSIST_JOBS: { label: string; build: (card: CardData) => LlmMessage
   { label: '✨ Character prompt (art)', build: (card) => appearanceTagsMessages(card, '') },
   { label: '✨ Scene prompt (art, from the first message)', build: (card) => sceneTagsMessages(card, card.first_mes, '') },
   { label: '✨ Brainstorm', build: (card) => brainstormMessages(card, [{ role: 'user', content: '(your message)' }]) },
+  { label: '✨ From an image: physical description (+ the picture)', build: (card) => visionMessages(card, 'appearance', '(your guidance)', []) },
+  { label: '✨ From an image: greeting (+ the picture)', build: (card) => visionMessages(card, 'greeting', '(your guidance)', []) },
+  { label: '✨ From an image: ask (+ the picture)', build: (card) => visionMessages(card, 'ask', '(your question)', []) },
 ];
 
 /** Tidies a tag reply: one line, no trailing period or stray quotes. */

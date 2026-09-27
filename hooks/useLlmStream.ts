@@ -16,9 +16,9 @@ import { uuid } from '@/lib/uuid';
  * connection, the job's messages wrapped in its SillyTavern preset (if one
  * is set, with prompts on), and the preset's samplers (if on).
  */
-export function assistRequest(messages: LlmMessage[]): { connection: LlmConnection | null; messages: LlmMessage[]; params: Partial<SamplerParams>; preset?: string } {
+export function assistRequest(messages: LlmMessage[], connectionId?: string | null): { connection: LlmConnection | null; messages: LlmMessage[]; params: Partial<SamplerParams>; preset?: string } {
   const { connections, assistConnectionId, assistSettings: a, presets, chatSettings } = useLlmStore.getState();
-  const connection = connections.find((c) => c.id === assistConnectionId) ?? null;
+  const connection = connections.find((c) => c.id === (connectionId ?? assistConnectionId)) ?? null;
   const preset = a.presetId ? presets.find((p) => p.id === a.presetId) : undefined;
   if (!preset || !connection) return { connection, messages, params: {} };
   const me = resolvePersona(usePersonaStore.getState().personas, chatSettings);
@@ -111,8 +111,8 @@ export function useLlmStream() {
   /** A writing-assistant request (see assistRequest), logged under `label`
    *  so its reasoning and prompt can be looked at. */
   const runAssist = useCallback(
-    async (messages: LlmMessage[], onText?: (full: string) => void, label = 'Assistant'): Promise<StreamResult & { runId: string }> => {
-      const req = assistRequest(messages);
+    async (messages: LlmMessage[], onText?: (full: string) => void, label = 'Assistant', opts: { connectionId?: string | null } = {}): Promise<StreamResult & { runId: string }> => {
+      const req = assistRequest(messages, opts.connectionId);
       const id = uuid();
       const log = useAssistLog.getState();
       log.add({

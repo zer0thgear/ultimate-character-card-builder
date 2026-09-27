@@ -86,6 +86,16 @@ Text-completion (instruct/context) presets aren't supported yet.
 
 **✨ Brainstorm** is a free-form chat with the writing assistant, which always sees the card as it is right now. Replies can be copied or added to the card's Notes.
 
+## Writing from an image
+
+**✨ Write from this image** hands a picture to a vision model: ✍ on a gen in the Image tab, **✨ Write from image** on a kept gen or a library image, or **✍ Write from picture** under the card's avatar. Pick what to write, add guidance if you like, and edit the result before using it:
+
+- **👤 Physical description**: how the character looks in it (build, face, hair, eyes, notable features, outfit), to **append to** or **replace** the description.
+- **💬 Greeting from the scene**: a new greeting that opens on the pictured moment, **added as a greeting** (or used as the first message if the card has none).
+- **❓ Ask about it**: any question (names that fit the look, a backstory idea…), with the answer **added to Notes** or copied.
+
+The picture is sent scaled to at most 1568px on its long side, as JPEG. It has its own **Vision model** connection, remembered, which starts as the assistant's; NovelAI's text models can't see images, so a NovelAI connection is flagged and nothing is sent. A model that can't take pictures usually refuses, and the error says so with a pointer to vision models (a few servers quietly ignore the picture instead). The three prompts are editable with the others, and the inspector shows the picture that was sent.
+
 ## What the assistant was asked
 
 Every assistant job shows its **reasoning** (folded, and live while it thinks) and a **🔍 Prompt** link to exactly what was sent: ✨ on fields, new greetings, lorebook entries, the card review and Brainstorm show both inline; the quick buttons (card tags, the character and scene prompts) get a 🔍 (🧠 when there's reasoning) once they've run. The inspector lists the connection, model, preset, effort and time, the reasoning, the reply, and every message sent, with tokens, and copies it as JSON.

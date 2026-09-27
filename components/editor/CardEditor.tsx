@@ -9,6 +9,7 @@ import { BasicsPanel } from '@/components/editor/BasicsPanel';
 import { GreetingsPanel } from '@/components/editor/GreetingsPanel';
 import { LorebookPanel } from '@/components/editor/LorebookPanel';
 import { CreatorPanel, NotesPanel, PromptsPanel, ToolsPanel } from '@/components/editor/OtherPanels';
+import { openVisionWrite } from '@/components/VisionWriteDialog';
 
 export function CardEditor() {
   const { editorTab, setEditorTab, showAvatar } = useUiStore();
@@ -112,6 +113,16 @@ function AvatarStrip() {
           <button type="button" className="rounded bg-slate-800 px-2 py-0.5 text-slate-300 hover:bg-slate-700" onClick={() => setDockTab('library')}>
             📚 Pick from library
           </button>
+          {url && (
+            <button
+              type="button"
+              className="rounded bg-slate-800 px-2 py-0.5 text-slate-300 hover:bg-slate-700"
+              title="A physical description, a greeting, or ask about the picture (vision model)"
+              onClick={async () => openVisionWrite(await (await fetch(url)).blob())}
+            >
+              ✍ Write from picture
+            </button>
+          )}
           {project.avatar && (
             <span className="self-center text-slate-500">
               {project.avatar.width}×{project.avatar.height}

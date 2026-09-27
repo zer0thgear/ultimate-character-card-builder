@@ -2,7 +2,7 @@ import 'server-only';
 import Anthropic from '@anthropic-ai/sdk';
 import type { LlmEvent, LlmRequest, SamplerParams } from '@/types/llm';
 import { NOVELAI_TEXT_BASE } from '@/types/llm';
-import { sseData, toAnthropic } from '@/lib/llmShape';
+import { VISION_HINT, sseData, toAnthropic, toOpenAiMessage } from '@/lib/llmShape';
 
 // The providers behind /api/llm/chat, each turned into the same stream of
 // LlmEvents. Keys arrive with each request from the browser (which keeps
@@ -57,14 +57,15 @@ async function* openAiStream(req: LlmRequest, signal: AbortSignal): AsyncGenerat
     },
     body: JSON.stringify({
       model: req.connection.model,
-      messages: req.messages,
+      messages: req.messages.map(toOpenAiMessage),
       stream: true,
       ...openAiParams(kind, req.connection.params, base),
     }),
     signal,
   });
   if (!res.ok || !res.body) {
-    yield { type: 'error', status: res.status, message: `${res.status}: ${await errorText(res)}` };
+    const hint = hasImages(req) ? ` ${VISION_HINT}` : '';
+    yield { type: 'error', status: res.status, message: `${res.status}: ${await errorText(res)}${hint}` };
     return;
   }
   const reader = res.body.getReader();
@@ -174,12 +175,21 @@ async function* anthropicStream(req: LlmRequest, signal: AbortSignal): AsyncGene
     };
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
-      yield { type: 'error', status: err.status, message: `${err.status ?? ''} ${err.message}`.trim() };
+      const hint = hasImages(req) && err.status === 400 ? ` ${VISION_HINT}` : '';
+      yield { type: 'error', status: err.status, message: `${`${err.status ?? ''} ${err.message}`.trim()}${hint}` };
     } else throw err;
   }
 }
 
+const hasImages = (req: LlmRequest) => req.messages.some((m) => m.images?.length);
+
 export function streamChat(req: LlmRequest, signal: AbortSignal): AsyncGenerator<LlmEvent> {
+  // NovelAI's chat API takes text only (its messages' content is a string).
+  if (req.connection.kind === 'novelai' && hasImages(req)) {
+    return (async function* (): AsyncGenerator<LlmEvent> {
+      yield { type: 'error', message: "NovelAI's text models can't see images, so this wasn't sent. Pick a vision model (an OpenAI-compatible or Claude connection) for it." };
+    })();
+  }
   return req.connection.kind === 'anthropic' ? anthropicStream(req, signal) : openAiStream(req, signal);
 }
 
