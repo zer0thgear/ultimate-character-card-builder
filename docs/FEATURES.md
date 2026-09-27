@@ -90,7 +90,7 @@ Text-completion (instruct/context) presets aren't supported yet.
 
 Every assistant job shows its **reasoning** (folded, and live while it thinks) and a **🔍 Prompt** link to exactly what was sent: ✨ on fields, new greetings, lorebook entries, the card review and Brainstorm show both inline; the quick buttons (card tags, the character and scene prompts) get a 🔍 (🧠 when there's reasoning) once they've run. The inspector lists the connection, model, preset, effort and time, the reasoning, the reply, and every message sent, with tokens, and copies it as JSON.
 
-Settings → Assistant also has **Recent requests** (this session's, newest first, each openable the same way) and **What each job sends**: pick a job to see its full prompt for the open card, wrapped in the assistant's preset if one is on, before running it. The prompts are built in (lib/assist.ts); they aren't editable yet.
+Settings → Assistant also has **Recent requests** (this session's, newest first, each openable the same way) and **What each job sends**: pick a job to see its full prompt for the open card, wrapped in the assistant's preset if one is on, before running it. **Prompts** there are editable: every job's system prompt and request, plus the field tools' action texts and reply rule, grouped by job. `{{placeholders}}` (`{{card}}`, `{{field}}`, `{{instruction}}`…, listed beside each) are filled in per request, and a paragraph whose placeholder comes out empty is left out; `{{char}}` and `{{user}}` are sent as written. Each shows when it's edited and has **↺ Default**; **↺ Restore all** puts every one back. Edits are saved with the LLM settings, so every device uses them.
 
 ## LLM connections
 

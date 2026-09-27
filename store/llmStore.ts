@@ -9,6 +9,7 @@ import type { ChatPreset } from '@/lib/stPreset';
 import { useSessionStore } from '@/store/sessionStore';
 import { serverStorage } from '@/lib/serverSettings';
 import { uuid } from '@/lib/uuid';
+import { setTemplateOverrides } from '@/lib/assist';
 
 // LLM connections (keys included, on the server like the NovelAI key),
 // which one the test chat and the writing assistant each use, and the
@@ -36,6 +37,9 @@ export interface AssistSettings {
   prompts: boolean;
   /** Per preset, the prompts left out of assistant requests. */
   excluded: Record<string, string[]>;
+  /** Your wording for the assistant's built-in prompts, by template key
+   *  (lib/assist.ts); a template not here uses its default. */
+  templates?: Record<string, string>;
 }
 
 export const DEFAULT_ASSIST_SETTINGS: AssistSettings = { presetId: null, samplers: true, prompts: true, excluded: {} };
@@ -121,6 +125,12 @@ export const useLlmStore = create<LlmState>()(
     },
   ),
 );
+
+// The assistant's prompts read your template edits from here.
+setTemplateOverrides(useLlmStore.getState().assistSettings.templates);
+useLlmStore.subscribe((s, prev) => {
+  if (s.assistSettings.templates !== prev.assistSettings.templates) setTemplateOverrides(s.assistSettings.templates);
+});
 
 /** The connection as sent to the proxy: a NovelAI one with no key of its
  *  own borrows the NovelAI key from Settings. */
