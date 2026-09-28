@@ -32,6 +32,8 @@ export interface ChatPromptSettings {
   presetId: string | null;
   /** Use the preset's samplers (temperature and so on) over the connection's. */
   presetSamplers: boolean;
+  /** Number the messages as SillyTavern does: #0 is the greeting. */
+  showMessageIds: boolean;
 }
 
 export const DEFAULT_CHAT_SETTINGS: ChatPromptSettings = {
@@ -47,6 +49,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatPromptSettings = {
   personaId: null,
   presetId: null,
   presetSamplers: true,
+  showMessageIds: true,
 };
 
 export const DEFAULT_IMPERSONATION =

@@ -121,6 +121,7 @@ export function ChatPanel() {
   // Who {{user}} is in this chat: its locked persona, the active one, or
   // the plain name and description.
   const me = resolvePersona(personas, chatSettings, chat);
+  const showIds = chatSettings.showMessageIds;
   const settings = { ...chatSettings, userName: me.name, persona: me.description };
   const preset = chatSettings.presetId ? (presets.find((p) => p.id === chatSettings.presetId) ?? null) : null;
   const overrides = preset && chatSettings.presetSamplers && connection ? presetParams(preset, connection.kind) : {};
@@ -320,12 +321,13 @@ export function ChatPanel() {
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              <GreetingBubble card={card} index={chat.greeting} count={greetingCount} onSwipe={setGreeting} userName={me.name} />
+              <GreetingBubble card={card} index={chat.greeting} count={greetingCount} onSwipe={setGreeting} userName={me.name} showId={showIds} />
               {chat.messages.map((m, i) => (
                 <div key={m.id} data-msg={m.id}>
                   <Bubble
                     card={card}
                     message={m}
+                    messageId={showIds ? i + 1 : undefined}
                     userName={me.name}
                     persona={me.persona}
                     streaming={streamingId === m.id}
@@ -441,7 +443,12 @@ function Avatar({ role, persona }: { role: 'user' | 'assistant' | 'system'; pers
   );
 }
 
-function GreetingBubble({ card, index, count, onSwipe, userName }: { card: CardData; index: number; count: number; onSwipe: (i: number) => void; userName: string }) {
+/** A message's number, SillyTavern style. */
+function MessageId({ id, className }: { id: number; className?: string }) {
+  return <span className={cx('text-[11px] text-slate-600 tabular-nums', className)} title={id === 0 ? 'Message #0: the greeting' : `Message #${id}`}>#{id}</span>;
+}
+
+function GreetingBubble({ card, index, count, onSwipe, userName, showId }: { card: CardData; index: number; count: number; onSwipe: (i: number) => void; userName: string; showId: boolean }) {
   const text = greetingText(card, index);
   return (
     <div className="flex gap-2">
@@ -450,8 +457,9 @@ function GreetingBubble({ card, index, count, onSwipe, userName }: { card: CardD
         <div className="mb-1 flex items-center gap-2 text-xs">
           <span className="font-semibold text-slate-200">{card.nickname || card.name || 'Character'}</span>
           <span className="text-slate-500">greeting · live from the card</span>
+          {showId && <MessageId id={0} className="ml-auto" />}
           {count > 1 && (
-            <span className="ml-auto flex items-center gap-1 text-slate-400">
+            <span className={cx('flex items-center gap-1 text-slate-400', !showId && 'ml-auto')}>
               <IconButton title="Previous greeting" onClick={() => onSwipe(index <= 0 ? count - 1 : index - 1)}>
                 ‹
               </IconButton>
@@ -473,6 +481,7 @@ function GreetingBubble({ card, index, count, onSwipe, userName }: { card: CardD
 function Bubble({
   card,
   message: m,
+  messageId,
   userName,
   persona,
   streaming,
@@ -486,6 +495,8 @@ function Bubble({
 }: {
   card: CardData;
   message: ChatMessage;
+  /** Its number in the chat (the greeting is #0), when they're shown. */
+  messageId?: number;
   userName: string;
   persona: Persona | null;
   streaming: boolean;
@@ -557,8 +568,11 @@ function Bubble({
         ) : (
           <span className="animate-pulse text-sm text-slate-500">…</span>
         )}
-        {!isUser && isLast && (
-          <div className="mt-1.5 flex items-center justify-end gap-1 text-xs text-slate-400">
+        {((!isUser && isLast) || messageId !== undefined) && (
+          <div className={cx('mt-1.5 flex items-center justify-end gap-1 text-xs text-slate-400', isUser && 'flex-row-reverse')}>
+            {messageId !== undefined && <MessageId id={messageId} className={isUser ? 'ml-auto' : 'mr-auto'} />}
+            {!isUser && isLast && (
+              <>
             {m.swipes.length > 1 && (
               <>
                 <IconButton title="Previous version" disabled={busy || m.swipe === 0} onClick={() => onChange({ swipe: m.swipe - 1 })}>
@@ -572,6 +586,8 @@ function Bubble({
             <IconButton title={m.swipe < m.swipes.length - 1 ? 'Next version' : 'Generate another version'} disabled={busy} onClick={() => (m.swipe < m.swipes.length - 1 ? onChange({ swipe: m.swipe + 1 }) : onSwipeNew())}>
               ›
             </IconButton>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -645,6 +661,7 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
         <Toggle checked={s.useCardPostHistory} onChange={(v) => setChatSettings({ useCardPostHistory: v })} label={<span className="text-xs">Card&apos;s post-history instructions replace {usingPreset ? 'Post-History Instructions' : 'the default'}</span>} />
         <Toggle checked={s.includeExamples} onChange={(v) => setChatSettings({ includeExamples: v })} label={<span className="text-xs">Send example messages</span>} />
         <Toggle checked={s.useLorebook} onChange={(v) => setChatSettings({ useLorebook: v })} label={<span className="text-xs">Use the lorebook</span>} />
+        <Toggle checked={s.showMessageIds} onChange={(v) => setChatSettings({ showMessageIds: v })} label={<span className="text-xs">Show message numbers (#0 is the greeting)</span>} />
       </div>
     </div>
   );
