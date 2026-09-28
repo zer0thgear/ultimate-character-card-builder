@@ -90,6 +90,16 @@ Text-completion (instruct/context) presets aren't supported yet.
 
 **✨ Brainstorm** is a free-form chat with the writing assistant, which always sees the card as it is right now. Replies can be copied or added to the card's Notes.
 
+## References
+
+**📎 References** attaches other cards and pictures to an assistant request, for "write her sister", "match this card's style" or "set a greeting here". It's on ✨ for fields, ✨ New greeting, ✨ Lorebook entry and Brainstorm. The picker offers your other cards, this card's kept gens and your recent gens, or a file: a PNG, JSON or CHARX card, or any picture. You can also paste a picture into the request's text box, or drop files on 📎.
+
+- **Cards** go in as text, the way the card being worked on is sent (8,000 characters each, shared out when there are several), under a note saying they're for reference, not the card itself. A PNG counts as a card when it has card data in it; otherwise it's a picture.
+- **Pictures** go with the message, scaled like Write from image, and a request with pictures goes to the **Vision model** instead of the assistant's (the tray says which).
+- In Brainstorm, references stay with the message they were sent with, so later turns still see them. A thread with pictures in it keeps going to the vision model until you Clear it.
+
+The wording of the note is editable in Settings → Assistant → Prompts (📎 References).
+
 ## Writing from an image
 
 **✨ Write from this image** hands a picture to a vision model: ✍ on a gen in the Image tab, **✨ Write from image** on a kept gen or a library image, or **✍ Write from picture** under the card's avatar. Pick what to write, add guidance if you like, and edit the result before using it:

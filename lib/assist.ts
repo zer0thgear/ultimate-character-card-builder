@@ -277,6 +277,20 @@ Reply with only the greeting.`,
 The attached image was made for this card. {{instruction}}`,
   },
 
+  // References (any job, when you attach cards or pictures)
+  {
+    key: 'references.user',
+    group: '📎 References',
+    label: 'Attached cards and pictures',
+    vars: ['cards', 'pictures'],
+    note: 'Goes before your request when you attach references. {{cards}} is each card, sent the way the card being worked on is; {{pictures}} names the attached pictures (sent with the message, for a vision model).',
+    text: `The user attached these for reference. They are not the card being worked on: use them the way the user asks (a style to match, a character who appears alongside, a place or facts to draw on, inspiration). Don't copy from them unless asked.
+
+{{cards}}
+
+{{pictures}}`,
+  },
+
   // Brainstorm
   {
     key: 'brainstorm.system',
@@ -458,6 +472,11 @@ export function visionMessages(card: CardData, kind: VisionJob, instruction: str
   const system = fillTemplate(template('vision.system'), vars);
   const user = fillTemplate(template(`vision.${kind}`), vars);
   return [...(system ? [{ role: 'system' as const, content: system }] : []), { role: 'user', content: user, images }];
+}
+
+/** The text that introduces attached references (see lib/references.ts). */
+export function referencesText(vars: { cards: string; pictures: string }): string {
+  return fillTemplate(template('references.user'), vars);
 }
 
 /** Brainstorm (the Ideas tab): a free-form chat that always sees the card. */

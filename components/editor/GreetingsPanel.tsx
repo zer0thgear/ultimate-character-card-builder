@@ -11,6 +11,8 @@ import { useLlmStream } from '@/hooks/useLlmStream';
 import { newGreetingMessages } from '@/lib/assist';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { AssistReasoning } from '@/components/llm/AssistTrace';
+import { ReferenceTray, referenceConnectionId, useReferences } from '@/components/llm/References';
+import { withReferences } from '@/lib/references';
 
 // First message, alternate greetings and group-only greetings, with the
 // reordering and promoting tavern-card-editor had, plus test-chat and
@@ -200,10 +202,11 @@ function NewGreetingDialog({ onClose }: { onClose: () => void }) {
   const [instruction, setInstruction] = useState('');
   const { runAssist, runId, stop, text, running, error } = useLlmStream();
   const [draft, setDraft] = useState<string | null>(null);
+  const refs = useReferences();
   if (!card) return null;
   const go = async () => {
     setDraft(null);
-    const r = await runAssist(newGreetingMessages(card, instruction), undefined, '✨ New greeting');
+    const r = await runAssist(withReferences(newGreetingMessages(card, instruction), refs.refs), undefined, '✨ New greeting', { connectionId: referenceConnectionId(refs.refs) });
     setDraft(r.text.trim());
   };
   const shown = draft ?? text;
@@ -236,7 +239,7 @@ function NewGreetingDialog({ onClose }: { onClose: () => void }) {
     >
       <div className="flex flex-col gap-3">
         <div className="flex gap-2">
-          <input autoFocus value={instruction} onChange={(e) => setInstruction(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !running && void go()} placeholder='The situation, e.g. "they meet at a rainy bus stop" (optional)' className={inputClass} />
+          <input autoFocus value={instruction} onChange={(e) => setInstruction(e.target.value)} onPaste={refs.onPaste} onKeyDown={(e) => e.key === 'Enter' && !running && void go()} placeholder='The situation, e.g. "they meet at a rainy bus stop" (optional)' className={inputClass} />
           {running ? (
             <Button variant="danger" onClick={stop}>
               Stop
@@ -247,6 +250,7 @@ function NewGreetingDialog({ onClose }: { onClose: () => void }) {
             </Button>
           )}
         </div>
+        <ReferenceTray refs={refs.refs} onAdd={refs.add} onRemove={refs.remove} />
         <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant model" />
         {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
         <AssistReasoning runId={runId} />

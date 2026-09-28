@@ -10,6 +10,8 @@ import { useLlmStream } from '@/hooks/useLlmStream';
 import { AutoTextarea, Button, IconButton, Modal, TextField, TokenBadge, cx, inputClass } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { AssistReasoning } from '@/components/llm/AssistTrace';
+import { ReferenceTray, referenceConnectionId, useReferences } from '@/components/llm/References';
+import { withReferences } from '@/lib/references';
 
 // Every card text field gets the same two helpers: ✨ the writing
 // assistant, and ⤢ a full-screen editor for long fields.
@@ -84,12 +86,13 @@ function AssistDialog({ path, onClose }: { path: string; onClose: () => void }) 
   const [instruction, setInstruction] = useState('');
   const [edited, setDraft] = useState('');
   const { runAssist, runId, stop, text, running, error } = useLlmStream();
+  const refs = useReferences();
   const draft = running ? text : edited;
 
   if (!card) return null;
   const label = fieldLabel(card, path);
   const go = async () => {
-    const r = await runAssist(fieldActionMessages(card, path, action, instruction), undefined, `✨ ${label} (${FIELD_ACTIONS.find((a) => a.value === action)?.label ?? action})`);
+    const r = await runAssist(withReferences(fieldActionMessages(card, path, action, instruction), refs.refs), undefined, `✨ ${label} (${FIELD_ACTIONS.find((a) => a.value === action)?.label ?? action})`, { connectionId: referenceConnectionId(refs.refs) });
     setDraft(r.text.trim());
   };
   const apply = (mode: 'replace' | 'append') => {
@@ -140,6 +143,7 @@ function AssistDialog({ path, onClose }: { path: string; onClose: () => void }) 
             autoFocus
             value={instruction}
             onChange={(e) => setInstruction(e.target.value)}
+            onPaste={refs.onPaste}
             onKeyDown={(e) => e.key === 'Enter' && !running && void go()}
             placeholder={action === 'draft' ? 'What should it cover? (optional)' : 'Instruction (optional), e.g. "more playful", "add her fear of water"'}
             className={inputClass}
@@ -154,6 +158,7 @@ function AssistDialog({ path, onClose }: { path: string; onClose: () => void }) 
             </Button>
           )}
         </div>
+        <ReferenceTray refs={refs.refs} onAdd={refs.add} onRemove={refs.remove} />
         <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant model" />
         {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
         <AssistReasoning runId={runId} />
