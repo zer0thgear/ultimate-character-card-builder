@@ -325,7 +325,7 @@ export function ChatPanel() {
               </Button>
             </div>
           ) : (
-            <div className={cx('flex flex-col gap-3', full && 'mx-auto w-full max-w-3xl')}>
+            <div className={cx('flex flex-col gap-3', full && 'mx-auto w-full max-w-6xl')}>
               <GreetingBubble card={card} index={chat.greeting} count={greetingCount} onSwipe={setGreeting} userName={me.name} showId={showIds} />
               {chat.messages.map((m, i) => (
                 <div key={m.id} data-msg={m.id}>
@@ -364,7 +364,7 @@ export function ChatPanel() {
 
       {chat && (
         <div className="flex-shrink-0 border-t border-slate-800 p-2">
-          <div className={cx(full && 'mx-auto w-full max-w-3xl')}>
+          <div className={cx(full && 'mx-auto w-full max-w-6xl')}>
           <AutoTextarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
