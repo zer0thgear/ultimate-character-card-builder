@@ -7,14 +7,14 @@ import { useLlmStore } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
-import { buildChatPrompt, displayText, greetingText, messageText, newMessage, type BuildOptions, type BuiltPrompt } from '@/lib/chatPrompt';
+import { buildChatPrompt, displayText, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt } from '@/lib/chatPrompt';
 import { buildPresetPrompt } from '@/lib/presetPrompt';
 import { presetParams } from '@/lib/stPreset';
 import { describeEntry } from '@/lib/lorebookScan';
 import { AutoTextarea, Button, IconButton, Modal, TokenBadge, Toggle, confirmDialog, cx, downloadBlob, enterSends, inputClass } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { PresetPicker } from '@/components/llm/PresetManager';
-import { PersonaAvatar, PersonaPicker } from '@/components/llm/Personas';
+import { PersonaAvatar, PersonaPicker, avatarFrame } from '@/components/llm/Personas';
 import { resolvePersona, usePersonaStore } from '@/store/personaStore';
 import { openSettings } from '@/components/SettingsDialog';
 import { useMediaQuery, PHONE_QUERY } from '@/hooks/useMediaQuery';
@@ -456,10 +456,13 @@ function renderNodes(nodes: FormatNode[]): React.ReactNode {
 
 function Avatar({ role, persona }: { role: 'user' | 'assistant' | 'system'; persona?: Persona | null }) {
   const project = useProjectStore((s) => s.project);
+  const shape = useLlmStore((s) => s.chatSettings.avatarShape) ?? 'circle';
   const url = project?.avatar ? `/api/projects/${project.id}/avatar?v=${project.avatar.version}` : null;
-  if (role === 'user') return <PersonaAvatar persona={persona} />;
+  if (shape === 'none') return null;
+  if (role === 'user') return <PersonaAvatar persona={persona} shape={shape} />;
+  const frame = avatarFrame(shape, 36);
   return (
-    <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-full bg-slate-800">
+    <div className={cx('flex-shrink-0 overflow-hidden bg-slate-800', frame.className)} style={frame.style}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {url && <img src={url} alt="" className="h-full w-full object-cover object-top" />}
     </div>
@@ -685,6 +688,15 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
         <Toggle checked={s.includeExamples} onChange={(v) => setChatSettings({ includeExamples: v })} label={<span className="text-xs">Send example messages</span>} />
         <Toggle checked={s.useLorebook} onChange={(v) => setChatSettings({ useLorebook: v })} label={<span className="text-xs">Use the lorebook</span>} />
         <Toggle checked={s.showMessageIds} onChange={(v) => setChatSettings({ showMessageIds: v })} label={<span className="text-xs">Show message numbers (#0 is the greeting)</span>} />
+        <label className="flex items-center gap-2 text-xs text-slate-400">
+          Avatars
+          <select value={s.avatarShape} onChange={(e) => setChatSettings({ avatarShape: e.target.value as AvatarShape })} className={cx(inputClass, 'w-auto py-0.5 text-xs')}>
+            <option value="circle">Circles</option>
+            <option value="square">Squares</option>
+            <option value="rectangle">Rectangles (portrait)</option>
+            <option value="none">None</option>
+          </select>
+        </label>
       </div>
     </div>
   );

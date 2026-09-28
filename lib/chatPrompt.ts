@@ -34,7 +34,11 @@ export interface ChatPromptSettings {
   presetSamplers: boolean;
   /** Number the messages as SillyTavern does: #0 is the greeting. */
   showMessageIds: boolean;
+  /** How the chat shows avatars, as SillyTavern's choice does. */
+  avatarShape: AvatarShape;
 }
+
+export type AvatarShape = 'circle' | 'square' | 'rectangle' | 'none';
 
 export const DEFAULT_CHAT_SETTINGS: ChatPromptSettings = {
   userName: 'User',
@@ -50,6 +54,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatPromptSettings = {
   presetId: null,
   presetSamplers: true,
   showMessageIds: true,
+  avatarShape: 'circle',
 };
 
 export const DEFAULT_IMPERSONATION =

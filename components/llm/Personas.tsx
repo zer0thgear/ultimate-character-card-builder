@@ -7,6 +7,7 @@ import { useLlmStore } from '@/store/llmStore';
 import { useChatStore } from '@/store/chatStore';
 import { api } from '@/lib/api';
 import type { Persona } from '@/types/project';
+import type { AvatarShape } from '@/lib/chatPrompt';
 import { AutoTextarea, Button, IconButton, TokenBadge, confirmDialog, cx, inputClass, pickFiles } from '@/components/ui';
 import { parseStPersonas, samePersona, PersonaImportError } from '@/lib/stPersonas';
 
@@ -66,10 +67,19 @@ async function importFromFolder() {
 // Settings → Personas; picked (and optionally locked to a chat) from the
 // chat itself.
 
-export function PersonaAvatar({ persona, size = 36 }: { persona?: Persona | null; size?: number }) {
+/** An avatar's frame: a circle, a rounded square, or a 2:3 portrait. */
+export function avatarFrame(shape: Exclude<AvatarShape, 'none'>, size: number): { className: string; style: React.CSSProperties } {
+  return {
+    className: shape === 'circle' ? 'rounded-full' : 'rounded-md',
+    style: { width: size, height: shape === 'rectangle' ? Math.round(size * 1.5) : size },
+  };
+}
+
+export function PersonaAvatar({ persona, size = 36, shape = 'circle' }: { persona?: Persona | null; size?: number; shape?: Exclude<AvatarShape, 'none'> }) {
   const url = persona ? api.personaAvatarUrl(persona) : null;
+  const frame = avatarFrame(shape, size);
   return (
-    <div className="flex flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-sky-500/20 text-xs text-sky-300" style={{ width: size, height: size }}>
+    <div className={cx('flex flex-shrink-0 items-center justify-center overflow-hidden bg-sky-500/20 text-xs text-sky-300', frame.className)} style={frame.style}>
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={url} alt="" className="h-full w-full object-cover object-top" />

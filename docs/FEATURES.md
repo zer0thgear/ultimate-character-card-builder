@@ -62,6 +62,7 @@ Search is GenBrowser's: comma-separated terms, all required; `-term` excludes; `
 - The **greeting is read live from the card**: edit it and the chat shows the edit. Swipe ‹ › through every greeting.
 - **Swipes** on the last reply (› generates another), **Regenerate**, **Continue**, edit or delete any message, or cut the chat after one.
 - **Message numbers**, as SillyTavern shows them: #0 is the greeting, #1 your first message, and so on, on each message's bottom line (beside the swipes on the last reply). Chat settings → Show message numbers turns them off.
+- **Avatars** as circles, squares, rectangles (2:3 portraits, which suit card art) or not at all, as SillyTavern lets you choose: Chat settings → Avatars. It's shared by every device, like the other chat settings.
 - **⤢ Full window** (in the chat's top row, not on a phone, where the chat is a screen of its own already): the chat fills the window, the card and the card list make way, and the messages take 80% of its width, centred; the slider beside ⤡ sets that from 40% to 100%. ⤡ puts things back. It only applies while the Test chat tab is open: other dock tabs show beside the card as usual, and it's remembered on this device.
 - Reasoning from thinking models is shown folded, apart from the reply.
 - Messages show *actions* in italics, **bold**, and "speech" highlighted, nested either way: italics inside quotes keep the speech's colour, as in SillyTavern. Pictures embedded in the greeting or messages, as `![alt](url)` or `<img src="url">`, are shown (web and inline images only).
