@@ -28,7 +28,11 @@ export const FIELD_ACTIONS: { value: FieldAction; label: string; hint: string }[
 
 const WRITER = `You are an expert character card writer helping a creator build a roleplay character card (the SillyTavern / Chub "Tavern card" format). You write vivid, specific, well-structured prose, match the card's established voice and formatting conventions (for example *actions in asterisks* and "quoted speech" if the card uses them), and keep {{char}} and {{user}} macros exactly as written. You never add commentary, headings or quotation marks around your answer unless the field itself calls for them.`;
 
-const TAG_RULES = `NovelAI's image models are prompted with Danbooru-style tags: lowercase, comma-separated, most important first, using real Danbooru tag names (e.g. "long hair", "blue eyes", "hair between eyes", "black thighhighs", "looking at viewer"). Use {tag} to emphasise and [tag] to de-emphasise only when it matters. No sentences, no names of the character, no quality tags like "masterpiece", and no artist or art-style tags: the style has its own field. Two exceptions go first when they apply: "nsfw" if the image should show nudity or sexual content, and "fur dataset" if the character is anthro or furry (an animal-person, not a human with animal ears or a tail).`;
+const TAG_RULES = `NovelAI's image models are prompted with Danbooru-style tags: lowercase, comma-separated, most important first, using real Danbooru tag names (e.g. "long hair", "blue eyes", "hair between eyes", "black thighhighs", "looking at viewer"). Use {tag} to emphasise and [tag] to de-emphasise only when it matters. No sentences, no quality tags like "masterpiece", and no artist or art-style tags: the style has its own field.
+
+Character tags: when a character is clearly an established one from an existing franchise (the card names them or plainly describes them), use their Danbooru character tag and their series' copyright tag, e.g. "princess peach, super mario bros." or "hatsune miku, vocaloid", right after "girl"/"boy"/"other" (or the count tags). The model knows them, so don't hold back; keep the look tags that matter too, especially where the card's version differs (a new outfit, say). Original characters get no name tags, only their look.
+
+Two special tags go first when they apply: "nsfw" if the image should show nudity or sexual content, and "fur dataset" if the character is anthro or furry (an animal-person, not a human with animal ears or a tail).`;
 
 export interface AssistTemplate {
   key: string;
