@@ -41,6 +41,9 @@ export function ChatPanel() {
   const keyboard = useKeyboard((s) => s.open);
   const full = useUiStore((s) => s.chatFull) && !phone;
   const setFull = useUiStore((s) => s.setChatFull);
+  const { chatFullWidth, setChatFullWidth } = useUiStore();
+  /** The full-window column: a share of the window, centred. */
+  const column = full ? { className: 'mx-auto w-full', style: { maxWidth: `${Math.round(chatFullWidth * 100)}%` } } : {};
   const connection = connections.find((c) => c.id === chatConnectionId) ?? null;
   const pending = useBridgeStore((s) => s.chatGreeting);
   const clearPending = useBridgeStore((s) => s.clearChat);
@@ -304,6 +307,19 @@ export function ChatPanel() {
               <IconButton title="Chat settings: connection, persona, prompt" onClick={() => setShowSettings(!showSettings)}>
                 ⚙
               </IconButton>
+              {full && (
+                <input
+                  type="range"
+                  min={40}
+                  max={100}
+                  step={5}
+                  value={Math.round(chatFullWidth * 100)}
+                  onChange={(e) => setChatFullWidth(Number(e.target.value) / 100)}
+                  title={`Message width: ${Math.round(chatFullWidth * 100)}% of the window`}
+                  aria-label="Message width"
+                  className="w-20 accent-violet-500"
+                />
+              )}
               <IconButton title={full ? 'Back to the card and the chat side by side' : 'Fill the window with the chat (hides the card)'} onClick={() => setFull(!full)}>
                 {full ? '⤡' : '⤢'}
               </IconButton>
@@ -325,7 +341,7 @@ export function ChatPanel() {
               </Button>
             </div>
           ) : (
-            <div className={cx('flex flex-col gap-3', full && 'mx-auto w-full max-w-6xl')}>
+            <div className={cx('flex flex-col gap-3', column.className)} style={column.style}>
               <GreetingBubble card={card} index={chat.greeting} count={greetingCount} onSwipe={setGreeting} userName={me.name} showId={showIds} />
               {chat.messages.map((m, i) => (
                 <div key={m.id} data-msg={m.id}>
@@ -364,7 +380,7 @@ export function ChatPanel() {
 
       {chat && (
         <div className="flex-shrink-0 border-t border-slate-800 p-2">
-          <div className={cx(full && 'mx-auto w-full max-w-6xl')}>
+          <div className={column.className} style={column.style}>
           <AutoTextarea
             value={input}
             onChange={(e) => setInput(e.target.value)}

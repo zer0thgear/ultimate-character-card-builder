@@ -34,6 +34,9 @@ interface UiState {
    *  only while the Chat tab is showing, and not on a phone. */
   chatFull: boolean;
   setChatFull: (full: boolean) => void;
+  /** How much of the window a full-window chat's messages take, 0.4–1. */
+  chatFullWidth: number;
+  setChatFullWidth: (w: number) => void;
   showAvatar: boolean;
   setShowAvatar: (show: boolean) => void;
   /** Keep NovelAI's generation metadata in exported card PNGs. */
@@ -71,6 +74,8 @@ export const useUiStore = create<UiState>()(
       sidebarOpen: true,
       chatFull: false,
       setChatFull: (chatFull) => set({ chatFull }),
+      chatFullWidth: 0.8,
+      setChatFullWidth: (w) => set({ chatFullWidth: Math.min(1, Math.max(0.4, w)) }),
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
       showAvatar: true,
       setShowAvatar: (showAvatar) => set({ showAvatar }),
