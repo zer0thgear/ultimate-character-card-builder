@@ -15,6 +15,8 @@ import { AutoTextarea, Button, IconButton, Modal, TokenBadge, Toggle, confirmDia
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { PresetPicker } from '@/components/llm/PresetManager';
 import { PersonaAvatar, PersonaPicker, avatarFrame } from '@/components/llm/Personas';
+import { openLightbox } from '@/components/Lightbox';
+import { api } from '@/lib/api';
 import { resolvePersona, usePersonaStore } from '@/store/personaStore';
 import { openSettings } from '@/components/SettingsDialog';
 import { useMediaQuery, PHONE_QUERY } from '@/hooks/useMediaQuery';
@@ -457,15 +459,24 @@ function renderNodes(nodes: FormatNode[]): React.ReactNode {
 function Avatar({ role, persona }: { role: 'user' | 'assistant' | 'system'; persona?: Persona | null }) {
   const project = useProjectStore((s) => s.project);
   const shape = useLlmStore((s) => s.chatSettings.avatarShape) ?? 'circle';
-  const url = project?.avatar ? `/api/projects/${project.id}/avatar?v=${project.avatar.version}` : null;
   if (shape === 'none') return null;
-  if (role === 'user') return <PersonaAvatar persona={persona} shape={shape} />;
+  // Tapping a picture shows it full size.
+  const url = role === 'user' ? (persona ? api.personaAvatarUrl(persona) : null) : project?.avatar ? `/api/projects/${project.id}/avatar?v=${project.avatar.version}` : null;
   const frame = avatarFrame(shape, 36);
+  const face =
+    role === 'user' ? (
+      <PersonaAvatar persona={persona} shape={shape} />
+    ) : (
+      <div className={cx('flex-shrink-0 overflow-hidden bg-slate-800', frame.className)} style={frame.style}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {url && <img src={url} alt="" className="h-full w-full object-cover object-top" />}
+      </div>
+    );
+  if (!url) return face;
   return (
-    <div className={cx('flex-shrink-0 overflow-hidden bg-slate-800', frame.className)} style={frame.style}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      {url && <img src={url} alt="" className="h-full w-full object-cover object-top" />}
-    </div>
+    <button type="button" onClick={() => openLightbox(url)} title="Show full size" className={cx('flex-shrink-0 cursor-zoom-in self-start', frame.className)}>
+      {face}
+    </button>
   );
 }
 
