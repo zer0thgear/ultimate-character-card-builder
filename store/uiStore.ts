@@ -30,6 +30,10 @@ interface UiState {
   setDockWidth: (w: number) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+  /** The test chat fills the window (the card and the list make way);
+   *  only while the Chat tab is showing, and not on a phone. */
+  chatFull: boolean;
+  setChatFull: (full: boolean) => void;
   showAvatar: boolean;
   setShowAvatar: (show: boolean) => void;
   /** Keep NovelAI's generation metadata in exported card PNGs. */
@@ -65,6 +69,8 @@ export const useUiStore = create<UiState>()(
       dockWidth: 0.45,
       setDockWidth: (w) => set({ dockWidth: Math.min(0.75, Math.max(0.25, w)) }),
       sidebarOpen: true,
+      chatFull: false,
+      setChatFull: (chatFull) => set({ chatFull }),
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
       showAvatar: true,
       setShowAvatar: (showAvatar) => set({ showAvatar }),

@@ -27,6 +27,7 @@ export function Shell() {
   const project = useProjectStore((s) => s.project);
   const loading = useProjectStore((s) => s.loading);
   const { sidebarOpen, setSidebarOpen, dockWidth, setDockWidth, phoneView } = useUiStore();
+  const chatFull = useUiStore((s) => s.chatFull && s.dockTab === 'chat');
   const workspace = useRef<HTMLDivElement>(null);
   // Phones get one screen at a time with a bottom bar, and the card list
   // as a drawer, as NovelFrontEnd's phone layout does.
@@ -120,7 +121,7 @@ export function Shell() {
       {/* Typing on a phone, the header and bottom bar make way for the text. */}
       {!(phone && keyboard) && <Header phone={phone} onMenu={() => (phone ? setDrawer(true) : setSidebarOpen(!sidebarOpen))} />}
       <div className="flex min-h-0 flex-1">
-        {!phone && sidebarOpen && <ProjectSidebar />}
+        {!phone && sidebarOpen && !(chatFull && project) && <ProjectSidebar />}
         <div ref={workspace} className="flex min-w-0 flex-1">
           {project && phone ? (
             // Both stay mounted, so a generation or a reply carries on
@@ -135,10 +136,12 @@ export function Shell() {
             </>
           ) : project ? (
             <>
-              <main className="min-w-0 border-r border-slate-800" style={{ width: `${(1 - dockWidth) * 100}%` }}>
+              {/* A full-window chat hides the card (kept mounted, so it
+                  comes back as it was). */}
+              <main className="min-w-0 border-r border-slate-800" style={{ width: `${(1 - dockWidth) * 100}%` }} hidden={chatFull}>
                 <CardEditor />
               </main>
-              <div onPointerDown={startResize} className="w-1 flex-shrink-0 cursor-col-resize bg-slate-900 hover:bg-violet-500/50" title="Drag to resize" />
+              {!chatFull && <div onPointerDown={startResize} className="w-1 flex-shrink-0 cursor-col-resize bg-slate-900 hover:bg-violet-500/50" title="Drag to resize" />}
               <aside className="min-w-0 flex-1">
                 <Dock />
               </aside>

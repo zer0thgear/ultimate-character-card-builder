@@ -5,7 +5,7 @@ import { useProjectStore } from '@/store/projectStore';
 import { useChatStore } from '@/store/chatStore';
 import { useLlmStore } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
-import { toast } from '@/store/uiStore';
+import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
 import { buildChatPrompt, displayText, greetingText, messageText, newMessage, type BuildOptions, type BuiltPrompt } from '@/lib/chatPrompt';
 import { buildPresetPrompt } from '@/lib/presetPrompt';
@@ -39,6 +39,8 @@ export function ChatPanel() {
   const personas = usePersonaStore((s) => s.personas);
   const phone = useMediaQuery(PHONE_QUERY);
   const keyboard = useKeyboard((s) => s.open);
+  const full = useUiStore((s) => s.chatFull) && !phone;
+  const setFull = useUiStore((s) => s.setChatFull);
   const connection = connections.find((c) => c.id === chatConnectionId) ?? null;
   const pending = useBridgeStore((s) => s.chatGreeting);
   const clearPending = useBridgeStore((s) => s.clearChat);
@@ -302,6 +304,9 @@ export function ChatPanel() {
               <IconButton title="Chat settings: connection, persona, prompt" onClick={() => setShowSettings(!showSettings)}>
                 ⚙
               </IconButton>
+              <IconButton title={full ? 'Back to the card and the chat side by side' : 'Fill the window with the chat (hides the card)'} onClick={() => setFull(!full)}>
+                {full ? '⤡' : '⤢'}
+              </IconButton>
             </div>
           )}
         </div>
@@ -320,7 +325,7 @@ export function ChatPanel() {
               </Button>
             </div>
           ) : (
-            <div className="flex flex-col gap-3">
+            <div className={cx('flex flex-col gap-3', full && 'mx-auto w-full max-w-3xl')}>
               <GreetingBubble card={card} index={chat.greeting} count={greetingCount} onSwipe={setGreeting} userName={me.name} showId={showIds} />
               {chat.messages.map((m, i) => (
                 <div key={m.id} data-msg={m.id}>
@@ -359,6 +364,7 @@ export function ChatPanel() {
 
       {chat && (
         <div className="flex-shrink-0 border-t border-slate-800 p-2">
+          <div className={cx(full && 'mx-auto w-full max-w-3xl')}>
           <AutoTextarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -396,6 +402,7 @@ export function ChatPanel() {
                 Last prompt · {lastPrompt.lore.active.length} lore
               </button>
             )}
+          </div>
           </div>
         </div>
       )}
