@@ -115,7 +115,7 @@ export interface AppConfig {
   autoSaveGens: boolean;
   /** Put saved gens in a subfolder named after the card. */
   outputPerCard: boolean;
-  /** Folders the gen library browses (GenBrowser's library/, downloads…). */
+  /** Folders the gen library browses (old gens, downloads…). */
   libraryFolders: string[];
   /** Let devices on the home network in, not only this computer and
    *  Tailscale devices (see server.mjs). */

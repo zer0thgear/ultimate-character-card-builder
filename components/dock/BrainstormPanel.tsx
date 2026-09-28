@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element -- thumbnails are data: and blob: URLs, which next/image can't optimise */
 
 import { useEffect, useRef, useState } from 'react';
 import { create } from 'zustand';

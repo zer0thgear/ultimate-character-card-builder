@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { a1111Payload, builtInWorkflow, composeBackendPrompts, describeSlots, fillComfyWorkflow, findComfySlots, parseComfyWorkflow } from '@/lib/imageBackends';
+import { a1111Payload, builtInWorkflow, composeBackendPrompts, describeSlots, fillComfyWorkflow, findComfySlots, parseComfyWorkflow, unfilledPlaceholders } from '@/lib/imageBackends';
 import { appearanceTagsMessages, setArtBackend } from '@/lib/assist';
 import { newCard } from '@/lib/cardSpec';
 import type { BackendGenRequest, ComfyWorkflow } from '@/types/imageBackend';
@@ -93,5 +93,14 @@ describe('the art writers follow the backend', () => {
     expect(sd).toContain('Use (tag:1.2) to emphasise');
     expect(sd).not.toContain('fur dataset');
     setArtBackend('novelai');
+  });
+});
+
+describe('ComfyUI placeholders with nothing to fill', () => {
+  it('are left for the server to report, not filled with blanks', () => {
+    const wf: ComfyWorkflow = { '1': { class_type: 'KSampler', inputs: { sampler_name: '%sampler%', seed: '%seed%' } } };
+    const out = fillComfyWorkflow(wf, { ...req, sampler: '' });
+    expect(out['1'].inputs).toEqual({ sampler_name: '%sampler%', seed: 42 });
+    expect(unfilledPlaceholders(out)).toEqual(['sampler']);
   });
 });

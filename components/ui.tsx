@@ -5,7 +5,7 @@ import { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState, 
 import { createPortal } from 'react-dom';
 import { formatTokens, useTextTokens } from '@/lib/textTokens';
 
-// Small shared building blocks, in the slate/violet look NovelFrontEnd uses.
+// Small shared building blocks, in UCCB's slate/violet look.
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 export { cx };

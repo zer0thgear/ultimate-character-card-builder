@@ -5,7 +5,7 @@ import { isV3Model } from '@/lib/imageRequest';
 
 // NovelAI's client sends every request image through one preparation step
 // (confirmed 2026-09-18 from its bundle, and by running that step and its
-// resizer in its own page against this code; see docs/REVERSE_ENGINEERING.md):
+// resizer in its own page against this code):
 //   1. decode the image exactly;
 //   2. if it carries stealth metadata, alpha 254 → 255 and 1 → 0;
 //   3. resize it to the request's size, if different: Pica's lanczos3 for

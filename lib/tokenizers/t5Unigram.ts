@@ -3,7 +3,7 @@
 // NovelAI's and are kept deliberately: emphasis syntax is stripped first, each
 // run of whitespace becomes its own "▁"-prefixed word (so a leading or trailing
 // space costs a token), the lattice walks UTF-16 code units, and the end-of-
-// text token is included. See docs/REVERSE_ENGINEERING.md.
+// text token is included.
 
 export interface T5Vocab {
   unkId: number;

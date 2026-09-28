@@ -14,8 +14,8 @@ import { openLightbox } from '@/components/Lightbox';
 import { openVisionWrite } from '@/components/VisionWriteDialog';
 import { ExtensionImageActions } from '@/components/ExtensionSlots';
 
-// Older gens, from any folders set in Settings (GenBrowser's library, a
-// downloads folder…), searchable by prompt like GenBrowser: for
+// Older gens, from any folders set in Settings (an old gens folder, a
+// downloads folder…), searchable by prompt: for
 // inspiration, reusing a prompt, or picking an existing picture.
 
 const PAGE = 120;
@@ -121,7 +121,7 @@ export function LibraryPanel() {
     return (
       <div className="p-4">
         <Empty>
-          Point the library at folders of gens (GenBrowser&apos;s <code>library</code> folder, your downloads…) to browse and search them here.
+          Point the library at folders of gens (wherever you keep them, your downloads…) to browse and search them here.
           <div className="mt-3">
             <Button variant="primary" onClick={() => openSettings('folders')}>
               Add folders

@@ -2,7 +2,7 @@
 // for V3. Its preprocessing is kept exactly: `[]{}` become spaces, HTML
 // entities are decoded (twice, by the same `html-entities` library), runs of
 // whitespace collapse, and everything is lowercased. Weight syntax is not
-// stripped and no start/end tokens are counted. See docs/REVERSE_ENGINEERING.md.
+// stripped and no start/end tokens are counted.
 
 // CLIP's word split (openai/CLIP simple_tokenizer), as NovelAI writes it.
 const WORDS = /<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+/giu;

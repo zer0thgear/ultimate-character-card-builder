@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config';
 
 // The tests cover lib/ — the pure modules that encode how NovelAI behaves.
 // Anything needing a canvas, the network or a React tree is checked in the
-// browser instead; see docs/REVERSE_ENGINEERING.md.
+// browser instead.
 const local = (file: string, fallback: string) => fileURLToPath(new URL(`./${existsSync(new URL(`./${file}`, import.meta.url)) ? file : fallback}`, import.meta.url));
 
 export default defineConfig({

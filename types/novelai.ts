@@ -159,8 +159,8 @@ export interface NovelAIParameters {
   /** V5 (transparency-capable) only; NovelAI's default setting is `true`. */
   straight_alpha?: boolean;
   /** Never sent. NovelAI's client dropped it for `qualityPresetId`, and
-   *  sending `true` measurably changes the image (see
-   *  docs/REVERSE_ENGINEERING.md). Older images' metadata may still carry it. */
+   *  sending `true` measurably changes the image. Older images' metadata
+   *  may still carry it. */
   qualityToggle?: boolean;
   /** SMEA. Sent for V3 only (and as false on image edits), as NovelAI does. */
   sm?: boolean;

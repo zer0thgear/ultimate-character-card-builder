@@ -192,8 +192,14 @@ export function fillComfyWorkflow(wf: ComfyWorkflow, r: BackendGenRequest): Comf
   }
   if (r.checkpoint) set(slots.checkpoint, 'ckpt_name', r.checkpoint);
   const values: Record<string, unknown> = { prompt: r.prompt, negative: r.negative, seed: r.seed, steps: r.steps, cfg: r.cfg, width: r.width, height: r.height, sampler: r.sampler, scheduler: r.scheduler, checkpoint: r.checkpoint };
-  for (const p of slots.placeholders) out[p.node].inputs[p.input] = values[p.name];
+  // Blank ones (no sampler picked, say) stay, for unfilledPlaceholders.
+  for (const p of slots.placeholders) if (values[p.name] !== '' && values[p.name] !== undefined) out[p.node].inputs[p.input] = values[p.name];
   return out;
+}
+
+/** The %placeholders% still in a filled workflow: ones with nothing to put there. */
+export function unfilledPlaceholders(wf: ComfyWorkflow): string[] {
+  return [...new Set(findComfySlots(wf).placeholders.map((p) => p.name))];
 }
 
 /** Reads a workflow file: ComfyUI's API format. The UI format (what plain

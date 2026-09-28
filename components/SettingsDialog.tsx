@@ -221,7 +221,7 @@ function FoldersTab() {
         <Toggle checked={config.autoSaveGens} onChange={(autoSaveGens) => void update({ autoSaveGens })} disabled={!config.outputDir} label="Save every gen as it arrives" />
       </Row>
       <RecentGensRow />
-      <Row label="Gen library folders" hint="Folders the Library tab browses: GenBrowser's library, a downloads folder, the output folder… Subfolders are included.">
+      <Row label="Gen library folders" hint="Folders the Library tab browses: an old gens folder, a downloads folder, the output folder… Subfolders are included.">
         {config.libraryFolders.map((f) => (
           <div key={f} className="flex items-center gap-2 rounded-md bg-slate-950 px-2.5 py-1.5 text-sm">
             <span className="min-w-0 flex-1 truncate text-slate-300" title={f}>

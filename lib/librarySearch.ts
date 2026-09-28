@@ -1,6 +1,6 @@
 import type { GenInfo } from '@/lib/genMetadata';
 
-// The gen library's search, after GenBrowser's: comma separated like a
+// The gen library's search: comma separated like a
 // prompt, every term required, `-` negates, `|` means "either" within a
 // term. Field prefixes narrow a term:
 //   char:elf   neg:blurry   model:v4.5   seed:123   file:foo   folder:bar
@@ -41,7 +41,7 @@ function countMatcher(expr: string): ((n: number) => boolean) | null {
   return null;
 }
 
-/** A model's short code as GenBrowser names them: v3, v4, v4.5, v5… */
+/** A model's short code: v3, v4, v4.5, v5… */
 export function modelCode(model: string | undefined): string {
   const m = lower(model).match(/v(\d+(?:\.\d+)?)/);
   return m ? `v${m[1]}` : '';

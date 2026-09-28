@@ -178,7 +178,7 @@ function PromptForm() {
     }
   };
 
-  // Ctrl+Enter generates from anywhere in the form, as in NovelFrontEnd.
+  // Ctrl+Enter generates from anywhere in the form.
   const runRef = useRef(run);
   useEffect(() => {
     runRef.current = run;
@@ -599,7 +599,8 @@ function SceneSection({ text, onChange, model, apiKey, meter }: { text: string; 
   const placeCharacters = useSettingsStore((s) => s.placeCharacters);
   const setForm = useSettingsStore((s) => s.set);
   // V3 has no character prompts; other backends get them appended.
-  const castModel = activeImageConnection()?.kind === 'novelai' || !activeImageConnection() ? !isV3Model(model) : true;
+  const naiNow = (activeImageConnection()?.kind ?? 'novelai') === 'novelai';
+  const castModel = naiNow ? !isV3Model(model) : true;
 
   const fromText = async (scene: string) => {
     if (!card) return;
@@ -617,7 +618,8 @@ function SceneSection({ text, onChange, model, apiKey, meter }: { text: string; 
     }
     // V4 and later: the main prompt and a prompt for each character in it.
     const form = useSettingsStore.getState();
-    const place = form.placeCharacters;
+    // Positions are NovelAI's; elsewhere the characters are just appended.
+    const place = naiNow && form.placeCharacters;
     const [messages, opts] = artRequest(castSceneMessages(card, scene, artNote(), form.characters.filter((c) => !c.archived), place));
     const r = await runAssist(messages, undefined, '✨ Scene prompt', opts);
     if (r.error) return toast(r.error, 'error');
@@ -665,7 +667,7 @@ function SceneSection({ text, onChange, model, apiKey, meter }: { text: string; 
           )}
           {pickOpen && (
             <div className="absolute right-0 z-30 mt-1 max-h-72 w-72 overflow-y-auto rounded-md border border-slate-700 bg-slate-900 p-1 shadow-xl" onMouseLeave={() => setPickOpen(false)}>
-              {castModel && (
+              {castModel && naiNow && (
                 <div className="border-b border-slate-800 px-2 pt-1 pb-2" title="Also place each character on NovelAI's grid (turns Positions on). Off, NovelAI decides where they go.">
                   <Toggle checked={placeCharacters} onChange={(v) => setForm('placeCharacters', v)} label={<span className="text-xs">Place characters too</span>} />
                 </div>

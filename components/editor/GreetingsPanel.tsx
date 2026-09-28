@@ -14,9 +14,9 @@ import { AssistReasoning } from '@/components/llm/AssistTrace';
 import { ReferenceTray, referenceConnectionId, useReferences } from '@/components/llm/References';
 import { withReferences } from '@/lib/references';
 
-// First message, alternate greetings and group-only greetings, with the
-// reordering and promoting tavern-card-editor had, plus test-chat and
-// illustrate shortcuts per greeting.
+// First message, alternate greetings and group-only greetings, with
+// reordering and promoting, plus test-chat and illustrate shortcuts per
+// greeting.
 
 type ListKey = 'alternate_greetings' | 'group_only_greetings';
 

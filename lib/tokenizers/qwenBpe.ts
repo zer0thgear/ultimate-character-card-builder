@@ -1,7 +1,6 @@
 // Counts Qwen 3.5 (byte-level BPE) tokens, the tokenizer NovelAI's prompt
 // counter uses for V5. Unlike its T5 counter, NovelAI counts V5 text as
 // written: emphasis syntax is not stripped and no end-of-text token is added.
-// See docs/REVERSE_ENGINEERING.md.
 
 // Qwen's pre-tokenizer pattern, with `\s` spelled out as Unicode White_Space
 // (what the original Rust regex means by it; JS's `\s` differs slightly) and

@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* NovelFrontEnd's variants (its ported canvas uses them), and UCCB's
+/* Touch and screen-shape variants (the canvas editor uses them), and the
    phone layout: one screen with a bottom bar on narrow screens and on a
    phone turned on its side. Keep PHONE_QUERY in hooks/useMediaQuery.ts
    the same. */
@@ -9,8 +9,7 @@
 @custom-variant wide (@media (min-width: 768px) and (not ((max-height: 500px) and (pointer: coarse))));
 @custom-variant short (@media (max-height: 500px) and (pointer: coarse));
 
-/* Dark is the default and is designed in Tailwind's slate scale (as
-   NovelFrontEnd's components are). Light mode flips the slate scale end
+/* Dark is the default and is designed in Tailwind's slate scale. Light mode flips the slate scale end
    for end, so every slate-950 background becomes slate-50 and every
    slate-200 text becomes slate-800 without touching a component; accent
    text shades are darkened to keep their contrast on white. */

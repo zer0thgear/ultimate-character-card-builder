@@ -4,8 +4,8 @@ import { joinPromptParts } from '@/lib/promptText';
 // Quality Tags / UC Preset literal text, per model, and how NovelAI splices it
 // into a request. The text and the rules both match NovelAI's own web client
 // (its bundled preset tables and request builder, read 2026-09-18), which
-// differs from docs.novelai.net in places; see docs/REVERSE_ENGINEERING.md,
-// "Quality Tags / UC Presets". Its token counter composes the same way.
+// differs from docs.novelai.net in places. Its token counter composes the
+// same way.
 
 export type ModelFamily = 'v5' | 'v45full' | 'v45curated' | 'v4full' | 'v4curated' | 'v3anime' | 'v3furry';
 

@@ -14,8 +14,8 @@ import { QualityLevel, UcLevel } from '@/lib/naiPresets';
 import { serverStorage } from '@/lib/serverSettings';
 import type { ImageConnection } from '@/types/imageBackend';
 
-// The image generator's settings, in the same shape as NovelFrontEnd's so
-// its request builder (lib/imageRequest.ts) works unchanged. The prompt
+// The image generator's settings, in the shape the request builder
+// (lib/imageRequest.ts) reads. The prompt
 // fields (base prompts, characters, negative) belong to the open card and
 // are swapped in and out with it (see store/projectStore.ts); the rest are
 // global, kept on the server so every device shares them (lib/serverSettings.ts).

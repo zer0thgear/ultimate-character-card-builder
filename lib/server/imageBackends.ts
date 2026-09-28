@@ -1,7 +1,7 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import type { BackendGenRequest, BackendOptions, ImageConnection } from '@/types/imageBackend';
-import { a1111Payload, builtInWorkflow, fillComfyWorkflow } from '@/lib/imageBackends';
+import { a1111Payload, builtInWorkflow, fillComfyWorkflow, unfilledPlaceholders } from '@/lib/imageBackends';
 import { isPng, readTextChunks, replaceTextChunks } from '@/lib/png';
 import { BadRequestError } from '@/lib/server/storage';
 
@@ -124,6 +124,8 @@ async function comfyGenerate(c: BackendConnection, r: BackendGenRequest): Promis
     if (!checkpoints.length) throw new Error('ComfyUI has no checkpoints (models/checkpoints is empty).');
     workflow['4'].inputs.ckpt_name = checkpoints[0];
   }
+  const left = unfilledPlaceholders(workflow);
+  if (left.length) throw new BadRequestError(`The workflow wants ${left.map((n) => `%${n}%`).join(', ')}, but none is set: pick ${left.join(' and ')} in the Image tab.`);
   const queued = await call(c, '/prompt', { method: 'POST', body: JSON.stringify({ prompt: workflow, client_id: randomUUID() }) });
   const { prompt_id, node_errors } = await json<{ prompt_id: string; node_errors?: Record<string, { errors?: { message: string; details?: string }[]; class_type?: string }> }>(queued);
   const nodeError = Object.values(node_errors ?? {})[0];
@@ -139,7 +141,9 @@ async function comfyGenerate(c: BackendConnection, r: BackendGenRequest): Promis
       const err = run.status.messages?.find(([kind]) => kind === 'execution_error')?.[1];
       throw new Error(`ComfyUI failed${err?.node_type ? ` in ${err.node_type}` : ''}: ${err?.exception_message?.trim() || 'see its console'}`);
     }
-    if (!run.status?.completed && !run.outputs) continue;
+    // History is written as the run ends, but go by its status when it has
+    // one, so a preview partway through isn't taken for the result.
+    if (run.status ? !run.status.completed : !run.outputs) continue;
     const files = Object.values(run.outputs ?? {}).flatMap((o) => o.images ?? []);
     if (!files.length) {
       if (run.status?.completed) throw new Error('The workflow finished without an image. Does it end in a Save Image or Preview Image node?');

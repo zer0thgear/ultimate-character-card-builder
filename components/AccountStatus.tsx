@@ -6,7 +6,7 @@ import type { NovelAISubscription } from '@/types/novelai';
 import { cx } from '@/components/ui';
 
 // The NovelAI account at a glance: Anlas, and for Opus, how much of the free
-// V5 allowance is left. Ported from NovelFrontEnd's AccountStatusBar.
+// V5 allowance is left.
 
 // NovelAI's own estimates, from its client: each 1% of the Opus allowance is
 // about 17.3 images (so ~1,730 when full), and `timeUntilNextPercent` is how

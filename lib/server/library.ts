@@ -16,7 +16,7 @@ import type { LibraryItem } from '@/lib/librarySearch';
 const INDEX_FILE = path.join(DATA_DIR, 'library-index.json');
 const THUMBS = path.join(DATA_DIR, 'thumbs');
 const IMAGE_EXTS = new Set(['.png', '.webp', '.jpg', '.jpeg']);
-/** GenBrowser's own trash, and folders nobody wants browsed. */
+/** Trash and import leftovers, and folders nobody wants browsed. */
 const SKIP_DIRS = new Set(['_Trash', 'node_modules', '.git', '_imported_zips']);
 const THUMB_SIZE = 384;
 /** Stealth metadata is read from the pixels; past this size it isn't tried. */

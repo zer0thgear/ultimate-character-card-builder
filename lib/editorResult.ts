@@ -1,6 +1,5 @@
 // What the Edit / Inpaint canvas hands back, and how it becomes the image
-// panel's Image2Image base. Ported from NovelFrontEnd's lib/editorResult.ts;
-// the base type lives here rather than in a store.
+// panel's Image2Image base. The base type lives here rather than in a store.
 
 export type EditorMode = 'paint' | 'mask';
 

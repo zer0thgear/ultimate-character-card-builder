@@ -2,8 +2,7 @@ import { readTextChunks, type TextChunk } from '@/lib/png';
 
 // Generation details read from an image's metadata, normalized across
 // NovelAI (its `Comment` JSON, or the same JSON hidden in the alpha
-// channel) and A1111-style `parameters` text. Ported from GenBrowser's
-// metadata.py. Pure, so the gen library (server) and drag-and-drop
+// channel) and A1111-style `parameters` text. Pure, so the gen library (server) and drag-and-drop
 // (browser) share it.
 
 export interface GenInfo {

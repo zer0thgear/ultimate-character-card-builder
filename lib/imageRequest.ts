@@ -26,8 +26,8 @@ import {
 // Copies, sweeps and img2img), Enhance, Inpaint, Edit and Variations. Each
 // flow supplies only what's specific to it; everything else lives here once.
 // Fields mirror what NovelAI's own client sends (captured from novelai.net,
-// 2026-09-18), and main Generate matches its images exactly (see
-// docs/REVERSE_ENGINEERING.md). Change fields only against a fresh capture:
+// 2026-09-18), and main Generate matches its images exactly. Change fields
+// only against a fresh capture:
 // some that look inert aren't (sending `qualityToggle` changed the image).
 
 export const randomSeed = () => Math.floor(Math.random() * 4294967295);

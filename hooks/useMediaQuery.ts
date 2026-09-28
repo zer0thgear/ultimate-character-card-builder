@@ -22,5 +22,5 @@ export function useMediaQuery(query: string): boolean {
 
 /** Where the layout becomes one screen with a bottom bar: the `phone`
  *  variant in app/globals.css (narrow screens, and short touch screens).
- *  The same query as NovelFrontEnd's, so its ported canvas lays out right. */
+ *  The canvas editor lays out by the same query. */
 export const PHONE_QUERY = '(max-width: 767.98px) or ((max-height: 500px) and (pointer: coarse))';

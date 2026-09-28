@@ -12,7 +12,7 @@ import { MODELS } from '@/lib/models';
 import { SAMPLERS } from '@/lib/samplers';
 import { uuid } from '@/lib/uuid';
 
-// One Generate's request, built the way NovelFrontEnd's PromptForm builds
+// One Generate's request, built the way novelai.net's own client builds
 // it, so gens here match novelai.net's: a plain generation, Image2Image
 // from a base, or an inpaint when the base has a mask.
 

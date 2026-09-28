@@ -31,7 +31,7 @@ export function Shell() {
   const chatFull = useUiStore((s) => s.chatFull && s.dockTab === 'chat');
   const workspace = useRef<HTMLDivElement>(null);
   // Phones get one screen at a time with a bottom bar, and the card list
-  // as a drawer, as NovelFrontEnd's phone layout does.
+  // as a drawer.
   const phone = useMediaQuery(PHONE_QUERY);
   const [drawer, setDrawer] = useState(false);
   const keyboard = useKeyboard((s) => s.open);
