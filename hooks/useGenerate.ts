@@ -8,6 +8,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { NovelAIGenerateRequest, PromptSource, SweepCellInfo, WildcardPicks } from '@/types/novelai';
 import { imageBlob, type SessionImage as GeneratedImage } from '@/store/sessionStore';
 import { uuid } from '@/lib/uuid';
+import type { BackendGenRequest, ImageConnection } from '@/types/imageBackend';
 
 interface GenerateOptions {
   /** If this generation is an enhancement, the source image's ID and a fresh object URL. */
@@ -33,6 +34,10 @@ interface GenerateOptions {
 interface UseGenerateReturn {
   /** The images added to the session, or null if the request failed. */
   generate: (request: NovelAIGenerateRequest, opts?: GenerateOptions) => Promise<GeneratedImage[] | null>;
+  /** The same for an A1111 or ComfyUI connection, through UCCB's server.
+   *  `like` is the NovelAI request the form would have sent, for the fields
+   *  a gen keeps (size, seed, sampler…) that the rest of the app reads. */
+  generateOn: (connection: ImageConnection, request: BackendGenRequest, like: NovelAIGenerateRequest, opts?: GenerateOptions) => Promise<GeneratedImage[] | null>;
   error: string | null;
   clearError: () => void;
   /** Whether the last failure is one there's no point carrying on past — a
@@ -310,5 +315,43 @@ export function useGenerate(): UseGenerateReturn {
     return images;
   };
 
-  return { generate, error, clearError: () => setError(null), lastErrorWasFatal: () => fatalRef.current };
+  const generateOn = async (connection: ImageConnection, request: BackendGenRequest, like: NovelAIGenerateRequest, opts?: GenerateOptions): Promise<GeneratedImage[] | null> => {
+    setError(null);
+    fatalRef.current = false;
+    try {
+      const res = await fetch('/api/image/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ connection, request }) });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        // Every copy would fail the same way.
+        fatalRef.current = true;
+        throw new Error(body.error ?? `The server said ${res.status}.`);
+      }
+      const blob = await res.blob();
+      const image: GeneratedImage = {
+        id: uuid(),
+        url: URL.createObjectURL(blob),
+        blob,
+        prompt: request.prompt,
+        negativePrompt: request.negative,
+        model: like.model,
+        parameters: { ...like.parameters, width: request.width, height: request.height, steps: request.steps, scale: request.cfg, seed: request.seed, negative_prompt: request.negative, n_samples: 1 },
+        timestamp: Date.now(),
+        seed: request.seed,
+        backend: { kind: connection.kind as 'a1111' | 'comfyui', connection: connection.name, checkpoint: request.checkpoint || undefined, sampler: request.sampler || undefined, scheduler: request.scheduler || undefined },
+        sourceImageId: opts?.sourceImageId,
+        sourceImageUrl: opts?.sourceImageUrl,
+        batchId: opts?.batchId,
+        wildcardPicks: opts?.wildcardPicks,
+        source: opts?.source,
+        projectId: opts?.projectId,
+      };
+      addImages([image]);
+      return [image];
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      return null;
+    }
+  };
+
+  return { generate, generateOn, error, clearError: () => setError(null), lastErrorWasFatal: () => fatalRef.current };
 }

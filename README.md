@@ -1,6 +1,6 @@
 # Ultimate Character Card Builder
 
-Write a character card, draw it with NovelAI, and chat with it to test it, all in one window. The card text sits on the left; image generation, your gens, your old gen library and a test chat sit on the right, so the words and the art are worked on together instead of in three different apps.
+Write a character card, draw it with NovelAI, A1111 / Forge or ComfyUI, and chat with it to test it, all in one window. The card text sits on the left; image generation, your gens, your old gen library and a test chat sit on the right, so the words and the art are worked on together instead of in three different apps.
 
 It brings together three earlier projects:
 
@@ -33,9 +33,10 @@ Your settings (NovelAI key, LLM connections, presets, models, chat and assistant
 
 In **Settings** (⚙, top right):
 
-1. **General**: your NovelAI persistent API key (`pst-…`), used for images, tag suggestions and NovelAI's text models.
+1. **General**: your NovelAI persistent API key (`pst-…`), used for NovelAI images, tag suggestions and NovelAI's text models.
 2. **Folders**: an output folder for saved gens (optional), and the folders the Library browses.
-3. **LLM connections**: add NovelAI, any OpenAI-compatible server (OpenRouter, KoboldCpp, llama.cpp, LM Studio…) or Anthropic, and choose which one the test chat and the writing assistant use.
+3. **Image**: where gens are made: NovelAI, A1111 / Forge (and reForge, SD.Next; start it with `--api`) or ComfyUI, with its built-in txt2img workflow or one you export from ComfyUI. The Image tab is locked until there's at least one.
+4. **LLM connections**: add NovelAI, any OpenAI-compatible server (OpenRouter, KoboldCpp, llama.cpp, LM Studio…) or Anthropic, and choose which one the test chat and the writing assistant use.
 
 ## Where things are kept
 
@@ -55,7 +56,7 @@ data/library-index.json, thumbs/     the gen library's cache (safe to delete)
 
 New gens go to `data/recent-gens` as they arrive, so a reload or a frozen phone tab doesn't lose them and every device sees them, and they're deleted after a number of days you choose (Settings → Folders; 7 by default). To keep one for good, **keep** it with a card or **save** it to the output folder (or turn on auto-save). The page only warns before closing while a gen is still uploading.
 
-API keys are kept on this computer, in data/settings.json. NovelAI image calls go straight from the browser to NovelAI, as in NovelFrontEnd; LLM calls go through UCCB's local server (which avoids CORS problems) and on to the provider. **This is a local app**: anyone who can reach it can use your keys, read and change your cards, and see the library folders, which is why it only lets in this computer and your Tailscale devices unless you allow the home network.
+API keys are kept on this computer, in data/settings.json. NovelAI image calls go straight from the browser to NovelAI, as in NovelFrontEnd; A1111, ComfyUI and LLM calls go through UCCB's local server (which avoids CORS problems) and on to the provider. **This is a local app**: anyone who can reach it can use your keys, read and change your cards, and see the library folders, which is why it only lets in this computer and your Tailscale devices unless you allow the home network.
 
 ## Development
 

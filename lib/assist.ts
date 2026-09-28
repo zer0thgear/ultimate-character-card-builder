@@ -28,11 +28,27 @@ export const FIELD_ACTIONS: { value: FieldAction; label: string; hint: string }[
 
 const WRITER = `You are an expert character card writer helping a creator build a roleplay character card (the SillyTavern / Chub "Tavern card" format). You write vivid, specific, well-structured prose, match the card's established voice and formatting conventions (for example *actions in asterisks* and "quoted speech" if the card uses them), and keep {{char}} and {{user}} macros exactly as written. You never add commentary, headings or quotation marks around your answer unless the field itself calls for them.`;
 
-const TAG_RULES = `NovelAI's image models are prompted with Danbooru-style tags: lowercase, comma-separated, most important first, using real Danbooru tag names (e.g. "long hair", "blue eyes", "hair between eyes", "black thighhighs", "looking at viewer"). Use {tag} to emphasise and [tag] to de-emphasise only when it matters. No sentences, no quality tags like "masterpiece", and no artist or art-style tags: the style has its own field.
+const TAG_RULES = `The image model is prompted with Danbooru-style tags: lowercase, comma-separated, most important first, using real Danbooru tag names (e.g. "long hair", "blue eyes", "hair between eyes", "black thighhighs", "looking at viewer"). {{emphasis}} No sentences, no quality tags like "masterpiece", and no artist or art-style tags: the style has its own field.
 
 Character tags: when a character is clearly an established one from an existing franchise (the card names them or plainly describes them), use their Danbooru character tag and their series' copyright tag, e.g. "princess peach, super mario bros." or "hatsune miku, vocaloid", right after "girl"/"boy"/"other" (or the count tags). The model knows them, so don't hold back; keep the look tags that matter too, especially where the card's version differs (a new outfit, say). Original characters get no name tags, only their look.
 
-Two special tags go first when they apply: "nsfw" if the image should show nudity or sexual content, and "fur dataset" if the character is anthro or furry (an animal-person, not a human with animal ears or a tail).`;
+{{datasets}}`;
+
+// What the tag rules say differs by where the gens are made (the Image
+// tab's connection, set by store/imageConnections.ts): NovelAI's {emphasis}
+// and its dataset tags, or the (tag:1.2) weights A1111 and ComfyUI read.
+let artBackend: 'novelai' | 'sd' = 'novelai';
+export const setArtBackend = (kind: 'novelai' | 'sd') => (artBackend = kind);
+const artVars = (): Record<string, string> =>
+  artBackend === 'novelai'
+    ? {
+        emphasis: 'Use {tag} to emphasise and [tag] to de-emphasise only when it matters.',
+        datasets: 'Two special tags go first when they apply: "nsfw" if the image should show nudity or sexual content, and "fur dataset" if the character is anthro or furry (an animal-person, not a human with animal ears or a tail).',
+      }
+    : {
+        emphasis: 'Use (tag:1.2) to emphasise and (tag:0.8) to de-emphasise only when it matters.',
+        datasets: 'Put "nsfw" first if the image should show nudity or sexual content.',
+      };
 
 export interface AssistTemplate {
   key: string;
@@ -160,7 +176,7 @@ Review this card as an experienced card creator would. Point out, concisely and 
   },
 
   // Art
-  { key: 'appearance.system', group: '✨ Character prompt (art)', label: 'System prompt', vars: [], text: `You turn character descriptions into image-generation prompts. ${TAG_RULES}` },
+  { key: 'appearance.system', group: '✨ Character prompt (art)', label: 'System prompt', vars: ['emphasis', 'datasets'], note: '{{emphasis}} and {{datasets}} are filled in for where gens are made (NovelAI, or A1111 / ComfyUI).', text: `You turn character descriptions into image-generation prompts. ${TAG_RULES}` },
   {
     key: 'appearance.user',
     group: '✨ Character prompt (art)',
@@ -180,7 +196,7 @@ Also: {{instruction}}
 Reply with one line per character, in exactly this form and nothing else:
 CHARACTER <name>: <tags>`,
   },
-  { key: 'scene.system', group: '✨ Scene prompt (art)', label: 'System prompt', vars: [], text: `You turn roleplay scenes into image-generation prompts. ${TAG_RULES}` },
+  { key: 'scene.system', group: '✨ Scene prompt (art)', label: 'System prompt', vars: ['emphasis', 'datasets'], note: '{{emphasis}} and {{datasets}} are filled in for where gens are made (NovelAI, or A1111 / ComfyUI).', text: `You turn roleplay scenes into image-generation prompts. ${TAG_RULES}` },
   {
     key: 'cast.user',
     group: '✨ Scene prompt (art)',
@@ -447,7 +463,7 @@ export function critiqueMessages(card: CardData): LlmMessage[] {
 
 /** The character's look, as tags for their character prompt. */
 export function appearanceTagsMessages(card: CardData, instruction: string, names: string[] = []): LlmMessage[] {
-  return job('appearance', { card: cardContext(card, undefined, 8000), names: names.filter(Boolean).join(', '), instruction: instruction.trim() });
+  return job('appearance', { ...artVars(), card: cardContext(card, undefined, 8000), names: names.filter(Boolean).join(', '), instruction: instruction.trim() });
 }
 
 /** Where the cast writer puts characters, when asked to (NovelAI's grid). */
@@ -458,6 +474,7 @@ const POSITION_RULE =
  *  character in it (read with lib/castPrompt.ts). */
 export function castSceneMessages(card: CardData, greeting: string, instruction: string, current: { label?: string; prompt: string }[], positions: boolean): LlmMessage[] {
   return job('cast', {
+    ...artVars(),
     card: cardContext(card, undefined, 5000),
     scene: clip(greeting, 4000),
     characters: current.filter((c) => c.prompt.trim()).map((c) => `${c.label || 'Unnamed'}: ${c.prompt.trim()}`).join('\n'),
@@ -469,7 +486,7 @@ export function castSceneMessages(card: CardData, greeting: string, instruction:
 /** A greeting's scene (pose, expression, setting, framing) as tags for the
  *  base prompt, to illustrate it. */
 export function sceneTagsMessages(card: CardData, greeting: string, instruction: string): LlmMessage[] {
-  return job('scene', { card: cardContext(card, undefined, 5000), scene: clip(greeting, 4000), instruction: instruction.trim() });
+  return job('scene', { ...artVars(), card: cardContext(card, undefined, 5000), scene: clip(greeting, 4000), instruction: instruction.trim() });
 }
 
 export type VisionJob = 'appearance' | 'greeting' | 'ask';

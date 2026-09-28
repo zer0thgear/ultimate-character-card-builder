@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '@/store/projectStore';
 import { useUiStore, useConfigStore, useToastStore, toast } from '@/store/uiStore';
 import { useSessionStore } from '@/store/sessionStore';
+import { useSettingsStore } from '@/store/settingsStore';
 import { usePersonaStore } from '@/store/personaStore';
 import { api } from '@/lib/api';
 import { exportCharx, exportJson, exportPng, importAsProject } from '@/lib/cardExport';
@@ -187,6 +188,8 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
   const { sidebarOpen, theme, setTheme, showAvatar, setShowAvatar, exportKeepsMetadata, exportMaxSize, exportCompression } = useUiStore();
   const imageOpts = { keepMetadata: exportKeepsMetadata, maxSize: exportMaxSize, compression: exportCompression };
   const apiKey = useSessionStore((s) => s.apiKey);
+  const imageSetUp = useSettingsStore((s) => s.imageConnections.length > 0);
+  const needsNaiKey = useSettingsStore((s) => s.imageConnections.some((c) => c.kind === 'novelai')) && !apiKey;
   const [exportOpen, setExportOpen] = useState(false);
 
   const overwrite = async () => {
@@ -229,10 +232,18 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
         </>
       )}
       <div className="ml-auto flex items-center gap-1.5">
-        {!apiKey && (
-          <button type="button" onClick={() => openSettings('general')} className="rounded bg-amber-500/15 px-2 py-1 text-xs whitespace-nowrap text-amber-300">
-            {phone ? 'NAI key' : 'Add your NovelAI key'}
+        {/* A nudge while images can't be made: no connection yet, or a
+            NovelAI one without its key. */}
+        {!imageSetUp ? (
+          <button type="button" onClick={() => openSettings('image')} className="rounded bg-amber-500/15 px-2 py-1 text-xs whitespace-nowrap text-amber-300">
+            {phone ? 'Images' : 'Set up image generation'}
           </button>
+        ) : (
+          needsNaiKey && (
+            <button type="button" onClick={() => openSettings('general')} className="rounded bg-amber-500/15 px-2 py-1 text-xs whitespace-nowrap text-amber-300">
+              {phone ? 'NAI key' : 'Add your NovelAI key'}
+            </button>
+          )
         )}
         {project && (
           <>

@@ -39,6 +39,10 @@ import type { CharacterPromptEntry, NovelAIModel, NovelAINoiseSchedule } from '@
 import type { LlmMessage } from '@/types/llm';
 import { uuid } from '@/lib/uuid';
 import { AssistTraceButton } from '@/components/llm/AssistTrace';
+import { activeImageConnection, loadBackendOptions, selectImageConnection, updateImageConnection, useActiveImageConnection, useBackendOptions } from '@/store/imageConnections';
+import { composeBackendPrompts, IMAGE_KIND_LABELS, SD_DEFAULT_NEGATIVE } from '@/lib/imageBackends';
+import { joinPromptParts } from '@/lib/promptText';
+import type { BackendGenRequest, ImageConnection } from '@/types/imageBackend';
 
 const promptClass = cx(inputClass, 'min-h-16 resize-y font-mono text-[13px] leading-relaxed');
 
@@ -92,7 +96,11 @@ function PromptForm() {
   const form = useSettingsStore();
   const { set, patch } = form;
   const apiKey = useSessionStore((s) => s.apiKey);
-  const { generate, error, clearError } = useGenerate();
+  const { generate, generateOn, error, clearError } = useGenerate();
+  // Where gens go. NovelAI has the whole form; A1111 and ComfyUI the parts
+  // that mean something to them.
+  const connection = useActiveImageConnection();
+  const nai = connection?.kind === 'novelai';
   const { subscription, refresh } = useSubscription();
   const setGenerating = useSessionStore((s) => s.setGenerating);
   const generating = useSessionStore((s) => s.generating);
@@ -114,7 +122,7 @@ function PromptForm() {
   const basePrompt = form.basePrompts.find((p) => p.selected) ?? form.basePrompts[0];
   const setBasePrompt = (text: string) => set('basePrompts', form.basePrompts.map((p) => (p.id === basePrompt?.id ? { ...p, text } : p)));
 
-  const cost = calculateAnlasCost({
+  const anlas = calculateAnlasCost({
     model: inpainting ? toInpaintingModel(form.model) : form.model,
     width: source?.width ?? form.width,
     height: source?.height ?? form.height,
@@ -124,7 +132,16 @@ function PromptForm() {
     strength: !source ? 1 : inpainting ? (hasInpaintStrength(form.model) ? inpaintStrength : 1) : strength,
     ...opusStatus(subscription),
   });
-  const tooBig = (source?.width ?? form.width) * (source?.height ?? form.height) > MAX_GENERATION_PIXELS;
+  const cost = nai ? anlas : 0;
+  const tooBig = nai && (source?.width ?? form.width) * (source?.height ?? form.height) > MAX_GENERATION_PIXELS;
+  /** Why this connection can't make the gen asked for, if it can't. */
+  const unsupported = !connection
+    ? 'no connection'
+    : connection.kind === 'comfyui' && source
+      ? "Img2Img isn't available with ComfyUI yet: remove the base, or switch to NovelAI or an A1111 connection."
+      : connection.kind === 'a1111' && source?.mask
+        ? "Inpainting is NovelAI-only for now: clear the mask to use the picture as an Img2Img base, or switch to NovelAI."
+        : null;
 
   /** The base as sent: stealth marks erased as NovelAI's canvas does, and
    *  the mask when inpainting. */
@@ -137,8 +154,9 @@ function PromptForm() {
   const hasPrompt = !!basePrompt?.text.trim() || form.characters.some((c) => c.enabled && c.prompt.trim());
 
   const run = async () => {
-    if (!apiKey) return openSettings('general');
-    if (generating || !hasPrompt || tooBig) return;
+    if (!connection) return openSettings('image');
+    if (nai && !apiKey) return openSettings('general');
+    if (generating || !hasPrompt || tooBig || unsupported) return;
     clearError();
     stopRef.current = false;
     setGenerating(1);
@@ -146,8 +164,10 @@ function PromptForm() {
       const base = await baseForRequest();
       for (let i = 0; i < form.copies && !stopRef.current; i++) {
         const seed = form.seed === 0 ? randomSeed() : form.seed + i;
-        const { request, resolved } = buildGenerateRequest(useSettingsStore.getState(), seed, base);
-        const made = await generate(request, { projectId, source: promptSource(form, resolved), wildcardPicks: resolved.picks, forceStandard: !!base });
+        const now = useSettingsStore.getState();
+        const { request, resolved } = buildGenerateRequest(now, seed, base);
+        const opts = { projectId, source: promptSource(form, resolved), wildcardPicks: resolved.picks, forceStandard: !!base };
+        const made = nai ? await generate(request, opts) : await generateOn(connection, backendRequest(connection, now, resolved, seed, base), request, opts);
         if (!made) break;
         if (useConfigStore.getState().config.autoSaveGens) for (const img of made) void saveSessionImage(img, true);
         if (i < form.copies - 1) await new Promise((r) => setTimeout(r, 1200));
@@ -199,16 +219,23 @@ function PromptForm() {
 
   return (
     <div className="flex flex-col gap-4" data-gen-form>
-      {!apiKey && (
+      {!connection ? (
+        <button type="button" onClick={() => openSettings('image')} className="rounded-md bg-amber-500/10 px-3 py-2 text-left text-sm text-amber-200">
+          Set up an image connection to generate: NovelAI, A1111 / Forge or ComfyUI, in Settings → Image. You can write prompts meanwhile.
+        </button>
+      ) : (
+        <ImageConnectionPicker current={connection} />
+      )}
+      {nai && !apiKey && (
         <button type="button" onClick={() => openSettings('general')} className="rounded-md bg-amber-500/10 px-3 py-2 text-left text-sm text-amber-200">
           Add your NovelAI API key in Settings to generate.
         </button>
       )}
 
       <div className="flex items-center gap-2">
-        <Button variant="primary" className="h-10 flex-1 text-base" disabled={!hasPrompt || tooBig || generating > 0} onClick={() => void run()} title="Ctrl+Enter">
+        <Button variant="primary" className="h-10 flex-1 text-base" disabled={!hasPrompt || tooBig || !!unsupported || generating > 0} onClick={() => void run()} title="Ctrl+Enter">
           {generating > 0 ? (retryNotice ?? 'Generating…') : `Generate${form.copies > 1 ? ` ×${form.copies}` : ''}`}
-          <span className="text-xs font-normal opacity-75">{cost === 0 ? 'free' : `${cost * form.copies} Anlas`}</span>
+          {nai && <span className="text-xs font-normal opacity-75">{cost === 0 ? 'free' : `${cost * form.copies} Anlas`}</span>}
         </Button>
         {generating > 0 && form.copies > 1 && (
           <Button variant="danger" onClick={() => (stopRef.current = true)}>
@@ -225,8 +252,9 @@ function PromptForm() {
           Auto-saving to the output folder
         </div>
       )}
-      <AccountStatus />
+      {nai && <AccountStatus />}
       {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
+      {unsupported && connection && <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-200">{unsupported}</div>}
       {tooBig && <div className="text-xs text-red-400">That size is past NovelAI&apos;s limit of about 3.1 megapixels.</div>}
 
       {source && (
@@ -252,9 +280,11 @@ function PromptForm() {
               <Button size="sm" onClick={() => setCanvas('paint')} title="Paint over the picture, then generate from it">
                 {source.paint ? 'Edit paint' : 'Edit image'}
               </Button>
-              <Button size="sm" onClick={() => setCanvas('mask')} title="Mark what to regenerate">
-                {source.mask ? 'Edit mask' : 'Inpaint'}
-              </Button>
+              {(nai || source.mask) && (
+                <Button size="sm" onClick={() => setCanvas('mask')} title="Mark what to regenerate">
+                  {source.mask ? 'Edit mask' : 'Inpaint'}
+                </Button>
+              )}
               {source.mask && (
                 <Button size="sm" variant="ghost" onClick={() => setSource({ ...source, mask: undefined })}>
                   Clear mask
@@ -278,11 +308,13 @@ function PromptForm() {
                   <input type="range" min={0.01} max={0.99} step={0.01} value={strength} onChange={(e) => setStrength(Number(e.target.value))} className="flex-1 accent-violet-500" />
                   <span className="w-8 tabular-nums">{strength.toFixed(2)}</span>
                 </label>
-                <label className="flex items-center gap-2">
-                  Noise
-                  <input type="range" min={0} max={0.99} step={0.01} value={noise} onChange={(e) => setNoise(Number(e.target.value))} className="flex-1 accent-violet-500" />
-                  <span className="w-8 tabular-nums">{noise.toFixed(2)}</span>
-                </label>
+                {nai && (
+                  <label className="flex items-center gap-2">
+                    Noise
+                    <input type="range" min={0} max={0.99} step={0.01} value={noise} onChange={(e) => setNoise(Number(e.target.value))} className="flex-1 accent-violet-500" />
+                    <span className="w-8 tabular-nums">{noise.toFixed(2)}</span>
+                  </label>
+                )}
               </>
             )}
           </div>
@@ -312,29 +344,35 @@ function PromptForm() {
         onChange={setBasePrompt}
         model={form.model}
         apiKey={apiKey}
-        meter={counts && basePrompt ? <TokenMeter own={counts.base[basePrompt.id] ?? 0} others={counts.characterPromptTotal} budget={counts.budget} othersLabel="Characters" /> : null}
+        meter={nai && counts && basePrompt ? <TokenMeter own={counts.base[basePrompt.id] ?? 0} others={counts.characterPromptTotal} budget={counts.budget} othersLabel="Characters" /> : null}
       />
       {/* NovelAI's dataset switches, put first in the prompt; the card's own.
           ✨ turns them on when it judges the scene or character needs them. */}
-      <div className="-mt-2 flex flex-wrap gap-x-4 gap-y-1">
+      <div className={cx('-mt-2 flex flex-wrap gap-x-4 gap-y-1', !nai && 'hidden')}>
         <Toggle checked={form.nsfwMode} onChange={(v) => set('nsfwMode', v)} label={<span className="text-xs" title="Puts nsfw first in the prompt">NSFW</span>} />
         <Toggle checked={form.furMode} onChange={(v) => set('furMode', v)} label={<span className="text-xs" title="Puts fur dataset first in the prompt (NovelAI's furry data)">Fur dataset</span>} />
       </div>
 
-      {!isV3 && <CharactersSection counts={counts?.characters ?? {}} />}
+      {(!nai || !isV3) && <CharactersSection counts={nai ? (counts?.characters ?? {}) : {}} nai={nai} />}
 
       <div className="flex flex-col gap-1">
         <span className="text-xs font-semibold tracking-wide text-slate-300 uppercase">Negative prompt</span>
         <TagAutocompleteField value={form.negativePrompt} onChange={(v) => set('negativePrompt', v)} model={form.model} apiKey={apiKey} className={promptClass} rows={3} />
-        {counts && <TokenMeter own={counts.negative} others={counts.characterUcTotal} budget={counts.budget} othersLabel="Character negatives" />}
-        {form.negativePrompt !== DEFAULT_NEGATIVE && (
-          <button type="button" className="self-start text-[11px] text-slate-500 hover:text-slate-300" onClick={() => set('negativePrompt', DEFAULT_NEGATIVE)}>
+        {nai && counts && <TokenMeter own={counts.negative} others={counts.characterUcTotal} budget={counts.budget} othersLabel="Character negatives" />}
+        {form.negativePrompt !== (nai || !connection ? DEFAULT_NEGATIVE : SD_DEFAULT_NEGATIVE) && (
+          <button
+            type="button"
+            className="self-start text-[11px] text-slate-500 hover:text-slate-300"
+            onClick={() => set('negativePrompt', nai || !connection ? DEFAULT_NEGATIVE : SD_DEFAULT_NEGATIVE)}
+            title={nai || !connection ? "NovelAI's default negative" : 'A negative that suits most Stable Diffusion checkpoints'}
+          >
             Reset to default
           </button>
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      {connection && !nai && <BackendSettings connection={connection} />}
+      <div className={cx('grid grid-cols-2 gap-3', !nai && connection && 'hidden')}>
         <label className="col-span-2 flex flex-col gap-0.5 text-xs text-slate-400">
           Model
           <select value={form.model} onChange={(e) => set('model', e.target.value as NovelAIModel)} className={cx(inputClass, 'py-1')}>
@@ -425,10 +463,12 @@ function PromptForm() {
         </label>
       </div>
 
-      <button type="button" className="self-start text-xs text-slate-400 hover:text-slate-200" onClick={() => setAdvanced(!advanced)}>
-        {advanced ? '▾' : '▸'} More settings
-      </button>
-      {advanced && (
+      {(nai || !connection) && (
+        <button type="button" className="self-start text-xs text-slate-400 hover:text-slate-200" onClick={() => setAdvanced(!advanced)}>
+          {advanced ? '▾' : '▸'} More settings
+        </button>
+      )}
+      {advanced && (nai || !connection) && (
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-0.5 text-xs text-slate-400">
             CFG rescale
@@ -476,6 +516,16 @@ function castSummary(m: MergeResult): string {
  *  stays your call), and says which, for the toast. */
 function switchedOn(nsfw: boolean, fur: boolean): string {
   const form = useSettingsStore.getState();
+  // Other backends have no dataset switches: an nsfw the writer asked for
+  // goes back in the prompt as a tag (fur dataset means nothing to them).
+  if (activeImageConnection()?.kind !== 'novelai' && activeImageConnection()) {
+    const base = form.basePrompts.find((p) => p.selected) ?? form.basePrompts[0];
+    if (nsfw && base && !/(^|,)\s*nsfw\s*(,|$)/i.test(base.text)) {
+      form.set('basePrompts', form.basePrompts.map((p) => (p.id === base.id ? { ...p, text: joinPromptParts('nsfw', p.text) } : p)));
+      return ' It added nsfw to the prompt.';
+    }
+    return '';
+  }
   const on: string[] = [];
   if (nsfw && !form.nsfwMode) {
     form.set('nsfwMode', true);
@@ -488,8 +538,6 @@ function switchedOn(nsfw: boolean, fur: boolean): string {
   return on.length ? ` ${on.join(' and ')} turned on, as it suggested.` : '';
 }
 
-/** The card's style: artist and style tags in front of every prompt, which
- *  the ✨ writers leave alone. */
 // Art references: pictures (or other cards) the ✨ prompt writers draw
 // from, per card, for this visit.
 const useArtRefs = create<{ byCard: Record<string, Reference[]>; set: (card: string, refs: Reference[]) => void }>((set) => ({
@@ -528,6 +576,8 @@ function ArtReferences() {
   );
 }
 
+/** The card's style: artist and style tags in front of every prompt, which
+ *  the ✨ writers leave alone. */
 function StyleSection({ text, onChange, model, apiKey }: { text: string; onChange: (v: string) => void; model: NovelAIModel; apiKey: string }) {
   return (
     <div className="flex flex-col gap-1">
@@ -548,7 +598,8 @@ function SceneSection({ text, onChange, model, apiKey, meter }: { text: string; 
 
   const placeCharacters = useSettingsStore((s) => s.placeCharacters);
   const setForm = useSettingsStore((s) => s.set);
-  const castModel = !isV3Model(model);
+  // V3 has no character prompts; other backends get them appended.
+  const castModel = activeImageConnection()?.kind === 'novelai' || !activeImageConnection() ? !isV3Model(model) : true;
 
   const fromText = async (scene: string) => {
     if (!card) return;
@@ -644,7 +695,7 @@ function SceneSection({ text, onChange, model, apiKey, meter }: { text: string; 
 
 // ─── Characters (V4+) ────────────────────────────────────────────────────────
 
-function CharactersSection({ counts }: { counts: Record<string, { prompt: number; uc: number }> }) {
+function CharactersSection({ counts, nai }: { counts: Record<string, { prompt: number; uc: number }>; nai: boolean }) {
   const { characters, set, model, useCoords } = useSettingsStore();
   const apiKey = useSessionStore((s) => s.apiKey);
   const card = useProjectStore((s) => s.project?.card.data);
@@ -682,10 +733,10 @@ function CharactersSection({ counts }: { counts: Record<string, { prompt: number
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold tracking-wide text-slate-300 uppercase">
-          Characters <span className="font-normal text-slate-500 normal-case">(appearance, per character)</span>
+          Characters <span className="font-normal text-slate-500 normal-case">{nai ? '(appearance, per character)' : '(each added to the end of the prompt; negatives to the negative)'}</span>
         </span>
         <div className="flex items-center gap-1">
-          {active.length > 1 && <Toggle checked={useCoords} onChange={(v) => set('useCoords', v)} label={<span className="text-xs">Positions</span>} />}
+          {nai && active.length > 1 && <Toggle checked={useCoords} onChange={(v) => set('useCoords', v)} label={<span className="text-xs">Positions</span>} />}
           <AssistTraceButton runId={runId} />
           {running ? (
             <Button size="sm" variant="danger" onClick={stop}>
@@ -707,7 +758,7 @@ function CharactersSection({ counts }: { counts: Record<string, { prompt: number
           <div className="flex items-center gap-2">
             <Toggle checked={c.enabled} onChange={(enabled) => update(c.id, { enabled })} />
             <input value={c.label ?? ''} onChange={(e) => update(c.id, { label: e.target.value })} className="min-w-0 flex-1 bg-transparent text-sm text-slate-200 outline-none" placeholder="Name" />
-            {useCoords && active.length > 1 && (
+            {nai && useCoords && active.length > 1 && (
               <select
                 value={`${c.center.x},${c.center.y}`}
                 onChange={(e) => {
@@ -737,6 +788,136 @@ function CharactersSection({ counts }: { counts: Record<string, { prompt: number
           {counts[c.id] && <span className="text-right text-[10px] text-slate-500 tabular-nums">{counts[c.id].prompt} tokens</span>}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ─── Other backends ──────────────────────────────────────────────────────────
+
+/** A1111 / ComfyUI's request, from the form: the prompt with the characters
+ *  appended, and the connection's checkpoint, sampler and scheduler. */
+function backendRequest(c: ImageConnection, form: ReturnType<typeof useSettingsStore.getState>, resolved: Parameters<typeof composeBackendPrompts>[1], seed: number, base?: Img2ImgBase): BackendGenRequest {
+  const { prompt, negative } = composeBackendPrompts(form, resolved);
+  return {
+    prompt,
+    negative,
+    width: base?.width ?? form.width,
+    height: base?.height ?? form.height,
+    steps: form.steps,
+    cfg: form.scale,
+    seed,
+    checkpoint: c.checkpoint,
+    sampler: c.sampler,
+    scheduler: c.scheduler,
+    ...(base ? { init: { image: base.image, strength: base.strength } } : {}),
+  };
+}
+
+/** Which connection gens go to, when there's a choice. */
+function ImageConnectionPicker({ current }: { current: ImageConnection }) {
+  const connections = useSettingsStore((s) => s.imageConnections);
+  if (connections.length < 2) return null;
+  return (
+    <label className="flex items-center gap-2 text-xs text-slate-400">
+      Generate with
+      <select value={current.id} onChange={(e) => selectImageConnection(e.target.value)} className={cx(inputClass, 'w-auto flex-1 py-1 text-xs')}>
+        {connections.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name === IMAGE_KIND_LABELS[c.kind] ? c.name : `${c.name} (${IMAGE_KIND_LABELS[c.kind]})`}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** The settings A1111 and ComfyUI take: the checkpoint, sampler and
+ *  scheduler (from the server's lists, kept on the connection), size,
+ *  steps, CFG and seed (the form's, shared with NovelAI). */
+function BackendSettings({ connection: c }: { connection: ImageConnection }) {
+  const form = useSettingsStore();
+  const { set, patch } = form;
+  const options = useBackendOptions((s) => s.byId[c.id]);
+  useEffect(() => {
+    if (!options) void loadBackendOptions(c).catch(() => {});
+  }, [c, options]);
+  const loaded = options && options !== 'loading' && !('error' in options) ? options : null;
+  const pick = (label: string, key: 'checkpoint' | 'sampler' | 'scheduler', list: string[] | undefined, fallback: string) => (
+    <label className={cx('flex flex-col gap-0.5 text-xs text-slate-400', key === 'checkpoint' && 'col-span-2')}>
+      {label}
+      <select value={c[key]} onChange={(e) => updateImageConnection(c.id, { [key]: e.target.value })} className={cx(inputClass, 'py-1')}>
+        <option value="">{fallback}</option>
+        {c[key] && !list?.includes(c[key]) && <option value={c[key]}>{c[key]}</option>}
+        {list?.map((v) => (
+          <option key={v} value={v}>
+            {v}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+  const custom = c.kind === 'comfyui' && c.workflow;
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {options && options !== 'loading' && 'error' in options && (
+        <div className="col-span-2 flex items-start gap-2 rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          <span className="flex-1">{options.error}</span>
+          <Button size="sm" onClick={() => void loadBackendOptions(c, true).catch(() => {})}>
+            Retry
+          </Button>
+        </div>
+      )}
+      {pick('Checkpoint', 'checkpoint', loaded?.checkpoints, c.kind === 'a1111' ? `The one loaded${loaded?.current ? ` (${loaded.current})` : ''}` : custom ? "The workflow's own" : loaded?.checkpoints[0] ? `First: ${loaded.checkpoints[0]}` : 'The first one')}
+      {pick('Sampler', 'sampler', loaded?.samplers, custom ? "The workflow's own" : 'Default')}
+      {pick('Scheduler', 'scheduler', loaded?.schedulers, custom ? "The workflow's own" : 'Default')}
+      <label className="flex flex-col gap-0.5 text-xs text-slate-400">
+        Size
+        <select
+          value={SIZE_PRESETS.find((p) => p.width === form.width && p.height === form.height)?.label ?? 'custom'}
+          onChange={(e) => {
+            const p = SIZE_PRESETS.find((x) => x.label === e.target.value);
+            if (p) patch({ width: p.width, height: p.height });
+          }}
+          className={cx(inputClass, 'py-1')}
+        >
+          {SIZE_PRESETS.map((p) => (
+            <option key={p.label} value={p.label}>
+              {p.label} ({p.width}×{p.height})
+            </option>
+          ))}
+          <option value="custom">Custom</option>
+        </select>
+      </label>
+      <div className="flex items-end gap-1 text-xs text-slate-400">
+        <label className="flex flex-1 flex-col gap-0.5">
+          W
+          <NumberInput value={form.width} onChange={(v) => set('width', v ?? 832)} min={64} max={4096} step={8} />
+        </label>
+        <IconButton title="Swap width and height" onClick={() => patch({ width: form.height, height: form.width })}>
+          ⇄
+        </IconButton>
+        <label className="flex flex-1 flex-col gap-0.5">
+          H
+          <NumberInput value={form.height} onChange={(v) => set('height', v ?? 1216)} min={64} max={4096} step={8} />
+        </label>
+      </div>
+      <label className="flex flex-col gap-0.5 text-xs text-slate-400">
+        Steps
+        <NumberInput value={form.steps} onChange={(v) => set('steps', v ?? 28)} min={1} max={150} step={1} />
+      </label>
+      <label className="flex flex-col gap-0.5 text-xs text-slate-400">
+        CFG
+        <NumberInput value={form.scale} onChange={(v) => set('scale', v ?? 6)} min={0} max={30} step={0.5} />
+      </label>
+      <label className="col-span-2 flex flex-col gap-0.5 text-xs text-slate-400">
+        Seed <span className="text-slate-500">(0 = random)</span>
+        <div className="flex gap-1">
+          <NumberInput value={form.seed} onChange={(v) => set('seed', v ?? 0)} min={0} max={4294967295} step={1} />
+          <IconButton title="Random each time" onClick={() => set('seed', 0)}>
+            🎲
+          </IconButton>
+        </div>
+      </label>
     </div>
   );
 }

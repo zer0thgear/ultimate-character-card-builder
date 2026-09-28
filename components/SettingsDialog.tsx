@@ -21,8 +21,9 @@ import { formatPrice, isOpenRouter, priceLabel } from '@/lib/modelPricing';
 import { useProjectStore } from '@/store/projectStore';
 import { AccountStatus } from '@/components/AccountStatus';
 import { ExtensionSettings, hasExtensionSettings } from '@/components/ExtensionSlots';
+import { ImageConnectionsTab } from '@/components/ImageConnectionsSettings';
 
-type SettingsTab = 'general' | 'folders' | 'llm' | 'chat' | 'assist' | 'personas' | 'extensions';
+type SettingsTab = 'general' | 'folders' | 'image' | 'llm' | 'chat' | 'assist' | 'personas' | 'extensions';
 
 const useSettingsDialog = create<{ tab: SettingsTab | null; set: (t: SettingsTab | null) => void }>((set) => ({ tab: null, set: (tab) => set({ tab }) }));
 export const openSettings = (tab: SettingsTab = 'general') => useSettingsDialog.getState().set(tab);
@@ -39,6 +40,7 @@ export function SettingsDialog() {
         tabs={[
           { value: 'general', label: 'General' },
           { value: 'folders', label: 'Folders' },
+          { value: 'image', label: 'Image' },
           { value: 'llm', label: 'LLM connections' },
           { value: 'chat', label: 'Chat preset' },
           { value: 'assist', label: 'Assistant' },
@@ -49,6 +51,7 @@ export function SettingsDialog() {
       />
       {tab === 'general' && <GeneralTab />}
       {tab === 'folders' && <FoldersTab />}
+      {tab === 'image' && <ImageConnectionsTab onOpenGeneral={() => set('general')} />}
       {tab === 'llm' && <LlmTab />}
       {tab === 'assist' && <AssistTab />}
       {tab === 'personas' && <PersonaManager />}

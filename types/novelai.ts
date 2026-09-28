@@ -1,4 +1,5 @@
 import type { EnhanceScale } from '@/lib/enhance';
+import type { BackendInfo } from '@/types/imageBackend';
 import type { SweepAxisDraft } from '@/lib/sweeps';
 import type { QualityLevel, UcLevel } from '@/lib/naiPresets';
 
@@ -305,6 +306,9 @@ export interface GeneratedImage {
   /** Kept when the session is cleared. History lives in memory only, so this
    *  is what stops a good one going with the rest. */
   pinned?: boolean;
+  /** Made on an A1111 or ComfyUI connection, not NovelAI: `model` and the
+   *  NovelAI-only parameters are then just the form's at the time. */
+  backend?: BackendInfo;
 }
 
 // ─── Chained actions ─────────────────────────────────────────────────────────

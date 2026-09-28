@@ -12,6 +12,7 @@ import {
 } from '@/types/novelai';
 import { QualityLevel, UcLevel } from '@/lib/naiPresets';
 import { serverStorage } from '@/lib/serverSettings';
+import type { ImageConnection } from '@/types/imageBackend';
 
 // The image generator's settings, in the same shape as NovelFrontEnd's so
 // its request builder (lib/imageRequest.ts) works unchanged. The prompt
@@ -55,6 +56,12 @@ export interface FormSettings {
   /** ✨ From greeting also places the characters (grid positions). Off,
    *  NovelAI decides where they go. */
   placeCharacters: boolean;
+  /** Where gens are made: NovelAI, A1111 or ComfyUI connections
+   *  (store/imageConnections.ts). None, and the generator is locked. */
+  imageConnections: ImageConnection[];
+  imageConnectionId: string | null;
+  /** Set once an existing NovelAI setup has been given its connection. */
+  imageConnectionsMigrated: boolean;
 }
 
 /** The fields that belong to a card rather than to the generator. */
@@ -97,6 +104,9 @@ export const GEN_DEFAULTS: FormSettings = {
   tidbitLibrary: [],
   copies: 1,
   placeCharacters: false,
+  imageConnections: [],
+  imageConnectionId: null,
+  imageConnectionsMigrated: false,
 };
 
 export const useSettingsStore = create<SettingsState>()(

@@ -4,6 +4,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { useLlmStore } from '@/store/llmStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { changedElsewhere, loadSettings, readSection } from '@/lib/serverSettings';
+import { migrateImageConnections } from '@/store/imageConnections';
 
 // Loads the settings every device shares before the app first renders, and
 // picks up changes made on another device (settings, recent gens) when this
@@ -17,6 +18,7 @@ async function loadNaiKey() {
 export async function hydrateSettings() {
   await loadSettings();
   await Promise.all([useSettingsStore.persist.rehydrate(), useLlmStore.persist.rehydrate(), loadNaiKey()]);
+  migrateImageConnections();
   // Recent gens come in behind the first render; they're only pictures.
   void useSessionStore.getState().syncStored();
 
