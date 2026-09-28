@@ -6,7 +6,7 @@ import { cx } from '@/components/ui';
 
 // Pictures, full screen: swipe (or ←/→, or ‹ ›) between them, pinch or
 // scroll to zoom, drag to pan when zoomed, double-tap (or double-click) to
-// zoom in and back, and swipe down, Back, Escape or ✕ to close. On a phone
+// zoom in and back, and swipe down, tap beside the picture, Back, Escape or ✕ to close. On a phone
 // it also asks the browser for real fullscreen, hiding its bars; Android's
 // Back leaves both at once.
 
@@ -233,7 +233,13 @@ function LightboxView({ srcs, index: startIndex, onIndex }: Open) {
       return setShift(0);
     }
     if (!g || g.moved) return;
-    // A tap: two in a row zoom in on that spot, or back out.
+    // A tap beside the picture (on the black) closes it, as clicking
+    // outside a dialog does. Not while zoomed in: then it's all picture.
+    if (viewRef.current.s === 1) {
+      const pic = root.current?.querySelector('[data-slot="0"] img')?.getBoundingClientRect();
+      if (pic && (e.clientX < pic.left || e.clientX > pic.right || e.clientY < pic.top || e.clientY > pic.bottom)) return close();
+    }
+    // A tap on it: two in a row zoom in on that spot, or back out.
     const now = Date.now();
     if (now - lastTap.current < 300) {
       lastTap.current = 0;
