@@ -23,7 +23,10 @@ import { calculateAnlasCost, opusStatus, MAX_GENERATION_PIXELS } from '@/lib/anl
 import { hasVariety } from '@/lib/variety';
 import { blobToBase64, getImageDimensions } from '@/lib/imageUtils';
 import { eraseStealthMarks } from '@/lib/requestImage';
-import { appearanceTagsMessages, castSceneMessages, cleanTags, sceneTagsMessages, takeDatasetTags } from '@/lib/assist';
+import { appearanceTagsMessages, artReferenceNote, castSceneMessages, cleanTags, sceneTagsMessages, takeDatasetTags } from '@/lib/assist';
+import { withReferences, type Reference } from '@/lib/references';
+import { ReferenceTray, referenceConnectionId } from '@/components/llm/References';
+import { create } from 'zustand';
 import { mergeCast, parseCast, type MergeResult } from '@/lib/castPrompt';
 import { greetingText } from '@/lib/chatPrompt';
 import { saveSessionImage } from '@/lib/imageActions';
@@ -33,6 +36,7 @@ import { Button, IconButton, NumberInput, Toggle, cx, inputClass } from '@/compo
 import { ImageViewer } from '@/components/dock/ImageViewer';
 import { openSettings } from '@/components/SettingsDialog';
 import type { CharacterPromptEntry, NovelAIModel, NovelAINoiseSchedule } from '@/types/novelai';
+import type { LlmMessage } from '@/types/llm';
 import { uuid } from '@/lib/uuid';
 import { AssistTraceButton } from '@/components/llm/AssistTrace';
 
@@ -301,6 +305,8 @@ function PromptForm() {
 
       <StyleSection text={form.stylePrompt} onChange={(v) => set('stylePrompt', v)} model={form.model} apiKey={apiKey} />
 
+      <ArtReferences />
+
       <SceneSection
         text={basePrompt?.text ?? ''}
         onChange={setBasePrompt}
@@ -484,6 +490,44 @@ function switchedOn(nsfw: boolean, fur: boolean): string {
 
 /** The card's style: artist and style tags in front of every prompt, which
  *  the ✨ writers leave alone. */
+// Art references: pictures (or other cards) the ✨ prompt writers draw
+// from, per card, for this visit.
+const useArtRefs = create<{ byCard: Record<string, Reference[]>; set: (card: string, refs: Reference[]) => void }>((set) => ({
+  byCard: {},
+  set: (card, refs) => set((s) => ({ byCard: { ...s.byCard, [card]: refs } })),
+}));
+const NO_REFS: Reference[] = [];
+
+/** A prompt writer's request with the card's art references on it, and the
+ *  connection it goes to. */
+function artRequest(messages: LlmMessage[]): [LlmMessage[], { connectionId?: string }] {
+  const id = useProjectStore.getState().project?.id;
+  const refs = (id && useArtRefs.getState().byCard[id]) || NO_REFS;
+  return [withReferences(messages, refs), { connectionId: referenceConnectionId(refs) }];
+}
+const hasArtRefs = () => {
+  const id = useProjectStore.getState().project?.id;
+  return !!(id && useArtRefs.getState().byCard[id]?.length);
+};
+const artNote = () => (hasArtRefs() ? artReferenceNote() : '');
+
+function ArtReferences() {
+  const id = useProjectStore((s) => s.project?.id);
+  const refs = useArtRefs((s) => (id && s.byCard[id]) || NO_REFS);
+  const setRefs = useArtRefs((s) => s.set);
+  if (!id) return null;
+  return (
+    <ReferenceTray
+      refs={refs}
+      label="Art references"
+      hint="Pictures (or other cards) for ✨ From greeting and ✨ From description to draw from: a character's look, an outfit, a place. You can also drop pictures here."
+      onAdd={(r) => setRefs(id, [...refs, ...r.filter((n) => !refs.some((c) => c.id === n.id))])}
+      onRemove={(rid) => setRefs(id, refs.filter((r) => r.id !== rid))}
+      className="-mb-1"
+    />
+  );
+}
+
 function StyleSection({ text, onChange, model, apiKey }: { text: string; onChange: (v: string) => void; model: NovelAIModel; apiKey: string }) {
   return (
     <div className="flex flex-col gap-1">
@@ -510,7 +554,8 @@ function SceneSection({ text, onChange, model, apiKey, meter }: { text: string; 
     if (!card) return;
     // V3 has no character prompts: everything goes in the one prompt.
     if (!castModel) {
-      const r = await runAssist(sceneTagsMessages(card, scene, ''), undefined, '✨ Scene prompt');
+      const [messages, opts] = artRequest(sceneTagsMessages(card, scene, artNote()));
+      const r = await runAssist(messages, undefined, '✨ Scene prompt', opts);
       if (r.error) return toast(r.error, 'error');
       const { tags, nsfw, fur } = takeDatasetTags(cleanTags(r.text));
       if (tags) {
@@ -522,7 +567,8 @@ function SceneSection({ text, onChange, model, apiKey, meter }: { text: string; 
     // V4 and later: the main prompt and a prompt for each character in it.
     const form = useSettingsStore.getState();
     const place = form.placeCharacters;
-    const r = await runAssist(castSceneMessages(card, scene, '', form.characters.filter((c) => !c.archived), place), undefined, '✨ Scene prompt');
+    const [messages, opts] = artRequest(castSceneMessages(card, scene, artNote(), form.characters.filter((c) => !c.archived), place));
+    const r = await runAssist(messages, undefined, '✨ Scene prompt', opts);
     if (r.error) return toast(r.error, 'error');
     const cast = parseCast(r.text);
     if (!cast.scene && !cast.characters.length) return toast("The assistant's reply had no prompts in it (🔍 shows what it said).", 'error');
@@ -606,6 +652,8 @@ function CharactersSection({ counts }: { counts: Record<string, { prompt: number
   const [openUc, setOpenUc] = useState<Set<string>>(new Set());
   const max = maxCharacters(model);
   const active = characters.filter((c) => !c.archived);
+  const projectId = useProjectStore((s) => s.project?.id);
+  const referenced = useArtRefs((s) => !!(projectId && s.byCard[projectId]?.length));
 
   const update = (id: string, patch: Partial<CharacterPromptEntry>) => set('characters', characters.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   const add = (prompt = '') =>
@@ -615,7 +663,8 @@ function CharactersSection({ counts }: { counts: Record<string, { prompt: number
    *  (a card about several gets several). */
   const appearance = async () => {
     if (!card) return;
-    const r = await runAssist(appearanceTagsMessages(card, '', active.map((c) => c.label ?? '')), undefined, '✨ Character prompt');
+    const [messages, opts] = artRequest(appearanceTagsMessages(card, artNote(), active.map((c) => c.label ?? '')));
+    const r = await runAssist(messages, undefined, '✨ Character prompt', opts);
     if (r.error) return toast(r.error, 'error');
     const cast = parseCast(r.text);
     // A reply without CHARACTER lines is one character's tags.
@@ -624,7 +673,7 @@ function CharactersSection({ counts }: { counts: Record<string, { prompt: number
     const now = useSettingsStore.getState();
     const m = mergeCast(now.characters, members, { scene: false, max: maxCharacters(now.model), cardName: card.name });
     set('characters', m.characters);
-    toast(`${members.length === 1 ? 'Character prompt' : 'Character prompts'} written from the card's description.${castSummary(m)}${switchedOn(cast.nsfw, cast.fur)}`, 'success');
+    toast(`${members.length === 1 ? 'Character prompt' : 'Character prompts'} written from the card's description${hasArtRefs() ? ' and your references' : ''}.${castSummary(m)}${switchedOn(cast.nsfw, cast.fur)}`, 'success');
   };
 
   const positions = useMemo(() => POSITIONS.flatMap((y) => POSITIONS.map((x) => ({ x, y }))), []);
@@ -643,7 +692,7 @@ function CharactersSection({ counts }: { counts: Record<string, { prompt: number
               Stop
             </Button>
           ) : (
-            <Button size="sm" disabled={!card?.description.trim()} onClick={() => void appearance()} title="Write each character's prompt from the card's description (one per character, for a card about several)">
+            <Button size="sm" disabled={!card?.description.trim() && !referenced} onClick={() => void appearance()} title="Write each character's prompt from the card's description and any art references (one per character, for a card about several)">
               ✨ From description
             </Button>
           )}

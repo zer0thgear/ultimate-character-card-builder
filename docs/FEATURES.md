@@ -98,7 +98,9 @@ Text-completion (instruct/context) presets aren't supported yet.
 - **Pictures** go with the message, scaled like Write from image, and a request with pictures goes to the **Vision model** instead of the assistant's (the tray says which).
 - In Brainstorm, references stay with the message they were sent with, so later turns still see them. A thread with pictures in it keeps going to the vision model until you Clear it.
 
-The wording of the note is editable in Settings → Assistant → Prompts (📎 References).
+**Art references** (📎 in the Image tab, between Style and Scene) do the same for the art prompt writers: ✨ From greeting and ✨ From description take the card's references into account, with a note to describe what the pictures show as tags (hair, eyes, build, outfit, setting) and let the card fill in the rest. A reference card there is another character who may appear. Art references are kept per card until you reload, and with a picture attached ✨ From description works even before the card has a description.
+
+The wording of both notes is editable in Settings → Assistant → Prompts (📎 References).
 
 ## Writing from an image
 

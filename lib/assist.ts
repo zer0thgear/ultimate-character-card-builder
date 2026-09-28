@@ -291,6 +291,15 @@ The attached image was made for this card. {{instruction}}`,
 {{pictures}}`,
   },
 
+  {
+    key: 'references.art',
+    group: '📎 References',
+    label: 'For the art prompt writers',
+    vars: [],
+    note: "Given to ✨ From description and ✨ From greeting (as their instruction) when you've attached art references in the Image tab.",
+    text: `Use the attached references for how things look: describe what the pictures show as tags (hair, eyes, build, outfit, setting), and let the card fill in what they don't. A reference card is another character who may appear; take their look from it.`,
+  },
+
   // Brainstorm
   {
     key: 'brainstorm.system',
@@ -478,6 +487,9 @@ export function visionMessages(card: CardData, kind: VisionJob, instruction: str
 export function referencesText(vars: { cards: string; pictures: string }): string {
   return fillTemplate(template('references.user'), vars);
 }
+
+/** What the art writers are told when there are references. */
+export const artReferenceNote = () => template('references.art');
 
 /** Brainstorm (the Ideas tab): a free-form chat that always sees the card. */
 export function brainstormMessages(card: CardData, thread: LlmMessage[]): LlmMessage[] {

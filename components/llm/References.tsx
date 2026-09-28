@@ -75,7 +75,7 @@ async function pictureReference(blob: Blob, name: string, id = uuid()): Promise<
  * The attached references as chips, and the 📎 button that adds more.
  * Pictures dropped on it are attached too.
  */
-export function ReferenceTray({ refs, onAdd, onRemove, className }: { refs: Reference[]; onAdd: (r: Reference[]) => void; onRemove: (id: string) => void; className?: string }) {
+export function ReferenceTray({ refs, onAdd, onRemove, className, label = 'References', hint }: { refs: Reference[]; onAdd: (r: Reference[]) => void; onRemove: (id: string) => void; className?: string; label?: string; hint?: string }) {
   const [picking, setPicking] = useState(false);
   const [over, setOver] = useState(false);
   const { connections, visionConnectionId, assistConnectionId } = useLlmStore();
@@ -103,8 +103,8 @@ export function ReferenceTray({ refs, onAdd, onRemove, className }: { refs: Refe
       }}
     >
       <div className="flex flex-wrap items-center gap-1.5">
-        <Button size="sm" variant="ghost" onClick={() => setPicking(true)} title="Attach other cards or pictures for the assistant to work from (you can also paste or drop pictures)">
-          📎 {refs.length ? 'Add' : 'References'}
+        <Button size="sm" variant="ghost" onClick={() => setPicking(true)} title={hint ?? 'Attach other cards or pictures for the assistant to work from (you can also paste or drop pictures)'}>
+          📎 {refs.length ? 'Add' : label}
         </Button>
         {refs.map((r) => (
           <span key={r.id} className="flex max-w-48 items-center gap-1 rounded-md bg-slate-800 py-0.5 pr-0.5 pl-1 text-xs text-slate-300" title={r.kind === 'card' ? `Card: ${r.name}` : `Picture: ${r.name}`}>
