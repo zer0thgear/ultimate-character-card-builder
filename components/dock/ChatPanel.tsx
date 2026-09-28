@@ -480,6 +480,52 @@ function Avatar({ role, persona }: { role: 'user' | 'assistant' | 'system'; pers
   );
 }
 
+/**
+ * A sideways swipe on a message, by touch only: left for the next version,
+ * right for the one before. Scrolling up and down is left to the browser;
+ * the bubble follows the finger a little while it's a swipe. Off with
+ * Chat settings → Swipe gesture, or when there's nothing to swipe.
+ */
+function useSwipeGesture(onNext: (() => void) | null, onPrev: (() => void) | null) {
+  const enabled = useLlmStore((s) => s.chatSettings.swipeGesture ?? true) && !!(onNext || onPrev);
+  const start = useRef<{ x: number; y: number; id: number; sideways: boolean | null } | null>(null);
+  const [dx, setDx] = useState(0);
+  if (!enabled) return { props: {}, style: undefined };
+  const end = (e: React.PointerEvent) => {
+    const s = start.current;
+    start.current = null;
+    setDx(0);
+    if (!s || e.pointerId !== s.id || !s.sideways) return;
+    const moved = e.clientX - s.x;
+    if (moved < -60) onNext?.();
+    else if (moved > 60) onPrev?.();
+  };
+  return {
+    props: {
+      onPointerDown: (e: React.PointerEvent) => {
+        if (e.pointerType !== 'touch' || (e.target as HTMLElement).closest('button, textarea, input, a, details')) return;
+        start.current = { x: e.clientX, y: e.clientY, id: e.pointerId, sideways: null };
+      },
+      onPointerMove: (e: React.PointerEvent) => {
+        const s = start.current;
+        if (!s || e.pointerId !== s.id) return;
+        const x = e.clientX - s.x;
+        const y = e.clientY - s.y;
+        // Decided once, on the first clear move: sideways is a swipe, anything else a scroll.
+        if (s.sideways === null && Math.hypot(x, y) > 10) s.sideways = Math.abs(x) > Math.abs(y) * 1.5;
+        if (s.sideways) setDx(Math.max(-80, Math.min(80, x * 0.4)));
+      },
+      onPointerUp: end,
+      onPointerCancel: () => {
+        start.current = null;
+        setDx(0);
+      },
+    },
+    // pan-y: the browser keeps vertical scrolling and hands sideways moves over.
+    style: { touchAction: 'pan-y', transform: dx ? `translateX(${dx}px)` : undefined, transition: dx ? undefined : 'transform 150ms ease-out' } as React.CSSProperties,
+  };
+}
+
 /** A message's number, SillyTavern style. */
 function MessageId({ id, className }: { id: number; className?: string }) {
   return <span className={cx('text-[11px] text-slate-600 tabular-nums', className)} title={id === 0 ? 'Message #0: the greeting' : `Message #${id}`}>#{id}</span>;
@@ -487,10 +533,11 @@ function MessageId({ id, className }: { id: number; className?: string }) {
 
 function GreetingBubble({ card, index, count, onSwipe, userName, showId }: { card: CardData; index: number; count: number; onSwipe: (i: number) => void; userName: string; showId: boolean }) {
   const text = greetingText(card, index);
+  const swipe = useSwipeGesture(count > 1 ? () => onSwipe(index >= count - 1 ? 0 : index + 1) : null, count > 1 ? () => onSwipe(index <= 0 ? count - 1 : index - 1) : null);
   return (
     <div className="flex gap-2">
       <Avatar role="assistant" />
-      <div className="min-w-0 flex-1 rounded-lg bg-slate-900 px-3 py-2">
+      <div className="min-w-0 flex-1 rounded-lg bg-slate-900 px-3 py-2" {...swipe.props} style={swipe.style}>
         <div className="mb-1 flex items-center gap-2 text-xs">
           <span className="font-semibold text-slate-200">{card.nickname || card.name || 'Character'}</span>
           <span className="text-slate-500">greeting · live from the card</span>
@@ -550,10 +597,16 @@ function Bubble({
   const tokens = useTextTokens(text, 800);
   const reasoning = streaming ? streamReasoning : m.reasoning?.[m.swipe];
   const isUser = m.role === 'user';
+  // Only the last reply has versions to swipe through, as its buttons do.
+  const swipeable = !isUser && isLast && !busy && editing === null;
+  const swipe = useSwipeGesture(
+    swipeable ? () => (m.swipe < m.swipes.length - 1 ? onChange({ swipe: m.swipe + 1 }) : onSwipeNew()) : null,
+    swipeable && m.swipe > 0 ? () => onChange({ swipe: m.swipe - 1 }) : null,
+  );
   return (
     <div className={cx('group flex gap-2', isUser && 'flex-row-reverse')}>
       <Avatar role={m.role} persona={persona} />
-      <div className={cx('min-w-0 flex-1 rounded-lg px-3 py-2', isUser ? 'bg-sky-500/10' : 'bg-slate-900')}>
+      <div className={cx('min-w-0 flex-1 rounded-lg px-3 py-2', isUser ? 'bg-sky-500/10' : 'bg-slate-900')} {...swipe.props} style={swipe.style}>
         <div className={cx('mb-1 flex items-center gap-2 text-xs', isUser && 'flex-row-reverse')}>
           <span className="font-semibold text-slate-200">{isUser ? userName || 'User' : card.nickname || card.name || 'Character'}</span>
           {m.model && !isUser && <span className="truncate text-slate-600">{m.model}</span>}
@@ -699,6 +752,7 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
         <Toggle checked={s.includeExamples} onChange={(v) => setChatSettings({ includeExamples: v })} label={<span className="text-xs">Send example messages</span>} />
         <Toggle checked={s.useLorebook} onChange={(v) => setChatSettings({ useLorebook: v })} label={<span className="text-xs">Use the lorebook</span>} />
         <Toggle checked={s.showMessageIds} onChange={(v) => setChatSettings({ showMessageIds: v })} label={<span className="text-xs">Show message numbers (#0 is the greeting)</span>} />
+        <Toggle checked={s.swipeGesture ?? true} onChange={(v) => setChatSettings({ swipeGesture: v })} label={<span className="text-xs" title="On a touch screen: swipe the last reply left for its next version (a new one at the end), right for the one before; the greeting swipes between greetings">Swipe gesture on the last reply</span>} />
         <label className="flex items-center gap-2 text-xs text-slate-400">
           Avatars
           <select value={s.avatarShape} onChange={(e) => setChatSettings({ avatarShape: e.target.value as AvatarShape })} className={cx(inputClass, 'w-auto py-0.5 text-xs')}>

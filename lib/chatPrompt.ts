@@ -36,6 +36,9 @@ export interface ChatPromptSettings {
   showMessageIds: boolean;
   /** How the chat shows avatars, as SillyTavern's choice does. */
   avatarShape: AvatarShape;
+  /** On a touch screen, swiping the last reply (or the greeting) sideways
+   *  changes its version, as SillyTavern's phone layout does. */
+  swipeGesture: boolean;
 }
 
 export type AvatarShape = 'circle' | 'square' | 'rectangle' | 'none';
@@ -55,6 +58,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatPromptSettings = {
   presetSamplers: true,
   showMessageIds: true,
   avatarShape: 'circle',
+  swipeGesture: true,
 };
 
 export const DEFAULT_IMPERSONATION =
