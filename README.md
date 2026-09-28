@@ -105,3 +105,7 @@ Features you'd rather not publish can live in a `local/` folder beside the app. 
 - an API under `/api/ext/<id>/`, with private storage in `data/ext/<id>/`.
 
 Without the folder, the app runs as usual. Restart after adding or removing it.
+
+## License
+
+MIT; see [LICENSE](LICENSE). The tokenizer data in `public/tokenizers/` keeps its own licenses (Apache 2.0 and MIT), included beside it.

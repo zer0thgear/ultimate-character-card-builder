@@ -2,6 +2,7 @@
   "name": "ultimate-character-card-builder",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "dev": "node server.mjs --dev",
     "build": "next build",
