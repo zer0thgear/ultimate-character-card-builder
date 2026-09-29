@@ -264,6 +264,16 @@ export function ChatPanel() {
     else setInput(r.text.trim());
   };
 
+  const sendButton = running ? (
+    <Button size="sm" variant="danger" onClick={stop} className={cx(phone && 'px-4')}>
+      Stop
+    </Button>
+  ) : (
+    <Button size="sm" variant="primary" onClick={() => void send()} className={cx(phone && 'px-4')}>
+      Send
+    </Button>
+  );
+
   const preview = () => setInspect(build(chat?.messages ?? []));
   const renameChat = () => {
     if (!chat) return;
@@ -480,24 +490,18 @@ export function ChatPanel() {
             maxRows={10}
             placeholder={phone ? `Message as ${me.name}…` : `Message as ${me.name}… (Enter sends, Shift+Enter for a new line; empty Enter asks for a reply)`}
           />
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {running ? (
-              <Button size="sm" variant="danger" onClick={stop}>
-                Stop
-              </Button>
-            ) : (
-              <Button size="sm" variant="primary" onClick={() => void send()}>
-                Send
-              </Button>
-            )}
-            <Button size="sm" disabled={running} onClick={() => void regenerate()} title="Another version of the last reply">
-              ↻ Regenerate
+          {/* One row on a phone too: the actions as icons (hold one for its
+              name), Send on the right. */}
+          <div className={cx('mt-1.5 flex items-center gap-1.5', phone ? 'flex-nowrap' : 'flex-wrap')}>
+            {!phone && sendButton}
+            <Button size="sm" disabled={running} onClick={() => void regenerate()} title={phone ? 'Regenerate: another version of the last reply' : 'Another version of the last reply'}>
+              {phone ? <span className="px-1 text-base leading-none">↻</span> : '↻ Regenerate'}
             </Button>
             <Button size="sm" disabled={running} onClick={() => void continueLast()} title="Continue the last reply">
-              → Continue
+              {phone ? <span className="px-1 text-base leading-none">→</span> : '→ Continue'}
             </Button>
-            <Button size="sm" disabled={running} onClick={() => void impersonate()} title="Write your next message for you (it lands in the box to edit)">
-              🎭 Impersonate
+            <Button size="sm" disabled={running} onClick={() => void impersonate()} title={phone ? 'Impersonate: write your next message for you (it lands in the box to edit)' : 'Write your next message for you (it lands in the box to edit)'}>
+              {phone ? <span className="px-0.5 text-base leading-none">🎭</span> : '🎭 Impersonate'}
             </Button>
             <Button
               size="sm"
@@ -505,8 +509,10 @@ export function ChatPanel() {
               onClick={() => setGuideOpen(!guideOpen)}
               title="Guide: steer the next reply, swipe, continue or impersonation with an instruction the model sees just before it writes"
             >
-              🧭{guide.trim() ? (guidePinned ? ' Guided 📌' : ' Guided') : ''}
+              <span className={cx(phone && 'px-0.5 text-base leading-none')}>🧭</span>
+              {guide.trim() ? (phone ? (guidePinned ? '📌' : '') : guidePinned ? ' Guided 📌' : ' Guided') : ''}
             </Button>
+            {phone && <span className="ml-auto">{sendButton}</span>}
             {lastPrompt && !phone && (
               <button type="button" className="ml-auto text-[11px] text-slate-500 hover:text-slate-300" onClick={() => setInspect(lastPrompt)}>
                 Last prompt · {lastPrompt.lore.active.length} lore

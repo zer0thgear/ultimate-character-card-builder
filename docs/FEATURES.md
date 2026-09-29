@@ -162,6 +162,7 @@ On a narrow screen (or a phone on its side) UCCB becomes one screen at a time: a
 - Dialogs, the Edit/Inpaint canvas included, fill the screen; text fields are 16px so iPhone Safari doesn't zoom in.
 - Pictures open full screen with pinch-zoom (see [Art](#art)), and the phone's Back closes them.
 - The chat's header is one row: the chat, **+ New**, **⋯** (rename, export, the next or last prompt, delete) and **⚙** (model, persona, preset and the rest). Its buttons wrap rather than run off the edge, and greetings keep their actions inside the unfolded greeting.
+- The chat's buttons are one row: ↻ Regenerate, → Continue, 🎭 Impersonate and 🧭 Guide as icons (hold one for its name), and Send on the right.
 - **Typing**: the page shrinks to fit above the on-screen keyboard (Chrome), the field you're in scrolls back into view, and while the keyboard is up the header, the chat's header and the bottom bar hide to give the text room. Enter adds a new line; **Send** sends.
 
 To use it from your phone, run UCCB on your computer and open it over Tailscale (see the README's section on other devices).
