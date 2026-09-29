@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { NovelAIModel } from '@/types/novelai';
 import { TagSuggestion, useTagSuggestions } from '@/hooks/useTagSuggestions';
-import { currentSegment, applySegment, relevanceBrightness } from '@/lib/tagAutocomplete';
+import { currentSegment, applySegment, relevanceBrightness, segmentBounds } from '@/lib/tagAutocomplete';
 import { isRandomEntry, randomOptions } from '@/lib/wildcards';
 import { useSettingsStore } from '@/store/settingsStore';
 import { findWeightTarget, parseWeighted, Span, stepWeight, withWeight } from '@/lib/emphasis';
@@ -72,6 +72,10 @@ export function TagAutocompleteField({
   // undo, Escape or a weight change all switch them off until the next
   // typed character or deletion.
   const [active, setActive] = useState(false);
+  // Hidden for the tag being typed (by Esc, ✕ or a tap elsewhere): where
+  // that tag starts. They come back for the next tag.
+  const [dismissedAt, setDismissedAt] = useState<number | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   // Where typing left the caret, so the select event that follows a
   // keystroke isn't mistaken for the caret being moved.
   const typedCaret = useRef<{ start: number; end: number } | null>(null);
@@ -94,7 +98,9 @@ export function TagAutocompleteField({
   const { suggestions: tagSuggestions } = useTagSuggestions(libraryQuery === null ? query : '', model, apiKey);
   const rawSuggestions: Suggestion[] =
     libraryQuery === null ? tagSuggestions : librarySuggestions(libraryQuery);
-  const suggestions = active ? rawSuggestions : [];
+  const segStart = cursor !== null ? segmentBounds(value, cursor).start : null;
+  const dismissed = dismissedAt !== null && dismissedAt === segStart;
+  const suggestions = active && !dismissed ? rawSuggestions : [];
 
   function librarySuggestions(q: string): Suggestion[] {
     const seen = new Set<string>();
@@ -116,6 +122,23 @@ export function TagAutocompleteField({
       }));
   }
   const dropdownOpen = cursor !== null && suggestions.length > 0;
+  const dismiss = () => {
+    setDismissedAt(segStart);
+    setActive(false);
+  };
+
+  // A tap or click anywhere but the field or the list closes it (more
+  // reliable than waiting for the field to lose focus, on a phone above all).
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    const away = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (fieldRef.current?.contains(t) || dropdownRef.current?.contains(t)) return;
+      dismiss();
+    };
+    document.addEventListener('pointerdown', away, true);
+    return () => document.removeEventListener('pointerdown', away, true);
+  });
 
   // The field can sit inside any number of `overflow-hidden`/`overflow-auto`
   // ancestors (card corners, the sidebar's own scroll container, …) that
@@ -230,12 +253,14 @@ export function TagAutocompleteField({
     }
     if (dropdownOpen && e.key === 'Escape') {
       e.preventDefault();
-      setActive(false);
+      dismiss();
       return;
     }
     // Ctrl/Cmd+Enter is Generate, wherever the caret is, so it beats the
-    // dropdown's own Enter.
-    if (dropdownOpen && (e.key === 'Enter' || e.key === 'Tab') && !e.nativeEvent.isComposing && !(e.ctrlKey || e.metaKey)) {
+    // dropdown's own Enter. On a touch screen Enter is just a new line (tap
+    // a suggestion to use it), so a line break never turns into a tag.
+    const touch = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+    if (dropdownOpen && !touch && (e.key === 'Enter' || e.key === 'Tab') && !e.nativeEvent.isComposing && !(e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       select(suggestions[highlightIndex].tag);
       return;
@@ -296,7 +321,8 @@ export function TagAutocompleteField({
         placement &&
         createPortal(
           <div
-            className="fixed z-50 overflow-y-auto rounded-lg border border-slate-700 bg-slate-800 shadow-xl"
+            ref={dropdownRef}
+            className="fixed z-50 flex flex-col overflow-y-auto rounded-lg border border-slate-700 bg-slate-800 shadow-xl"
             style={{
               left: placement.left,
               width: placement.width,
@@ -304,6 +330,17 @@ export function TagAutocompleteField({
               ...(placement.top !== undefined ? { top: placement.top } : { bottom: placement.bottom }),
             }}
           >
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault(); // keep the field focused
+                dismiss();
+              }}
+              title="Hide the suggestions for this tag (Esc); they come back for the next one"
+              className={`sticky flex items-center justify-end gap-1 bg-slate-800/95 px-3 py-1 text-[10px] text-slate-400 hover:text-slate-100 ${placement.top !== undefined ? 'top-0 order-first border-b' : 'bottom-0 order-last border-t'} border-slate-700`}
+            >
+              Hide <span aria-hidden>✕</span>
+            </button>
             {suggestions.map((s, i) => (
               <button
                 key={s.tag}

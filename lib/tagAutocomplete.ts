@@ -3,7 +3,7 @@
 
 /** Segments break on commas and line breaks — the latter matter for random
  *  wildcard entries (one option per line) and Shift+Enter in prompt boxes. */
-function segmentBounds(text: string, cursor: number): { start: number; end: number } {
+export function segmentBounds(text: string, cursor: number): { start: number; end: number } {
   const before = text.slice(0, cursor);
   const start = Math.max(before.lastIndexOf(','), before.lastIndexOf('\n')) + 1;
   const comma = text.indexOf(',', cursor);
