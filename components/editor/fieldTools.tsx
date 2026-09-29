@@ -9,6 +9,7 @@ import { FIELD_ACTIONS, fieldActionMessages, type FieldAction } from '@/lib/assi
 import { useLlmStream } from '@/hooks/useLlmStream';
 import { AutoTextarea, Button, IconButton, Modal, TextField, TokenBadge, cx, enterSends, inputClass } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
+import { CutOffNotice } from '@/components/llm/CutOffNotice';
 import { AssistReasoning } from '@/components/llm/AssistTrace';
 import { ReferenceTray, referenceConnectionId, useReferences } from '@/components/llm/References';
 import { withReferences } from '@/lib/references';
@@ -85,7 +86,7 @@ function AssistDialog({ path, onClose }: { path: string; onClose: () => void }) 
   const [action, setAction] = useState<FieldAction>(current.trim() ? 'rewrite' : 'draft');
   const [instruction, setInstruction] = useState('');
   const [edited, setDraft] = useState('');
-  const { runAssist, continueAssist, cutOff, runId, stop, text, running, error } = useLlmStream();
+  const { runAssist, continueAssist, retryWithMoreRoom, cutOff, runId, stop, text, reasoning, running, error } = useLlmStream();
   const refs = useReferences();
   const draft = running ? text : edited;
 
@@ -179,7 +180,7 @@ function AssistDialog({ path, onClose }: { path: string; onClose: () => void }) 
         <ReferenceTray refs={refs.refs} onAdd={refs.add} onRemove={refs.remove} />
         <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant model" />
         {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
-        {cutOff && !running && <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-200">The reply stopped at the model&apos;s token limit. → Continue picks up where it left off (or raise the connection&apos;s max tokens in Settings).</div>}
+        <CutOffNotice show={cutOff && !running} hasText={!!draft.trim()} reasoning={reasoning} onUseReasoning={() => setDraft(reasoning.trim())} onRetry={() => void retryWithMoreRoom().then((r) => r && setDraft(r.text.trim()))} />
         <AssistReasoning runId={runId} />
         <div className="grid gap-3 md:grid-cols-2">
           <div className="flex flex-col gap-1">

@@ -11,6 +11,7 @@ import { imageForVision } from '@/lib/visionImage';
 import { copyText } from '@/lib/clipboard';
 import { AutoTextarea, Button, Modal, TokenBadge, confirmDialog, cx, enterSends } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
+import { CutOffNotice } from '@/components/llm/CutOffNotice';
 import { AssistReasoning } from '@/components/llm/AssistTrace';
 
 // ✨ Write from an image: a vision model looks at a gen (or a kept or
@@ -58,7 +59,7 @@ function VisionWriteDialog({ blob, url }: { blob: Blob; url: string }) {
   const [job, setJob] = useState<VisionJob>('appearance');
   const [instruction, setInstruction] = useState('');
   const [draft, setDraft] = useState<string | null>(null);
-  const { runAssist, continueAssist, cutOff, runId, stop, text, running, error } = useLlmStream();
+  const { runAssist, continueAssist, retryWithMoreRoom, cutOff, runId, stop, text, reasoning, running, error } = useLlmStream();
   if (!card) return null;
   const shown = draft ?? text;
   const blind = connection?.kind === 'novelai';
@@ -234,7 +235,7 @@ function VisionWriteDialog({ blob, url }: { blob: Blob; url: string }) {
             <p className="text-[11px] text-slate-500">Needs a model that can see images. One that can&apos;t usually refuses the request (you&apos;ll see why here), though a few servers quietly ignore the picture and guess.</p>
           )}
           {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
-          {cutOff && !running && <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-200">The reply stopped at the model&apos;s token limit. → Continue picks up where it left off (or raise the connection&apos;s max tokens in Settings).</div>}
+          <CutOffNotice show={cutOff && !running} hasText={!!shown.trim()} reasoning={reasoning} onUseReasoning={() => setDraft(reasoning.trim())} onRetry={() => { setDraft(null); void retryWithMoreRoom().then((r) => setDraft(r ? r.text.trim() : null)); }} />
           <AssistReasoning runId={runId} />
           <div className="flex items-center justify-between text-xs text-slate-500">
             <span>{running ? <span className="animate-pulse text-violet-300">writing…</span> : 'Result'}</span>

@@ -10,6 +10,7 @@ import { AutoTextarea, Button, IconButton, Modal, TokenBadge, confirmDialog, Sec
 import { useLlmStream } from '@/hooks/useLlmStream';
 import { newGreetingMessages } from '@/lib/assist';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
+import { CutOffNotice } from '@/components/llm/CutOffNotice';
 import { AssistReasoning } from '@/components/llm/AssistTrace';
 import { ReferenceTray, referenceConnectionId, useReferences } from '@/components/llm/References';
 import { withReferences } from '@/lib/references';
@@ -200,7 +201,7 @@ function NewGreetingDialog({ onClose }: { onClose: () => void }) {
   const updateCard = useProjectStore((s) => s.updateCard);
   const { assistConnectionId, setAssistConnection } = useLlmStore();
   const [instruction, setInstruction] = useState('');
-  const { runAssist, continueAssist, cutOff, runId, stop, text, running, error } = useLlmStream();
+  const { runAssist, continueAssist, retryWithMoreRoom, cutOff, runId, stop, text, reasoning, running, error } = useLlmStream();
   const [draft, setDraft] = useState<string | null>(null);
   const refs = useReferences();
   if (!card) return null;
@@ -281,7 +282,7 @@ function NewGreetingDialog({ onClose }: { onClose: () => void }) {
         <ReferenceTray refs={refs.refs} onAdd={refs.add} onRemove={refs.remove} />
         <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant model" />
         {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
-        {cutOff && !running && <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-200">The reply stopped at the model&apos;s token limit. → Continue picks up where it left off (or raise the connection&apos;s max tokens in Settings).</div>}
+        <CutOffNotice show={cutOff && !running} hasText={!!shown.trim()} reasoning={reasoning} onUseReasoning={() => setDraft(reasoning.trim())} onRetry={() => { setDraft(null); void retryWithMoreRoom().then((r) => setDraft(r ? r.text.trim() : null)); }} />
         <AssistReasoning runId={runId} />
         <AutoTextarea value={shown} onChange={(e) => setDraft(e.target.value)} minRows={10} maxRows={28} placeholder="The new greeting appears here. You can edit it before adding." />
       </div>

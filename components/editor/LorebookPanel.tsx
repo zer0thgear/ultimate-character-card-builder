@@ -14,6 +14,7 @@ import { SortableList, arrayMove, remapIndex } from '@/components/SortableList';
 import { FieldActions, useCardField } from '@/components/editor/fieldTools';
 import { AutoTextarea, Button, ChipInput, Empty, IconButton, Modal, NumberInput, Section, TokenBadge, Toggle, confirmDialog, cx, downloadBlob, enterSends, fileBytes, inputClass, pickFiles } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
+import { CutOffNotice } from '@/components/llm/CutOffNotice';
 import { AssistReasoning } from '@/components/llm/AssistTrace';
 import { ReferenceTray, referenceConnectionId, useReferences } from '@/components/llm/References';
 import { withReferences } from '@/lib/references';
@@ -291,7 +292,7 @@ function WriteEntryDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (e: 
   const card = useProjectStore((s) => s.project?.card.data);
   const { assistConnectionId, setAssistConnection } = useLlmStore();
   const [topic, setTopic] = useState('');
-  const { runAssist, continueAssist, cutOff, runId, stop, text, running, error } = useLlmStream();
+  const { runAssist, continueAssist, retryWithMoreRoom, cutOff, runId, stop, text, reasoning, running, error } = useLlmStream();
   const parsed = parseLorebookEntry(text);
   const refs = useReferences();
   if (!card) return null;
@@ -362,7 +363,7 @@ function WriteEntryDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (e: 
         <ReferenceTray refs={refs.refs} onAdd={refs.add} onRemove={refs.remove} />
         <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant model" />
         {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
-        {cutOff && !running && <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-200">The reply stopped at the model&apos;s token limit. → Continue picks up where it left off (or raise the connection&apos;s max tokens in Settings).</div>}
+        <CutOffNotice show={cutOff && !running} hasText={!!text.trim()} reasoning={reasoning} onRetry={() => void retryWithMoreRoom()} />
         <AssistReasoning runId={runId} />
         {text && (
           <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm">

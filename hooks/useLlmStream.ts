@@ -120,8 +120,8 @@ export function useLlmStream() {
   /** A writing-assistant request (see assistRequest), logged under `label`
    *  so its reasoning and prompt can be looked at. */
   const runAssist = useCallback(
-    async (messages: LlmMessage[], onText?: (full: string) => void, label = 'Assistant', opts: { connectionId?: string | null; continueFrom?: string } = {}): Promise<StreamResult & { runId: string }> => {
-      if (opts.continueFrom === undefined) lastAssist.current = { messages, label, connectionId: opts.connectionId };
+    async (messages: LlmMessage[], onText?: (full: string) => void, label = 'Assistant', opts: { connectionId?: string | null; continueFrom?: string; maxTokens?: number } = {}): Promise<StreamResult & { runId: string }> => {
+      if (opts.continueFrom === undefined && opts.maxTokens === undefined) lastAssist.current = { messages, label, connectionId: opts.connectionId };
       setCutOff(false);
       const req = assistRequest(messages, opts.connectionId);
       // A continue: the reply so far goes last, as the start of the model's
@@ -150,7 +150,7 @@ export function useLlmStream() {
           useAssistLog.getState().update(id, { text: full });
           onText?.(full);
         },
-        { params: req.params, onReasoning: (reasoning) => useAssistLog.getState().update(id, { reasoning }), prefill: opts.continueFrom !== undefined, prefix: opts.continueFrom },
+        { params: opts.maxTokens ? { ...req.params, max_tokens: opts.maxTokens } : req.params, onReasoning: (reasoning) => useAssistLog.getState().update(id, { reasoning }), prefill: opts.continueFrom !== undefined, prefix: opts.continueFrom },
       );
       useAssistLog.getState().update(id, { running: false, text: r.text, reasoning: r.reasoning, error: r.error });
       setCutOff(isCutOff(r.stopReason));
@@ -178,5 +178,15 @@ export function useLlmStream() {
     setError(null);
   }, []);
 
-  return { run, runAssist, continueAssist, cutOff, runId, stop, reset, text, reasoning, running, error };
+  /** The latest request again, once, with twice the room to reply (for a
+   *  reasoning model that thought its whole budget away). */
+  const retryWithMoreRoom = useCallback(async () => {
+    const last = lastAssist.current;
+    if (!last) return null;
+    const req = assistRequest(last.messages, last.connectionId);
+    const now = req.params.max_tokens ?? req.connection?.params.max_tokens ?? 1024;
+    return runAssist(last.messages, undefined, `${last.label} (more room)`, { connectionId: last.connectionId, maxTokens: now * 2 });
+  }, [runAssist]);
+
+  return { run, runAssist, continueAssist, retryWithMoreRoom, cutOff, runId, stop, reset, text, reasoning, running, error };
 }

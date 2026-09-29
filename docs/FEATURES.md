@@ -27,7 +27,7 @@ Everything UCCB does, in detail. New to it? Start with the [tour](TOUR.md). For 
 
 - A **token count** (an estimate from GPT's o200k tokenizer; your model may differ a little).
 - **✨ Writing assistant**: Rewrite, Draft (treats what's there as notes), Expand, Tighten, Polish or Continue, with an optional instruction. It sees the whole card, shows its suggestion next to the current text, lets you edit it, then Replace or Append.
-- **→ Continue** in every ✨ window (fields, new greetings, lorebook entries, Write from image) carries a suggestion on from where it stopped, from its end as it stands (so you can edit it first). When a reply stopped at the model's token limit, the window says so.
+- **→ Continue** in every ✨ window (fields, new greetings, lorebook entries, Write from image) carries a suggestion on from where it stopped, from its end as it stands (so you can edit it first). When a reply stopped at the model's token limit, the window says so. If a reasoning model used its whole limit thinking and never got to the reply, it offers to **use its reasoning as the draft** (models often draft the answer there) or to **run again with twice the room** (once, without changing the connection).
 - **⤢ Large editor** for long fields.
 
 ## Art
