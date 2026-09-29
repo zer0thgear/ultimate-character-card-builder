@@ -393,11 +393,35 @@ export function cardContext(card: CardData, skipPath?: string, budget = 12000): 
   add('first_mes', 'first_message', budget * 0.15);
   add('mes_example', 'example_messages', budget * 0.1);
   add('system_prompt', 'system_prompt', budget * 0.05);
-  const book = card.character_book?.entries.filter((e) => e.content.trim()) ?? [];
-  if (book.length) {
-    parts.push(`<lorebook_entries>\n${book.slice(0, 30).map((e) => `- ${entryName(e) || e.keys.join('/')}: ${clip(e.content, 200)}`).join('\n')}\n</lorebook_entries>`);
-  }
+  const lore = lorebookContext(card, skipPath, budget * 0.35);
+  if (lore) parts.push(lore);
   return parts.join('\n\n') || '(The card is still empty.)';
+}
+
+/**
+ * The lorebook as context: every entry that's switched on (the chat never
+ * uses the others), with its name, keywords and whether it's always on, in
+ * full while they fit `budget`, else each trimmed to an even share, so none
+ * is left out. The entry being worked on is skipped (it's the field).
+ */
+export function lorebookContext(card: CardData, skipPath: string | undefined, budget: number): string {
+  const entries = card.character_book?.entries ?? [];
+  const skip = skipPath?.match(/^character_book\.entries\.(\d+)\./)?.[1];
+  const shown = entries.filter((e, i) => e.content.trim() && String(i) !== skip);
+  const on = shown.filter((e) => e.enabled !== false);
+  const off = shown.length - on.length;
+  const offNote = off ? `(${off} more entr${off === 1 ? 'y is' : 'ies are'} switched off.)` : '';
+  if (!on.length) return offNote ? `<lorebook>\n${offNote}\n</lorebook>` : '';
+  const total = on.reduce((n, e) => n + e.content.trim().length, 0);
+  const share = total <= budget ? Infinity : Math.max(150, Math.floor(budget / on.length));
+  const attr = (v: string) => v.replace(/"/g, "'");
+  const body = on
+    .map((e) => {
+      const keys = e.constant ? 'always on' : e.keys.join(', ');
+      return `<entry name="${attr(entryName(e) || e.keys[0] || 'entry')}" keys="${attr(keys)}">\n${clip(e.content.trim(), share)}\n</entry>`;
+    })
+    .join('\n');
+  return `<lorebook>\n${body}${offNote ? `\n${offNote}` : ''}\n</lorebook>`;
 }
 
 const FIELD_GUIDANCE: Record<string, string> = {

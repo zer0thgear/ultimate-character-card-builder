@@ -454,7 +454,7 @@ export function Section({ title, actions, children, className }: { title: ReactN
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <div className="rounded-md border border-dashed border-slate-700 p-6 text-center text-sm text-slate-500">{children}</div>;
+  return <div className="rounded-md border border-dashed border-slate-700 p-6 text-center text-sm text-slate-500 phone:p-4">{children}</div>;
 }
 
 /** Reads a picked or dropped file as bytes. */

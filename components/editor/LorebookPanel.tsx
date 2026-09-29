@@ -55,7 +55,7 @@ export function LorebookPanel() {
       <div className="flex flex-col gap-3">
         <Empty>
           This card has no lorebook. A lorebook holds facts that are added to the prompt only when their keywords come up in the chat.
-          <div className="mt-3 flex justify-center gap-2">
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
             <Button variant="primary" onClick={() => setBook(newLorebook())}>
               Attach a new lorebook
             </Button>

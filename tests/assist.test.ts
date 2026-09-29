@@ -45,3 +45,42 @@ describe('editable prompts', () => {
     expect(fieldActionMessages(card(), 'description', 'continue', '')[1].content).not.toContain('nothing else');
   });
 });
+
+describe('the lorebook in the card context', () => {
+  const withBook = async (entries: { content: string; keys?: string[]; name?: string; enabled?: boolean; constant?: boolean }[]) => {
+    const { newCard, newLorebook, newEntry } = await import('@/lib/cardSpec');
+    const book = newLorebook();
+    book.entries = entries.map((e, i) => ({ ...newEntry(), id: i, keys: e.keys ?? ['k'], content: e.content, name: e.name, comment: e.name, enabled: e.enabled ?? true, constant: e.constant }));
+    return { ...newCard().data, name: 'Mira', character_book: book };
+  };
+
+  it('sends every switched-on entry in full when they fit, with keys and always-on', async () => {
+    const { lorebookContext } = await import('@/lib/assist');
+    const card = await withBook([
+      { name: 'Saltmarrow', keys: ['lighthouse', 'tower'], content: 'A lonely tower on the Greywater coast.' },
+      { name: 'Wren', content: 'The keeper.', constant: true },
+      { name: 'Secret', content: 'Not used.', enabled: false },
+    ]);
+    const out = lorebookContext(card, undefined, 5000);
+    expect(out).toContain('<entry name="Saltmarrow" keys="lighthouse, tower">\nA lonely tower on the Greywater coast.\n</entry>');
+    expect(out).toContain('keys="always on"');
+    expect(out).not.toContain('Not used.');
+    expect(out).toContain('(1 more entry is switched off.)');
+  });
+
+  it('trims evenly when the lorebook is over its share, leaving none out', async () => {
+    const { lorebookContext } = await import('@/lib/assist');
+    const card = await withBook(Array.from({ length: 40 }, (_, i) => ({ name: `E${i}`, content: `${i}:${'x'.repeat(1000)}` })));
+    const out = lorebookContext(card, undefined, 8000);
+    expect(out.match(/<entry /g)).toHaveLength(40);
+    expect(out.length).toBeLessThan(8000 + 40 * 60);
+  });
+
+  it("leaves out the entry being edited", async () => {
+    const { lorebookContext } = await import('@/lib/assist');
+    const card = await withBook([{ name: 'A', content: 'first' }, { name: 'B', content: 'second' }]);
+    const out = lorebookContext(card, 'character_book.entries.1.content', 5000);
+    expect(out).toContain('first');
+    expect(out).not.toContain('second');
+  });
+});
