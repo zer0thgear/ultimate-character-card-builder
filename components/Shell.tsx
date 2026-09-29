@@ -427,7 +427,7 @@ function CardsHome() {
       <div className="mx-auto flex max-w-5xl flex-col gap-4">
         <div>
           <h1 className="text-xl font-semibold text-slate-100">Ultimate Character Card Builder</h1>
-          <p className="mt-1 text-sm text-slate-400">Write the card, draw it with NovelAI, and chat with it to test, all side by side.</p>
+          <p className="mt-1 text-sm text-slate-400">Write the card, draw it with NovelAI, A1111 or ComfyUI, and chat with it to test, all side by side.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="primary" onClick={() => void create()}>

@@ -2,6 +2,8 @@
 
 A workbench for roleplay character cards. Write the card, draw it, and chat with it to see how it plays, all in one window. The card sits on the left; image generation, your gens, a gen library and a test chat sit on the right, so the words and the art get worked on together.
 
+![A card open in UCCB: the Character fields on the left, the Image tab on the right with the card's picture and its style, scene and character prompts](docs/screenshot.png)
+
 - **A full card editor**: every V1/V2/V3 field, alternate and group greetings, lorebooks, find and replace, cleanup macros, undo/redo and autosave. Cards import and export as PNG, JSON or CHARX, and nothing another frontend stored is lost.
 - **Art for the card**: NovelAI (the full generator: character prompts, positions, Img2Img, inpainting), A1111 / Forge, or ComfyUI (with its built-in workflow or your own). The writing assistant turns the card's description or a greeting into prompts.
 - **A writing assistant** on every field, for greetings, lorebook entries, tags and a card review, plus a free-form Brainstorm chat. It can take other cards and pictures as references, and a vision model can write from a gen. Every prompt it sends can be viewed and edited.
