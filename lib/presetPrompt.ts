@@ -5,6 +5,7 @@ import type { ChatPreset, PresetPrompt } from '@/lib/stPreset';
 import { scanLorebook, describeEntry } from '@/lib/lorebookScan';
 import {
   cardDepthInjections,
+  guideText,
   exampleBlocks,
   historyParts,
   lorePlace,
@@ -132,6 +133,8 @@ export function buildPresetPrompt(card: CardData, history: ChatMessage[], settin
   // Continue / impersonate go last, after the post-history instructions.
   if (continuing && !prefillContinue) after.push({ label: 'Continue nudge', role: 'system', content: x(preset.continueNudgePrompt) });
   if (mode === 'impersonate') after.push({ label: 'Impersonation prompt', role: 'system', content: x(preset.impersonationPrompt) });
+  // 🧭 A guide goes last of all, nearest the reply.
+  if (opts.guide?.trim()) after.push({ label: 'Guide (🧭)', role: 'system', content: x(guideText(settings.guideTemplate, opts.guide)) });
 
   // Fit the history into the context size, dropping the oldest first.
   let chatParts = historyAt ? historyParts(chat, injections, x, names) : [];

@@ -7,7 +7,7 @@ import { useLlmStore } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
-import { buildChatPrompt, displayText, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt } from '@/lib/chatPrompt';
+import { buildChatPrompt, displayText, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
 import { buildPresetPrompt } from '@/lib/presetPrompt';
 import { presetParams } from '@/lib/stPreset';
 import { describeEntry } from '@/lib/lorebookScan';
@@ -16,6 +16,7 @@ import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { PresetPicker } from '@/components/llm/PresetManager';
 import { PersonaAvatar, PersonaPicker, avatarFrame } from '@/components/llm/Personas';
 import { openLightbox } from '@/components/Lightbox';
+import { addContinue, addReroll, branchCount, choose, onPath, pathDepth, pathText, rerollBase, startTree, undoContinue, type ContinueNode } from '@/lib/continueTree';
 import { api } from '@/lib/api';
 import { resolvePersona, usePersonaStore } from '@/store/personaStore';
 import { openSettings } from '@/components/SettingsDialog';
@@ -55,6 +56,11 @@ export function ChatPanel() {
   const [inspect, setInspect] = useState<BuiltPrompt | null>(null);
   const [lastPrompt, setLastPrompt] = useState<BuiltPrompt | null>(null);
   const [streamingId, setStreamingId] = useState<string | null>(null);
+  // 🧭 A guide for the next generation: used once, unless pinned.
+  const [guide, setGuide] = useState('');
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [guidePinned, setGuidePinned] = useState(false);
+  const [treeFor, setTreeFor] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   // Following the chat's end: true while you're at the bottom. Scrolling up
@@ -152,18 +158,21 @@ export function ChatPanel() {
    * `continueFrom`, the model carries on from the target's text, by
    * prefilling it or with the preset's continue nudge.
    */
-  const reply = async (messages: ChatMessage[], target?: ChatMessage, continueFrom?: string, emptySend = false) => {
+  const reply = async (messages: ChatMessage[], target?: ChatMessage, continueFrom?: string, emptySend = false): Promise<{ text: string; error?: string }> => {
+    const guided = takeGuide();
     const built = continueFrom !== undefined
-      ? build(messages, { mode: 'continue', continueText: continueFrom })
-      : build(target ? messages.filter((m) => m.id !== target.id) : messages, { emptySend });
+      ? build(messages, { mode: 'continue', continueText: continueFrom, guide: guided })
+      : build(target ? messages.filter((m) => m.id !== target.id) : messages, { emptySend, guide: guided });
     const id = target?.id ?? uuid();
     const base = continueFrom ?? '';
+    let written = base;
     setStreamingId(id);
     if (!target) setMessages((m) => [...m, { ...newMessage('assistant', '', connection?.model), id }]);
     else if (continueFrom === undefined) setMessages((m) => m.map((x) => (x.id === id ? { ...x, swipes: [...x.swipes, ''], swipe: x.swipes.length } : x)));
-    const r = await complete(built, (full) =>
-      setMessages((m) => m.map((x) => (x.id === id ? { ...x, swipes: x.swipes.map((s, i) => (i === x.swipe ? base + (continueFrom && !/^\s/.test(full) && !/\s$/.test(base) ? ' ' : '') + full : s)) } : x))),
-    );
+    const r = await complete(built, (full) => {
+      written = base + (continueFrom && full && !/^\s/.test(full) && !/\s$/.test(base) ? ' ' : '') + full;
+      setMessages((m) => m.map((x) => (x.id === id ? { ...x, swipes: x.swipes.map((s, i) => (i === x.swipe ? written : s)) } : x)));
+    });
     setStreamingId(null);
     setMessages((m) =>
       m
@@ -176,7 +185,44 @@ export function ChatPanel() {
         .filter((x) => !(x.id === id && !target && !messageText(x).trim())),
     );
     if (r.error) toast(r.error, 'error');
+    return { text: written, error: r.error };
   };
+
+  /** The guide for this generation, cleared unless it's pinned. */
+  const takeGuide = () => {
+    const g = guide.trim();
+    if (g && !guidePinned) setGuide('');
+    return g || undefined;
+  };
+
+  /** Sets a reply's continue tree for its shown swipe, and its text to match. */
+  const setTree = (id: string, tree: ContinueNode) =>
+    setMessages((m) =>
+      m.map((x) => {
+        if (x.id !== id) return x;
+        const continues = x.swipes.map((_, i) => (i === x.swipe ? tree : x.continues?.[i]));
+        return { ...x, continues, swipes: x.swipes.map((s, i) => (i === x.swipe ? pathText(tree) : s)) };
+      }),
+    );
+  /** The shown swipe's tree, started from its text if it has none yet (or
+   *  its text no longer matches, after an edit). */
+  const treeOf = (m: ChatMessage) => {
+    const t = m.continues?.[m.swipe];
+    return t && pathText(t) === messageText(m) ? t : startTree(messageText(m));
+  };
+
+  /** ↻ Another version of the last continue, beside the old one. */
+  const rerollContinue = async (m: ChatMessage) => {
+    if (!chat || running) return;
+    const tree = treeOf(m);
+    const base = rerollBase(tree);
+    if (base === null) return;
+    const r = await reply(chat.messages, m, base);
+    const added = r.text.slice(base.length);
+    setTree(m.id, added.trim() ? addReroll(tree, added) : tree);
+  };
+  /** ↶ Takes the last continue back off (it stays in the tree). */
+  const undoLastContinue = (m: ChatMessage) => setTree(m.id, undoContinue(treeOf(m)));
 
   const send = async () => {
     if (running || !chat) return;
@@ -201,15 +247,19 @@ export function ChatPanel() {
   const continueLast = async () => {
     if (!chat || running) return;
     const last = chat.messages[chat.messages.length - 1];
-    if (last?.role !== 'assistant') return reply(chat.messages);
-    await reply(chat.messages, last, messageText(last));
+    if (last?.role !== 'assistant') return void (await reply(chat.messages));
+    const tree = treeOf(last);
+    const base = pathText(tree);
+    const r = await reply(chat.messages, last, base);
+    const added = r.text.slice(base.length);
+    setTree(last.id, added.trim() ? addContinue(tree, added) : tree);
   };
 
   /** Writes your next message for you, into the box, to edit and send. */
   const impersonate = async () => {
     if (!chat || running) return;
     setInput('');
-    const r = await complete(build(chat.messages, { mode: 'impersonate' }), (full) => setInput(full));
+    const r = await complete(build(chat.messages, { mode: 'impersonate', guide: takeGuide() }), (full) => setInput(full));
     if (r.error) toast(r.error, 'error');
     else setInput(r.text.trim());
   };
@@ -361,6 +411,9 @@ export function ChatPanel() {
                     onDelete={() => setMessages((ms) => ms.filter((x) => x.id !== m.id))}
                     onDeleteAfter={() => setMessages((ms) => ms.slice(0, i + 1))}
                     onSwipeNew={() => void reply(chat.messages, m)}
+                    onRerollContinue={() => void rerollContinue(m)}
+                    onUndoContinue={() => undoLastContinue(m)}
+                    onShowTree={() => setTreeFor(m.id)}
                   />
                 </div>
               ))}
@@ -380,9 +433,40 @@ export function ChatPanel() {
         )}
       </div>
 
+      {treeFor && chat && (() => {
+        const m = chat.messages.find((x) => x.id === treeFor);
+        return m ? <ContinueTreeDialog message={m} tree={treeOf(m)} busy={running} onChoose={(id) => setTree(m.id, choose(treeOf(m), id))} onClose={() => setTreeFor(null)} /> : null;
+      })()}
       {chat && (
         <div className="flex-shrink-0 border-t border-slate-800 p-2">
           <div className={column.className} style={column.style}>
+          {guideOpen && (
+            <div className="mb-1.5 flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1">
+              <span className="text-sm" title="Guide">
+                🧭
+              </span>
+              <input
+                autoFocus
+                value={guide}
+                onChange={(e) => setGuide(e.target.value)}
+                placeholder="Steer the next reply, swipe, continue or impersonation, e.g. “she finally admits it”"
+                className="min-w-0 flex-1 bg-transparent py-0.5 text-sm text-slate-200 outline-none placeholder:text-slate-500"
+              />
+              <IconButton title={guidePinned ? 'Pinned: used for every generation until you unpin it' : 'Used once, then cleared. Pin it to keep it.'} tone={guidePinned ? 'accent' : 'default'} onClick={() => setGuidePinned(!guidePinned)}>
+                📌
+              </IconButton>
+              <IconButton
+                title="Close the guide"
+                onClick={() => {
+                  setGuide('');
+                  setGuidePinned(false);
+                  setGuideOpen(false);
+                }}
+              >
+                ✕
+              </IconButton>
+            </div>
+          )}
           <AutoTextarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -414,6 +498,14 @@ export function ChatPanel() {
             </Button>
             <Button size="sm" disabled={running} onClick={() => void impersonate()} title="Write your next message for you (it lands in the box to edit)">
               🎭 Impersonate
+            </Button>
+            <Button
+              size="sm"
+              variant={guide.trim() ? 'primary' : 'secondary'}
+              onClick={() => setGuideOpen(!guideOpen)}
+              title="Guide: steer the next reply, swipe, continue or impersonation with an instruction the model sees just before it writes"
+            >
+              🧭{guide.trim() ? (guidePinned ? ' Guided 📌' : ' Guided') : ''}
             </Button>
             {lastPrompt && !phone && (
               <button type="button" className="ml-auto text-[11px] text-slate-500 hover:text-slate-300" onClick={() => setInspect(lastPrompt)}>
@@ -576,6 +668,9 @@ function Bubble({
   onDelete,
   onDeleteAfter,
   onSwipeNew,
+  onRerollContinue,
+  onUndoContinue,
+  onShowTree,
 }: {
   card: CardData;
   message: ChatMessage;
@@ -591,12 +686,17 @@ function Bubble({
   onDelete: () => void;
   onDeleteAfter: () => void;
   onSwipeNew: () => void;
+  onRerollContinue: () => void;
+  onUndoContinue: () => void;
+  onShowTree: () => void;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   const text = messageText(m);
   const tokens = useTextTokens(text, 800);
   const reasoning = streaming ? streamReasoning : m.reasoning?.[m.swipe];
   const isUser = m.role === 'user';
+  // This swipe's continues, when it has any and they still match its text.
+  const tree = !isUser && m.continues?.[m.swipe] && pathText(m.continues[m.swipe]!) === text ? m.continues[m.swipe] : undefined;
   // Only the last reply has versions to swipe through, as its buttons do.
   const swipeable = !isUser && isLast && !busy && editing === null;
   const swipe = useSwipeGesture(
@@ -645,7 +745,8 @@ function Bubble({
                 size="sm"
                 variant="primary"
                 onClick={() => {
-                  onChange({ swipes: m.swipes.map((s, i) => (i === m.swipe ? editing : s)) });
+                  // An edit starts the swipe's continue tree afresh.
+                  onChange({ swipes: m.swipes.map((s, i) => (i === m.swipe ? editing : s)), continues: m.continues?.map((c, i) => (i === m.swipe ? undefined : c)) });
                   setEditing(null);
                 }}
               >
@@ -663,6 +764,21 @@ function Bubble({
             {messageId !== undefined && <MessageId id={messageId} className={isUser ? 'ml-auto' : 'mr-auto'} />}
             {!isUser && isLast && (
               <>
+            {tree && pathDepth(tree) > 0 && (
+              <>
+                <IconButton title="Undo the last continue (it stays in 🌿, to go back to)" disabled={busy} onClick={onUndoContinue}>
+                  ↶
+                </IconButton>
+                <IconButton title="Reroll the last continue (the old one stays in 🌿)" disabled={busy} onClick={onRerollContinue}>
+                  ↻
+                </IconButton>
+              </>
+            )}
+            {tree && branchCount(tree) > 0 && (
+              <IconButton title="Continues: every one you've made, as a tree, to pick a path" onClick={onShowTree}>
+                🌿<span className="ml-0.5 text-[10px] tabular-nums">{branchCount(tree)}</span>
+              </IconButton>
+            )}
             {m.swipes.length > 1 && (
               <>
                 <IconButton title="Previous version" disabled={busy || m.swipe === 0} onClick={() => onChange({ swipe: m.swipe - 1 })}>
@@ -682,6 +798,53 @@ function Bubble({
         )}
       </div>
     </div>
+  );
+}
+
+/** 🌿 Every continue of a reply's swipe, as a tree: the chosen path is
+ *  highlighted, and picking any point makes the reply end there. */
+function ContinueTreeDialog({ message, tree, busy, onChoose, onClose }: { message: ChatMessage; tree: ContinueNode; busy: boolean; onChoose: (id: string) => void; onClose: () => void }) {
+  const snippet = (t: string) => {
+    const s = t.replace(/\s+/g, ' ').trim();
+    return s.length > 140 ? `${s.slice(0, 140)}…` : s || '(nothing)';
+  };
+  const Node = ({ node, depth }: { node: ContinueNode; depth: number }) => {
+    const chosen = onPath(tree, node.id);
+    const end = chosen && (node.active === undefined || !node.children[node.active]);
+    return (
+      <li>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onChoose(node.id)}
+          title={node.text}
+          className={cx(
+            'w-full rounded-md border px-2 py-1.5 text-left text-xs',
+            end ? 'border-violet-500 bg-violet-500/15 text-slate-100' : chosen ? 'border-violet-500/40 bg-violet-500/5 text-slate-200' : 'border-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200',
+          )}
+        >
+          <span className="mr-1.5 text-[10px] tracking-wide text-slate-500 uppercase">{depth === 0 ? 'Reply' : `+${depth}`}</span>
+          {snippet(node.text)}
+        </button>
+        {node.children.length > 0 && (
+          <ul className="mt-1 ml-3 flex flex-col gap-1 border-l border-slate-800 pl-2">
+            {node.children.map((c) => (
+              <Node key={c.id} node={c} depth={depth + 1} />
+            ))}
+          </ul>
+        )}
+      </li>
+    );
+  };
+  return (
+    <Modal open onClose={onClose} title="🌿 Continues" size="lg" footer={<Button onClick={onClose}>Done</Button>}>
+      <p className="mb-3 text-xs text-slate-500">
+        Every continue of this reply{message.swipes.length > 1 ? ` (version ${message.swipe + 1})` : ''}. The highlighted path is what the reply says now; pick any point to end it there, then Continue to branch from it.
+      </p>
+      <ul className="flex flex-col gap-1">
+        <Node node={tree} depth={0} />
+      </ul>
+    </Modal>
   );
 }
 
@@ -752,6 +915,10 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
         <Toggle checked={s.includeExamples} onChange={(v) => setChatSettings({ includeExamples: v })} label={<span className="text-xs">Send example messages</span>} />
         <Toggle checked={s.useLorebook} onChange={(v) => setChatSettings({ useLorebook: v })} label={<span className="text-xs">Use the lorebook</span>} />
         <Toggle checked={s.showMessageIds} onChange={(v) => setChatSettings({ showMessageIds: v })} label={<span className="text-xs">Show message numbers (#0 is the greeting)</span>} />
+        <label className="flex w-full flex-col gap-0.5 text-xs text-slate-400">
+          🧭 Guide template <span className="text-slate-500">({'{{guide}}'} is where your guide goes; sent last, just before the reply)</span>
+          <input value={s.guideTemplate ?? DEFAULT_GUIDE_TEMPLATE} onChange={(e) => setChatSettings({ guideTemplate: e.target.value })} className={cx(inputClass, 'text-xs')} />
+        </label>
         <Toggle checked={s.swipeGesture ?? true} onChange={(v) => setChatSettings({ swipeGesture: v })} label={<span className="text-xs" title="On a touch screen: swipe the last reply left for its next version (a new one at the end), right for the one before; the greeting swipes between greetings">Swipe gesture on the last reply</span>} />
         <label className="flex items-center gap-2 text-xs text-slate-400">
           Avatars

@@ -1,3 +1,4 @@
+import type { ContinueNode } from '@/lib/continueTree';
 import type { CharacterCard } from '@/types/card';
 import type { BasePrompt, CharacterPromptEntry, NovelAIModel, NovelAIParameters, PromptTidbit } from '@/types/novelai';
 
@@ -81,6 +82,9 @@ export interface ChatMessage {
   model?: string;
   /** Reasoning the model returned alongside its reply, per swipe. */
   reasoning?: (string | undefined)[];
+  /** Per swipe, its continues as a tree (lib/continueTree.ts), once it's
+   *  been continued; that swipe's text is the tree's chosen path. */
+  continues?: (ContinueNode | undefined)[];
 }
 
 export interface ChatSession {

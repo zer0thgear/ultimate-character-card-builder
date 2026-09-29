@@ -53,3 +53,17 @@ describe('buildChatPrompt', () => {
     expect(exampleBlocks(card().mes_example)).toHaveLength(2);
   });
 });
+
+describe('🧭 guides', () => {
+  it('go last, in the template, and only when given', async () => {
+    const { buildChatPrompt, guideText, DEFAULT_CHAT_SETTINGS } = await import('@/lib/chatPrompt');
+    const { newCard } = await import('@/lib/cardSpec');
+    const card = { ...newCard().data, name: 'Mira', description: 'An elf.' };
+    const settings = { ...DEFAULT_CHAT_SETTINGS, userName: 'Sam' };
+    const guided = buildChatPrompt(card, [], settings, { guide: 'she hides the letter from {{user}}' });
+    expect(guided.messages.at(-1)).toEqual({ role: 'system', content: '[Take the following into special consideration for your next message: she hides the letter from Sam]' });
+    expect(buildChatPrompt(card, [], settings, { guide: '  ' }).parts.some((p) => p.label.startsWith('Guide'))).toBe(false);
+    expect(guideText('Steer: {{guide}}!', 'x')).toBe('Steer: x!');
+    expect(guideText('No slot', 'x')).toBe('No slot\nx');
+  });
+});

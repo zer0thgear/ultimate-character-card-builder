@@ -2,7 +2,9 @@
 
 import type { FormSettings } from '@/store/settingsStore';
 import type { NovelAIGenerateRequest, CharacterPromptEntry, NovelAIModel, NovelAISampler } from '@/types/novelai';
-import { buildImageRequest, composeFinalPrompts, formSampling, resolveSelectedPrompt, styleText } from '@/lib/imageRequest';
+import { buildImageRequest, composeFinalPrompts, EDIT_REQUEST_FLAGS, formSampling, randomSeed, resolveReworkPrompt, resolveSelectedPrompt, styleText } from '@/lib/imageRequest';
+import { addEnhancePrompt, ENHANCE_LEVELS, enhanceRequestSize, type EnhanceLevelNum, type EnhanceScale } from '@/lib/enhance';
+import type { GeneratedImage } from '@/types/novelai';
 import { joinPromptParts } from '@/lib/promptText';
 import { takeDatasetTags } from '@/lib/assist';
 import { hasInpaintStrength, toInpaintingModel } from '@/lib/inpaint';
@@ -55,6 +57,47 @@ export function buildGenerateRequest(form: FormSettings, seed: number, base?: Im
       seed,
       ...(base ? { strength: base.strength, noise: base.noise, image: base.image } : {}),
       ...(base?.mask ? { mask: base.mask } : {}),
+    },
+  });
+  return { request, resolved };
+}
+
+/**
+ * NovelAI's Enhance of a picture, as its own client builds it: an Image2Image
+ * of the picture at a larger size (or, for V5's Max, its own size with the
+ * server upscaling), at the level's strength and noise, with the form's
+ * prompt (the picture's own rolls replayed) and a nudge away from an
+ * upscaled, blurry look on V4.5 and V5.
+ */
+export function buildEnhanceRequest(form: FormSettings, image: Pick<GeneratedImage, 'parameters' | 'wildcardPicks' | 'source'>, levelNum: EnhanceLevelNum, scale: EnhanceScale, imageB64: string) {
+  const level = ENHANCE_LEVELS[levelNum - 1];
+  const { width, height } = enhanceRequestSize(image.parameters.width, image.parameters.height, scale);
+  const resolved = resolveReworkPrompt(form, image as GeneratedImage);
+  const composed = composeFinalPrompts(form, resolved);
+  const request: NovelAIGenerateRequest = buildImageRequest({
+    input: addEnhancePrompt(composed.input, form.model, scale),
+    negativePrompt: composed.negativePrompt,
+    model: form.model,
+    action: 'img2img',
+    characters: resolved.characters,
+    useCoords: form.useCoords,
+    presets: { quality: form.qualityPreset, uc: form.ucPreset },
+    parameters: {
+      ...formSampling(form),
+      ...EDIT_REQUEST_FLAGS,
+      width,
+      height,
+      // Variety+ scales with the size, and this renders at its own.
+      skip_cfg_above_sigma: varietySigma(form.model, form.variety, width, height),
+      n_samples: 1,
+      strength: level.strength,
+      noise: level.noise,
+      add_original_image: true,
+      inpaintImg2ImgStrength: 0,
+      seed: randomSeed(),
+      image: imageB64,
+      ...(scale === 'max' ? { upscaled_enhance: true } : {}),
+      color_correct: false,
     },
   });
   return { request, resolved };

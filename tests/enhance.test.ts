@@ -94,3 +94,20 @@ describe('addEnhancePrompt', () => {
     expect(addEnhancePrompt(once, 'nai-diffusion-5-full', 1.5)).toBe(once);
   });
 });
+
+describe('buildEnhanceRequest', () => {
+  it('is an Image2Image at the scaled size, at the level strength, with the enhance nudge', async () => {
+    const { buildEnhanceRequest } = await import('@/lib/genRequest');
+    const { GEN_DEFAULTS } = await import('@/store/settingsStore');
+    const form = { ...GEN_DEFAULTS, model: 'nai-diffusion-4-5-full' as const, basePrompts: [{ id: 'p', label: 'P', text: '1girl, smile', selected: true }] };
+    const image = { parameters: { width: 832, height: 1216 } as never, wildcardPicks: undefined, source: undefined };
+    const { request } = buildEnhanceRequest(form, image, 3, 1.5, 'AAAA');
+    expect(request.action).toBe('img2img');
+    expect(request.parameters).toMatchObject({ width: 1248, height: 1824, strength: 0.5, noise: 0, image: 'AAAA', add_original_image: true, n_samples: 1 });
+    expect(request.parameters.upscaled_enhance).toBeUndefined();
+    expect(request.input).toContain('-2::upscaled, blurry::');
+    const max = buildEnhanceRequest({ ...form, model: 'nai-diffusion-5-full' as never }, image, 5, 'max', 'AAAA').request;
+    expect(max.parameters).toMatchObject({ width: 832, height: 1216, strength: 0.7, noise: 0.1, upscaled_enhance: true });
+    expect(max.input).not.toContain('upscaled, blurry');
+  });
+});

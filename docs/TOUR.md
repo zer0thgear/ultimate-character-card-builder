@@ -57,7 +57,7 @@ Press **Generate** (or Ctrl+Enter). On NovelAI the button shows the Anlas cost. 
 - reuse its seed or prompt;
 - open it full screen.
 
-With NovelAI or A1111 you can also use a picture as an **Img2Img** base, and with NovelAI paint over it or **inpaint** part of it.
+With NovelAI or A1111 you can also use a picture as an **Img2Img** base, and with NovelAI paint over it, **inpaint** part of it, or **✨ Enhance** it (a larger, more detailed re-render, as on novelai.net).
 
 Pictures you haven't kept are saved as **recent gens** for a week (you can change that), so closing the tab doesn't lose them.
 
@@ -68,6 +68,8 @@ It works the other way around too: **✍ Write from this image** on a picture ha
 Open **💬 Test chat** and start a chat. It builds the prompt the way SillyTavern would, from the card, the lorebook entries that fire, your persona and the chat so far. The greeting is read live from the card, so edits show up right away.
 
 - **Swipe** (›) for another version of the last reply, or **Regenerate**, **Continue**, **🎭 Impersonate** (it writes your next message for you), and edit or delete any message.
+- After a **Continue**, **↻** rerolls just the part it added and **↶** undoes it; **🌿** shows every continue you've tried as a tree, to go back down another path.
+- **🧭** steers the next reply, swipe, continue or impersonation with an instruction ("she finally admits it"), used once unless you pin it.
 - **🔍** shows exactly what the next reply would send, part by part with token counts, and which lorebook entries fired and why.
 - **Personas** (Settings → Personas) set who you are in the chat. Pick one from the chat's toolbar.
 - **SillyTavern presets**: import a chat-completion preset in Settings → Chat preset, and the chat uses its prompts, order and samplers.

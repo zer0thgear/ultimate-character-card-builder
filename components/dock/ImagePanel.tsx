@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSettingsStore, DEFAULT_NEGATIVE } from '@/store/settingsStore';
 import { useSessionStore, type SessionImage } from '@/store/sessionStore';
 import { useProjectStore } from '@/store/projectStore';
@@ -729,7 +729,6 @@ function CharactersSection({ counts, nai }: { counts: Record<string, { prompt: n
     toast(`${members.length === 1 ? 'Character prompt' : 'Character prompts'} written from the card's description${hasArtRefs() ? ' and your references' : ''}.${castSummary(m)}${switchedOn(cast.nsfw, cast.fur)}`, 'success');
   };
 
-  const positions = useMemo(() => POSITIONS.flatMap((y) => POSITIONS.map((x) => ({ x, y }))), []);
 
   return (
     <div className="flex flex-col gap-2">
@@ -760,24 +759,7 @@ function CharactersSection({ counts, nai }: { counts: Record<string, { prompt: n
           <div className="flex items-center gap-2">
             <Toggle checked={c.enabled} onChange={(enabled) => update(c.id, { enabled })} />
             <input value={c.label ?? ''} onChange={(e) => update(c.id, { label: e.target.value })} className="min-w-0 flex-1 bg-transparent text-sm text-slate-200 outline-none" placeholder="Name" />
-            {nai && useCoords && active.length > 1 && (
-              <select
-                value={`${c.center.x},${c.center.y}`}
-                onChange={(e) => {
-                  const [x, y] = e.target.value.split(',').map(Number);
-                  update(c.id, { center: { x, y } });
-                }}
-                className={cx(inputClass, 'w-24 py-0.5 text-xs')}
-                title="Where in the picture"
-              >
-                {positions.map((p) => (
-                  <option key={`${p.x},${p.y}`} value={`${p.x},${p.y}`}>
-                    {'ABCDE'[POSITIONS.indexOf(p.x)]}
-                    {POSITIONS.indexOf(p.y) + 1}
-                  </option>
-                ))}
-              </select>
-            )}
+            {nai && useCoords && active.length > 1 && <PositionPicker character={c} others={active.filter((o) => o.id !== c.id && o.enabled)} onPick={(center) => update(c.id, { center })} />}
             <IconButton title="Negative prompt for this character" onClick={() => setOpenUc((s) => (s.has(c.id) ? new Set([...s].filter((x) => x !== c.id)) : new Set(s).add(c.id)))}>
               −
             </IconButton>
@@ -920,6 +902,96 @@ function BackendSettings({ connection: c }: { connection: ImageConnection }) {
           </IconButton>
         </div>
       </label>
+    </div>
+  );
+}
+
+// ─── Character positions (NovelAI V4+) ───────────────────────────────────────
+
+const cellName = (p: { x: number; y: number }) => `${'ABCDE'[POSITIONS.indexOf(p.x)] ?? '?'}${POSITIONS.indexOf(p.y) + 1 || '?'}`;
+const initials = (label?: string) =>
+  (label ?? '?')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join('') || '?';
+
+/** Where a character goes, picked on NovelAI's 5×5 grid over the picture's
+ *  shape, with the other characters shown where they are. */
+function PositionPicker({ character: c, others, onPick }: { character: CharacterPromptEntry; others: CharacterPromptEntry[]; onPick: (center: { x: number; y: number }) => void }) {
+  const [open, setOpen] = useState(false);
+  // Opens upward when there isn't room below (the panel scrolls, and would cut it off).
+  const [up, setUp] = useState(false);
+  const { width, height } = useSettingsStore();
+  // The grid takes the picture's shape, within a small box.
+  const box = 150;
+  const k = box / Math.max(width, height);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={(e) => {
+          setUp(window.innerHeight - e.currentTarget.getBoundingClientRect().bottom < 240);
+          setOpen(!open);
+        }}
+        title="Where in the picture: click to pick on the grid"
+        className={cx('flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs tabular-nums', open ? 'border-violet-500 text-violet-200' : 'border-slate-700 text-slate-300 hover:border-slate-500')}
+      >
+        <span className="grid grid-cols-3 gap-px opacity-70" aria-hidden>
+          {Array.from({ length: 9 }, (_, i) => (
+            <span key={i} className={cx('h-1 w-1 rounded-[1px]', i === 3 * Math.min(2, Math.round(POSITIONS.indexOf(c.center.y) / 2)) + Math.min(2, Math.round(POSITIONS.indexOf(c.center.x) / 2)) ? 'bg-violet-300' : 'bg-slate-600')} />
+          ))}
+        </span>
+        {cellName(c.center)}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className={cx('absolute right-0 z-40 rounded-md border border-slate-700 bg-slate-900 p-2 shadow-xl', up ? 'bottom-full mb-1' : 'mt-1')}>
+            <div className="mb-1.5 text-[11px] text-slate-400">
+              Where <span className="text-slate-200">{c.label || 'this character'}</span> goes
+            </div>
+            <div className="checker grid grid-cols-5 grid-rows-5 overflow-hidden rounded border border-slate-700" style={{ width: Math.round(width * k), height: Math.round(height * k) }}>
+              {POSITIONS.flatMap((y) =>
+                POSITIONS.map((x) => {
+                  const here = c.center.x === x && c.center.y === y;
+                  const them = others.filter((o) => o.center.x === x && o.center.y === y);
+                  return (
+                    <button
+                      key={`${x},${y}`}
+                      type="button"
+                      title={`${cellName({ x, y })}${them.length ? `: ${them.map((o) => o.label || 'a character').join(', ')}` : ''}`}
+                      onClick={() => {
+                        onPick({ x, y });
+                        setOpen(false);
+                      }}
+                      className={cx(
+                        'flex items-center justify-center border-r border-b border-slate-800/80 text-[10px] font-semibold',
+                        here ? 'bg-violet-600 text-white' : them.length ? 'bg-sky-500/25 text-sky-200 hover:bg-violet-500/40' : 'bg-slate-950/40 text-transparent hover:bg-violet-500/30 hover:text-violet-200',
+                      )}
+                    >
+                      {here ? initials(c.label) : them.length ? them.map((o) => initials(o.label)).join('·') : cellName({ x, y })}
+                    </button>
+                  );
+                }),
+              )}
+            </div>
+            <div className="mt-1.5 flex justify-between text-[10px] text-slate-500">
+              <span>
+                <span className="mr-1 inline-block h-2 w-2 rounded-sm bg-violet-600 align-middle" />
+                this one
+              </span>
+              {others.length > 0 && (
+                <span>
+                  <span className="mr-1 inline-block h-2 w-2 rounded-sm bg-sky-500/50 align-middle" />
+                  the others
+                </span>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

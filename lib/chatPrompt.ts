@@ -39,9 +39,21 @@ export interface ChatPromptSettings {
   /** On a touch screen, swiping the last reply (or the greeting) sideways
    *  changes its version, as SillyTavern's phone layout does. */
   swipeGesture: boolean;
+  /** How a 🧭 guide is put to the model, with {{guide}} where it goes. */
+  guideTemplate: string;
 }
 
 export type AvatarShape = 'circle' | 'square' | 'rectangle' | 'none';
+
+/** A guided generation's instruction, as SillyTavern's Guided Generations
+ *  extension words it. */
+export const DEFAULT_GUIDE_TEMPLATE = '[Take the following into special consideration for your next message: {{guide}}]';
+
+/** The guide as sent: the template with the guide in it. */
+export function guideText(template: string | undefined, guide: string): string {
+  const t = template?.trim() || DEFAULT_GUIDE_TEMPLATE;
+  return t.includes('{{guide}}') ? t.split('{{guide}}').join(guide.trim()) : `${t}\n${guide.trim()}`;
+}
 
 export const DEFAULT_CHAT_SETTINGS: ChatPromptSettings = {
   userName: 'User',
@@ -59,6 +71,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatPromptSettings = {
   showMessageIds: true,
   avatarShape: 'circle',
   swipeGesture: true,
+  guideTemplate: DEFAULT_GUIDE_TEMPLATE,
 };
 
 export const DEFAULT_IMPERSONATION =
@@ -77,6 +90,9 @@ export interface BuildOptions {
   continueText?: string;
   /** The user sent nothing (a preset's send_if_empty applies). */
   emptySend?: boolean;
+  /** 🧭 A one-off steer for this generation, sent last as a system message
+   *  (in the settings' guide template). */
+  guide?: string;
   model?: string;
   kind?: ProviderKind;
   /** The reply's max tokens, for fitting a preset's context size. */
@@ -256,6 +272,7 @@ export function buildChatPrompt(card: CardData, history: ChatMessage[], settings
   const cardPhi = settings.useCardPostHistory && card.post_history_instructions.trim();
   sys(cardPhi ? 'Post-history instructions (card)' : 'Post-history instructions', cardPhi ? x(card.post_history_instructions, phiDefault) : phiDefault);
   if (mode === 'impersonate') sys('Impersonation prompt', x(DEFAULT_IMPERSONATION));
+  if (opts.guide?.trim()) sys('Guide (🧭)', x(guideText(settings.guideTemplate, opts.guide)));
 
   return {
     parts,
