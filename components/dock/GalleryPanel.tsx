@@ -306,6 +306,8 @@ function Pressable({ onTap, onLongPress, className, style, children }: { onTap: 
   return (
     <button
       type="button"
+      // Its long press selects; no help bubble (components/TouchTips.tsx).
+      data-longpress
       className={cx('select-none [-webkit-touch-callout:none]', className)}
       style={style}
       onPointerDown={(e) => {

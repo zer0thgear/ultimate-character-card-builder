@@ -158,6 +158,7 @@ On a narrow screen (or a phone on its side) UCCB becomes one screen at a time: a
 - ☰ opens the card list as a drawer; picking a card or swiping it left closes it, and **⌂ Home** at its top closes the open card.
 - The header keeps what fits: undo/redo, Export (which gains **Overwrite from a file…**) and Settings; the theme switch is in Settings → General.
 - Controls that otherwise show on hover (deleting a card, message actions, thumbnail actions) are always shown on a touch screen. Drag handles don't scroll the page.
+- **Hold a button to see what it does**: the help text a mouse shows on hover appears in a bubble after about half a second, and letting go doesn't press the button. Text fields keep the phone's own long press (selecting text), and in Gallery a long press still starts selecting pictures.
 - Dialogs, the Edit/Inpaint canvas included, fill the screen; text fields are 16px so iPhone Safari doesn't zoom in.
 - Pictures open full screen with pinch-zoom (see [Art](#art)), and the phone's Back closes them.
 - The chat's header is one row: the chat, **+ New**, **⋯** (rename, export, the next or last prompt, delete) and **⚙** (model, persona, preset and the rest). Its buttons wrap rather than run off the edge, and greetings keep their actions inside the unfolded greeting.

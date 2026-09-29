@@ -85,7 +85,7 @@ Open **💬 Test chat** and start a chat. It builds the prompt the way SillyTave
 
 ## On your phone
 
-Open UCCB over Tailscale (see the README) and it becomes one screen at a time: a bar along the bottom switches between the card and the dock's tabs. **☰** opens the card list. The page makes room for the keyboard while you type.
+Open UCCB over Tailscale (see the README) and it becomes one screen at a time: a bar along the bottom switches between the card and the dock's tabs. **☰** opens the card list. The page makes room for the keyboard while you type. Not sure what an icon does? **Hold it** for a moment to see its help.
 
 ## Seeing and changing what the assistant is told
 

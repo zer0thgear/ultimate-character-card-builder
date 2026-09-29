@@ -15,6 +15,7 @@ import { FieldToolsHost } from '@/components/editor/fieldTools';
 import { CardEditor } from '@/components/editor/CardEditor';
 import { Dock } from '@/components/dock/Dock';
 import { Lightbox } from '@/components/Lightbox';
+import { TouchTips } from '@/components/TouchTips';
 import { AssistInspectorHost } from '@/components/llm/AssistTrace';
 import { LibraryPanel } from '@/components/dock/LibraryPanel';
 import { Tabs } from '@/components/ui';
@@ -166,6 +167,7 @@ export function Shell() {
       <ExtensionHosts />
       <AssistInspectorHost />
       <Lightbox />
+      <TouchTips />
       <Toasts />
     </div>
   );

@@ -125,3 +125,14 @@ body {
     font-size: max(16px, 1em);
   }
 }
+
+/* Touch screens: holding a button shows its help (components/TouchTips.tsx),
+   so it mustn't start selecting the button's label or open the phone's menu. */
+@media (hover: none) {
+  button,
+  [role="button"] {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+}
