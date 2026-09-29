@@ -95,8 +95,11 @@ export interface BuildOptions {
   guide?: string;
   model?: string;
   kind?: ProviderKind;
-  /** The reply's max tokens, for fitting a preset's context size. */
+  /** The reply's max tokens, for fitting the context size. */
   maxTokens?: number;
+  /** The context size to fit the history into (the connection's; a
+   *  preset's own wins). */
+  maxContext?: number;
   now?: Date;
   random?: () => number;
 }
@@ -229,6 +232,22 @@ export function historyParts(history: ChatMessage[], injections: DepthInjection[
 
 export const toMessages = (parts: PromptPart[]): LlmMessage[] => parts.map(({ role, content }) => ({ role, content }));
 
+/** A rough token count, for fitting a context size. */
+export const estimateTokens = (text: string) => Math.ceil(text.length / 3.5) + 4;
+
+/**
+ * The history that fits `maxContext` beside the rest of the prompt and the
+ * reply, dropping the oldest messages first (at least one is kept).
+ */
+export function fitHistory(chat: ChatMessage[], toParts: (kept: ChatMessage[]) => PromptPart[], fixedParts: PromptPart[], maxContext: number | undefined, maxTokens: number | undefined): { kept: ChatMessage[]; dropped: number } {
+  if (!maxContext || maxContext <= 0) return { kept: chat, dropped: 0 };
+  const cost = (ps: PromptPart[]) => ps.reduce((n, p) => n + estimateTokens(p.content), 0);
+  const budget = maxContext - cost(fixedParts) - (maxTokens ?? 0);
+  let kept = chat;
+  while (kept.length > 1 && cost(toParts(kept)) > budget) kept = kept.slice(1);
+  return { kept, dropped: chat.length - kept.length };
+}
+
 // ─── The built-in prompt (no preset) ─────────────────────────────────────────
 
 export function buildChatPrompt(card: CardData, history: ChatMessage[], settings: ChatPromptSettings, opts: BuildOptions = {}): BuiltPrompt {
@@ -266,7 +285,9 @@ export function buildChatPrompt(card: CardData, history: ChatMessage[], settings
     }
   }
 
-  parts.push(...historyParts(chat, cardDepthInjections(card, lore.active, x), x, { char, user }));
+  // The history goes here, once the rest is known (to fit the context size).
+  const historyAt = parts.length;
+  const injections = cardDepthInjections(card, lore.active, x);
 
   const phiDefault = x(settings.defaultPostHistory);
   const cardPhi = settings.useCardPostHistory && card.post_history_instructions.trim();
@@ -274,12 +295,18 @@ export function buildChatPrompt(card: CardData, history: ChatMessage[], settings
   if (mode === 'impersonate') sys('Impersonation prompt', x(DEFAULT_IMPERSONATION));
   if (opts.guide?.trim()) sys('Guide (🧭)', x(guideText(settings.guideTemplate, opts.guide)));
 
+  const toParts = (kept: ChatMessage[]) => historyParts(kept, injections, x, { char, user });
+  const prefill = mode === 'continue' ? opts.continueText : undefined;
+  const fixed = prefill ? [...parts, { label: 'Prefill', role: 'assistant' as const, content: prefill }] : parts;
+  const { kept, dropped } = fitHistory(chat, toParts, fixed, opts.maxContext, opts.maxTokens);
+  parts.splice(historyAt, 0, ...toParts(kept));
+
   return {
     parts,
     messages: toMessages(parts),
     lore,
-    prefill: mode === 'continue' ? opts.continueText : undefined,
-    droppedHistory: 0,
+    prefill,
+    droppedHistory: dropped,
   };
 }
 

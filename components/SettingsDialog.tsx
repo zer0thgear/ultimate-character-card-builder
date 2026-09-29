@@ -437,6 +437,10 @@ function ConnectionEditor({ connection: c }: { connection: LlmConnection }) {
           Max tokens
           <NumberInput value={c.params.max_tokens} onChange={(v) => setParam({ max_tokens: v ?? 600 })} min={1} step={50} />
         </label>
+        <label className="flex flex-col gap-0.5 text-xs text-slate-400" title="How many tokens the model can take in. The test chat trims its oldest messages to fit the prompt and the reply in this (a preset's own context size wins when it has one). Blank: no trimming. Never sent to the model.">
+          Context size
+          <NumberInput value={c.params.max_context} onChange={(v) => setParam({ max_context: v })} min={512} step={1024} allowEmpty placeholder="no limit" />
+        </label>
         {c.kind !== 'anthropic' ? (
           <>
             {num('temperature', 'Temperature')}

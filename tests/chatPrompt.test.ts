@@ -67,3 +67,34 @@ describe('🧭 guides', () => {
     expect(guideText('No slot', 'x')).toBe('No slot\nx');
   });
 });
+
+describe('context size', () => {
+  it('trims the oldest messages so the prompt and reply fit, keeping the latest', async () => {
+    const { buildChatPrompt, DEFAULT_CHAT_SETTINGS, newMessage } = await import('@/lib/chatPrompt');
+    const { newCard } = await import('@/lib/cardSpec');
+    const card = { ...newCard().data, name: 'Mira', description: 'An elf.' };
+    const chat = Array.from({ length: 40 }, (_, i) => newMessage(i % 2 ? 'assistant' : 'user', `Message ${i}: ${'words '.repeat(60)}`));
+    const all = buildChatPrompt(card, chat, DEFAULT_CHAT_SETTINGS, {});
+    expect(all.droppedHistory).toBe(0);
+    const fit = buildChatPrompt(card, chat, DEFAULT_CHAT_SETTINGS, { maxContext: 2000, maxTokens: 300 });
+    expect(fit.droppedHistory).toBeGreaterThan(0);
+    const text = fit.messages.map((m) => m.content).join('\n');
+    expect(text).toContain('Message 39');
+    expect(text).not.toContain('Message 0:');
+    const total = fit.messages.reduce((n, m) => n + Math.ceil(m.content.length / 3.5) + 4, 0);
+    expect(total + 300).toBeLessThanOrEqual(2000);
+  });
+
+  it("uses a preset's own context size over the connection's", async () => {
+    const { buildPresetPrompt } = await import('@/lib/presetPrompt');
+    const { parseStPreset } = await import('@/lib/stPreset');
+    const { DEFAULT_CHAT_SETTINGS, newMessage } = await import('@/lib/chatPrompt');
+    const { newCard } = await import('@/lib/cardSpec');
+    const card = { ...newCard().data, name: 'Mira' };
+    const chat = Array.from({ length: 30 }, (_, i) => newMessage(i % 2 ? 'assistant' : 'user', `M${i} ${'words '.repeat(60)}`));
+    const preset = parseStPreset({ prompts: [{ identifier: 'main', content: 'Main.' }], openai_max_context: 100000 });
+    expect(buildPresetPrompt(card, chat, DEFAULT_CHAT_SETTINGS, preset, { maxContext: 1500, maxTokens: 100 }).droppedHistory).toBe(0);
+    const noSize = { ...preset, maxContext: undefined };
+    expect(buildPresetPrompt(card, chat, DEFAULT_CHAT_SETTINGS, noSize, { maxContext: 1500, maxTokens: 100 }).droppedHistory).toBeGreaterThan(0);
+  });
+});

@@ -141,7 +141,7 @@ export function ChatPanel() {
 
   /** The prompt for `messages` (greeting added), through the preset if one is on. */
   const build = (messages: ChatMessage[], opts: BuildOptions = {}): BuiltPrompt => {
-    const full = { model: connection?.model, kind: connection?.kind, maxTokens: overrides.max_tokens ?? connection?.params.max_tokens, ...opts };
+    const full = { model: connection?.model, kind: connection?.kind, maxTokens: overrides.max_tokens ?? connection?.params.max_tokens, maxContext: connection?.params.max_context, ...opts };
     return preset ? buildPresetPrompt(card, history(messages), settings, preset, full) : buildChatPrompt(card, history(messages), settings, full);
   };
 

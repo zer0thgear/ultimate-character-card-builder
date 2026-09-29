@@ -139,9 +139,11 @@ export function buildPresetPrompt(card: CardData, history: ChatMessage[], settin
   // Fit the history into the context size, dropping the oldest first.
   let chatParts = historyAt ? historyParts(chat, injections, x, names) : [];
   let droppedHistory = 0;
-  if (historyAt && preset.maxContext && preset.maxContext > 0) {
+  // The preset's own context size, else the connection's.
+  const maxContext = preset.maxContext && preset.maxContext > 0 ? preset.maxContext : opts.maxContext;
+  if (historyAt && maxContext && maxContext > 0) {
     const fixed = [...before, ...after].reduce((n, p) => n + estimate(p.content), 0) + (opts.maxTokens ?? preset.samplers.max_tokens ?? 0);
-    const budget = preset.maxContext - fixed;
+    const budget = maxContext - fixed;
     let kept = chat;
     while (kept.length > 1 && historyParts(kept, injections, x, names).reduce((n, p) => n + estimate(p.content), 0) > budget) kept = kept.slice(1);
     droppedHistory = chat.length - kept.length;

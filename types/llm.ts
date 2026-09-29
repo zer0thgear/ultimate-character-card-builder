@@ -9,6 +9,10 @@ export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
 export interface SamplerParams {
   max_tokens: number;
+  /** Context size, in tokens: the test chat's history is trimmed (oldest
+   *  first) so the prompt and the reply fit. A preset's own size wins. Never
+   *  sent to the model. */
+  max_context?: number;
   temperature?: number;
   top_p?: number;
   top_k?: number;
