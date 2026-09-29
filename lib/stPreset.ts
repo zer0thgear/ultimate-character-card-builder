@@ -85,7 +85,21 @@ export interface ChatPreset {
   /** SillyTavern's character_names_behavior: -1 none, 0 default, 1 completion, 2 in content. */
   namesBehavior: number;
   importedAt: number;
+  /** The file's other settings, which UCCB doesn't use (logit bias, other
+   *  providers' sampler fields…), kept so exporting writes them back. */
+  extra?: Record<string, unknown>;
 }
+
+/** The fields UCCB reads (so everything else goes in `extra`). */
+const KNOWN_KEYS = new Set([
+  'name', 'prompts', 'prompt_order', 'temperature', 'top_p', 'top_k', 'top_a', 'min_p', 'frequency_penalty', 'presence_penalty', 'repetition_penalty',
+  'openai_max_tokens', 'openai_max_context', 'seed', 'reasoning_effort', 'wi_format', 'scenario_format', 'personality_format', 'new_chat_prompt',
+  'new_example_chat_prompt', 'continue_nudge_prompt', 'impersonation_prompt', 'send_if_empty', 'assistant_prefill', 'continue_prefill',
+  'continue_postfix', 'squash_system_messages', 'names_behavior', 'character_names_behavior',
+]);
+
+/** SillyTavern's reasoning effort choices ('auto' leaves it to the server). */
+export const PRESET_EFFORTS = ['auto', 'min', 'low', 'medium', 'high', 'max'] as const;
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown, fallback = '') => (typeof v === 'string' ? v : fallback);
@@ -203,6 +217,83 @@ export function parseStPreset(json: unknown, fileName = 'Preset'): ChatPreset {
     squashSystemMessages: s.squash_system_messages === true,
     namesBehavior: typeof s.names_behavior === 'number' ? s.names_behavior : typeof s.character_names_behavior === 'number' ? s.character_names_behavior : 0,
     importedAt: Date.now(),
+    extra: Object.fromEntries(Object.entries(s).filter(([k]) => !KNOWN_KEYS.has(k))),
+  };
+}
+
+/** SillyTavern's own default prompts, for a new preset. */
+const DEFAULT_PROMPTS = [
+  { identifier: 'main', name: 'Main Prompt', system_prompt: true, role: 'system', content: "Write {{char}}'s next reply in a fictional chat between {{char}} and {{user}}." },
+  { identifier: 'nsfw', name: 'Auxiliary Prompt', system_prompt: true, role: 'system', content: '' },
+  { identifier: 'jailbreak', name: 'Post-History Instructions', system_prompt: true, role: 'system', content: '' },
+  { identifier: 'enhanceDefinitions', name: 'Enhance Definitions', system_prompt: true, role: 'system', content: "If you have more knowledge of {{char}}, add to the character's lore and personality to enhance them but keep the Character Sheet's definitions absolute." },
+];
+
+/** A new preset, as SillyTavern starts one: its default prompts and order
+ *  (Enhance Definitions off), and no samplers set. */
+export function newPreset(name = 'New preset'): ChatPreset {
+  const p = parseStPreset({ name, prompts: DEFAULT_PROMPTS });
+  p.order = p.order.map((o) => ({ ...o, enabled: o.identifier !== 'enhanceDefinitions' }));
+  p.extra = {};
+  return p;
+}
+
+/** A copy under a new id and name. */
+export function duplicatePreset(p: ChatPreset, name = `${p.name} (copy)`): ChatPreset {
+  return { ...structuredClone(p), id: uuid(), name, importedAt: Date.now() };
+}
+
+/** A new prompt of your own, as SillyTavern's "+" makes one. */
+export function newPresetPrompt(name = 'New prompt'): PresetPrompt {
+  return { identifier: uuid(), name, role: 'system', content: '', marker: false, injectionPosition: 0, injectionDepth: 4, injectionOrder: 100, forbidOverrides: false, systemPrompt: false };
+}
+
+/** The preset as a SillyTavern chat-completion preset file, which ST can
+ *  import (settings UCCB doesn't use are written back as they came). */
+export function toStPreset(p: ChatPreset): Record<string, unknown> {
+  const s = p.samplers;
+  const num = (v: number | undefined, fallback: number) => (v === undefined ? fallback : v);
+  return {
+    ...p.extra,
+    temperature: num(s.temperature, 1),
+    top_p: num(s.top_p, 1),
+    top_k: num(s.top_k, 0),
+    top_a: num(s.top_a, 0),
+    min_p: num(s.min_p, 0),
+    frequency_penalty: num(s.frequency_penalty, 0),
+    presence_penalty: num(s.presence_penalty, 0),
+    repetition_penalty: num(s.repetition_penalty, 1),
+    openai_max_tokens: num(s.max_tokens, 300),
+    ...(p.maxContext !== undefined ? { openai_max_context: p.maxContext } : {}),
+    seed: num(s.seed, -1),
+    ...(s.reasoning_effort ? { reasoning_effort: s.reasoning_effort } : {}),
+    wi_format: p.formats.wi,
+    scenario_format: p.formats.scenario,
+    personality_format: p.formats.personality,
+    new_chat_prompt: p.newChatPrompt,
+    new_example_chat_prompt: p.newExampleChatPrompt,
+    continue_nudge_prompt: p.continueNudgePrompt,
+    impersonation_prompt: p.impersonationPrompt,
+    send_if_empty: p.sendIfEmpty,
+    assistant_prefill: p.assistantPrefill,
+    continue_prefill: p.continuePrefill,
+    continue_postfix: p.continuePostfix,
+    squash_system_messages: p.squashSystemMessages,
+    names_behavior: p.namesBehavior,
+    prompts: p.prompts.map((x) => ({
+      identifier: x.identifier,
+      name: x.name,
+      role: x.role,
+      content: x.content,
+      system_prompt: x.systemPrompt,
+      marker: x.marker,
+      injection_position: x.injectionPosition,
+      injection_depth: x.injectionDepth,
+      injection_order: x.injectionOrder,
+      forbid_overrides: x.forbidOverrides,
+    })),
+    // ST's global prompt list (character 100001), the one it uses.
+    prompt_order: [{ character_id: 100001, order: p.order.map((o) => ({ identifier: o.identifier, enabled: o.enabled })) }],
   };
 }
 

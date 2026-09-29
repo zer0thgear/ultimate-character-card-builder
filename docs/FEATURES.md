@@ -91,7 +91,7 @@ Search: comma-separated terms, all required; `-term` excludes; `a | b` is either
 
 ### SillyTavern presets
 
-**Settings → Chat preset** (or ⚙ in the chat) → **Import…** takes SillyTavern chat-completion presets (the JSON "Export preset" writes). The picked preset is global: every chat on every card uses it until you pick another, and the chat's toolbar shows which one is on. With one picked, the prompt is built by its prompt manager, as SillyTavern would:
+**Settings → Chat preset** (or ⚙ in the chat) → **Import…** takes SillyTavern chat-completion presets (the JSON "Export preset" writes), or **+ New** starts one. The picked preset is global: every chat on every card uses it until you pick another, and the chat's toolbar shows which one is on. With one picked, the prompt is built by its prompt manager, as SillyTavern would:
 
 - Its prompts, in its order, only the ones switched on; markers (description, personality, scenario, persona, world info before/after, examples, chat history) filled from the card, using its personality/scenario/world-info formats and its new-chat and example-chat separators.
 - The card's system prompt and post-history instructions replace **Main Prompt** and **Post-History Instructions** (with `{{original}}`), unless the preset forbids overrides or you turn that off.
@@ -101,7 +101,12 @@ Search: comma-separated terms, all required; `-term` excludes; `a | b` is either
 - Macros include SillyTavern's variables (`{{setvar}}`, `{{getvar}}`, `{{addvar}}`, `{{incvar}}`…) and card fields (`{{description}}`, `{{lastUserMessage}}`…), shared across the whole prompt.
 - **Conditionals**: `{{#if description}}…{{/if}}`, with `{{else}}`, `{{#unless x}}`, `!x` and nesting, as SillyTavern's presets use them. A condition is a field (`description`, `personality`, `scenario`, `persona`, `mesExamples`), the lorebook entries that fired this turn (`wiBefore`, `wiAfter`, also usable as `{{wiBefore}}` / `{{wiAfter}}`), a macro such as `getvar::mood`, or a variable's name; it's true unless that's empty, `false` or `0`. A tag on a line of its own takes the line with it, so a block that's left out leaves no gap, and blocks resolve in reading order, so a `{{setvar}}` inside a block that's left out doesn't happen. They work in card fields and the built-in prompt too.
 - **Use the preset's samplers** puts its temperature, top P/K/A, min P, penalties, max tokens and seed over the connection's (for Claude, only length and reasoning effort, since current models refuse the rest).
-- **Prompts** opens its prompt manager: switch prompts on and off, drag to reorder, edit text, role and depth. Changes apply to UCCB's copy.
+- **Edit…** opens the whole preset, as SillyTavern's AI Response Configuration panel has it:
+  - **Samplers**: temperature, top P, top K, min P, top A, the repetition, frequency and presence penalties, seed, max reply tokens, context size and reasoning effort. A blank one isn't sent, so the connection's own setting applies.
+  - **Prompts**: its prompt manager. Switch prompts on and off, drag to reorder, edit text, role and depth, and **+ Prompt** to add your own (named, and deletable; SillyTavern's built-ins can be edited but not deleted).
+  - **Other prompts & options**: the impersonation prompt, continue nudge (or continuing by prefill, with what follows it), send if empty, the assistant prefill, the new-chat and example markers, the world info, scenario and personality formats, character names, and squashing system messages.
+  - **Duplicate** makes a copy to experiment on, and **Export** saves it as a SillyTavern preset file, which ST imports. Settings UCCB doesn't use (logit bias, other providers' fields) are kept from the imported file and written back.
+- **+ New** starts a preset from SillyTavern's default prompts and order.
 
 **The writing assistant can use a preset too** (Settings → Assistant), chosen separately from the chat's. Its samplers can apply, and its own prompts are wrapped around every assistant request (✨ on fields, new greetings, lorebook entries, tags, the review, the art prompts, Brainstorm): those ordered before Chat History go first, the rest after. The card is already in the request, so placeholders are skipped. Untick any prompt that fights a writing task, such as a roleplay "write {{char}}'s next reply"; that choice is the assistant's alone and doesn't touch the chat.
 

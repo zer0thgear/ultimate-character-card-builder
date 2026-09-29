@@ -222,3 +222,31 @@ describe('wrapWithPreset (the writing assistant)', () => {
     expect(out.map((m) => m.content)).toEqual(['You help write cards.', 'Rewrite the description.', 'Keep it .']);
   });
 });
+
+describe('editing and exporting presets', () => {
+  it('round-trips through SillyTavern\'s format, keeping settings UCCB doesn\'t use', async () => {
+    const { toStPreset } = await import('@/lib/stPreset');
+    const p = parseStPreset(ST_PRESET, 'My Preset.json');
+    expect(p.extra).toMatchObject({ wrap_in_quotes: false });
+    const out = toStPreset(p);
+    expect(out).toMatchObject({ wrap_in_quotes: false, temperature: 1.1, openai_max_tokens: 50, openai_max_context: 200, send_if_empty: '[continue]' });
+    const again = parseStPreset(out, 'My Preset.json');
+    const strip = (x: typeof p) => ({ ...x, id: '', importedAt: 0 });
+    expect(strip(again)).toEqual(strip(p));
+  });
+
+  it('starts a new preset as SillyTavern does, and copies one', async () => {
+    const { newPreset, duplicatePreset, newPresetPrompt } = await import('@/lib/stPreset');
+    const p = newPreset('Mine');
+    expect(p.name).toBe('Mine');
+    expect(p.order.find((o) => o.identifier === 'main')?.enabled).toBe(true);
+    expect(p.order.find((o) => o.identifier === 'enhanceDefinitions')?.enabled).toBe(false);
+    expect(p.order.map((o) => o.identifier)).toContain('chatHistory');
+    const copy = duplicatePreset(p);
+    expect(copy.id).not.toBe(p.id);
+    expect(copy.name).toBe('Mine (copy)');
+    copy.prompts[0].content = 'changed';
+    expect(p.prompts[0].content).not.toBe('changed');
+    expect(newPresetPrompt()).toMatchObject({ role: 'system', marker: false, systemPrompt: false, injectionPosition: 0 });
+  });
+});
