@@ -33,6 +33,10 @@ export function assistRequest(messages: LlmMessage[], connectionId?: string | nu
   return { connection, messages: wrapped, params: a.samplers ? presetParams(preset, connection.kind) : {}, preset: preset.name };
 }
 
+/** Stop reasons that mean the reply hit its token limit (OpenAI-compatible
+ *  and NovelAI say "length", Claude "max_tokens"). */
+export const isCutOff = (stopReason?: string) => stopReason === 'length' || stopReason === 'max_tokens';
+
 export interface StreamResult {
   text: string;
   reasoning: string;
@@ -54,7 +58,7 @@ export function useLlmStream() {
     onText?: (full: string) => void,
     /** `prefill`: the last message starts the reply. `params` override the
      *  connection's (a preset's samplers). */
-    opts: { prefill?: boolean; params?: Partial<SamplerParams>; onReasoning?: (full: string) => void } = {},
+    opts: { prefill?: boolean; params?: Partial<SamplerParams>; onReasoning?: (full: string) => void; prefix?: string } = {},
   ): Promise<StreamResult> => {
     abortRef.current?.abort();
     setText('');
@@ -80,8 +84,8 @@ export function useLlmStream() {
         (e) => {
           if (e.type === 'text') {
             result.text += e.text;
-            setText(result.text);
-            onText?.(result.text);
+            setText((opts.prefix ?? '') + result.text);
+            onText?.((opts.prefix ?? '') + result.text);
           } else if (e.type === 'reasoning') {
             result.reasoning += e.text;
             setReasoning(result.reasoning);
@@ -102,17 +106,27 @@ export function useLlmStream() {
       if (abortRef.current === controller) abortRef.current = null;
       setRunning(false);
     }
+    if (opts.prefix) result.text = opts.prefix + result.text;
     return result;
   }, []);
 
   /** The id of this hook's latest assistant run, in the assist log. */
   const [runId, setRunId] = useState<string | null>(null);
+  /** The latest reply stopped at its token limit, so there's more to come. */
+  const [cutOff, setCutOff] = useState(false);
+  /** The latest assistant request, for continueAssist. */
+  const lastAssist = useRef<{ messages: LlmMessage[]; label: string; connectionId?: string | null } | null>(null);
 
   /** A writing-assistant request (see assistRequest), logged under `label`
    *  so its reasoning and prompt can be looked at. */
   const runAssist = useCallback(
-    async (messages: LlmMessage[], onText?: (full: string) => void, label = 'Assistant', opts: { connectionId?: string | null } = {}): Promise<StreamResult & { runId: string }> => {
+    async (messages: LlmMessage[], onText?: (full: string) => void, label = 'Assistant', opts: { connectionId?: string | null; continueFrom?: string } = {}): Promise<StreamResult & { runId: string }> => {
+      if (opts.continueFrom === undefined) lastAssist.current = { messages, label, connectionId: opts.connectionId };
+      setCutOff(false);
       const req = assistRequest(messages, opts.connectionId);
+      // A continue: the reply so far goes last, as the start of the model's
+      // reply (after any preset prompts), and it writes on from there.
+      if (opts.continueFrom !== undefined) req.messages = [...req.messages, { role: 'assistant', content: opts.continueFrom }];
       const id = uuid();
       const log = useAssistLog.getState();
       log.add({
@@ -136,12 +150,25 @@ export function useLlmStream() {
           useAssistLog.getState().update(id, { text: full });
           onText?.(full);
         },
-        { params: req.params, onReasoning: (reasoning) => useAssistLog.getState().update(id, { reasoning }) },
+        { params: req.params, onReasoning: (reasoning) => useAssistLog.getState().update(id, { reasoning }), prefill: opts.continueFrom !== undefined, prefix: opts.continueFrom },
       );
       useAssistLog.getState().update(id, { running: false, text: r.text, reasoning: r.reasoning, error: r.error });
+      setCutOff(isCutOff(r.stopReason));
       return { ...r, runId: id };
     },
     [run],
+  );
+
+  /** Carries on the latest assistant reply from `soFar` (it, or your edit
+   *  of it), for one that stopped short. The result is `soFar` plus what
+   *  the model added. */
+  const continueAssist = useCallback(
+    async (soFar: string) => {
+      const last = lastAssist.current;
+      if (!last) return null;
+      return runAssist(last.messages, undefined, `${last.label} (continued)`, { connectionId: last.connectionId, continueFrom: soFar });
+    },
+    [runAssist],
   );
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
@@ -151,5 +178,5 @@ export function useLlmStream() {
     setError(null);
   }, []);
 
-  return { run, runAssist, runId, stop, reset, text, reasoning, running, error };
+  return { run, runAssist, continueAssist, cutOff, runId, stop, reset, text, reasoning, running, error };
 }

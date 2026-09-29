@@ -58,7 +58,7 @@ function VisionWriteDialog({ blob, url }: { blob: Blob; url: string }) {
   const [job, setJob] = useState<VisionJob>('appearance');
   const [instruction, setInstruction] = useState('');
   const [draft, setDraft] = useState<string | null>(null);
-  const { runAssist, runId, stop, text, running, error } = useLlmStream();
+  const { runAssist, continueAssist, cutOff, runId, stop, text, running, error } = useLlmStream();
   if (!card) return null;
   const shown = draft ?? text;
   const blind = connection?.kind === 'novelai';
@@ -75,6 +75,12 @@ function VisionWriteDialog({ blob, url }: { blob: Blob; url: string }) {
     const label = `✨ From an image: ${JOBS.find((j) => j.value === job)?.label.replace(/^\S+\s/, '').toLowerCase()}`;
     const r = await runAssist(visionMessages(card, job, instruction, [image]), undefined, label, { connectionId });
     setDraft(r.text.trim());
+  };
+  const carryOn = async () => {
+    const from = shown;
+    setDraft(null);
+    const r = await continueAssist(from);
+    setDraft(r ? r.text : from);
   };
 
   const close = () => {
@@ -207,9 +213,16 @@ function VisionWriteDialog({ blob, url }: { blob: Blob; url: string }) {
                 Stop
               </Button>
             ) : (
-              <Button variant="primary" disabled={blind || needsQuestion} onClick={() => void go()} title={needsQuestion ? 'Type your question first' : undefined}>
-                {shown ? 'Again' : 'Write'}
-              </Button>
+              <>
+                <Button variant="primary" disabled={blind || needsQuestion} onClick={() => void go()} title={needsQuestion ? 'Type your question first' : undefined}>
+                  {shown ? 'Again' : 'Write'}
+                </Button>
+                {shown.trim() && !blind && (
+                  <Button onClick={() => void carryOn()} title="Carry on writing from the end of the text (edit it first if you like)">
+                    → Continue
+                  </Button>
+                )}
+              </>
             )}
           </div>
           <ConnectionPicker value={connectionId} onChange={setVisionConnection} label="Vision model" />
@@ -221,6 +234,7 @@ function VisionWriteDialog({ blob, url }: { blob: Blob; url: string }) {
             <p className="text-[11px] text-slate-500">Needs a model that can see images. One that can&apos;t usually refuses the request (you&apos;ll see why here), though a few servers quietly ignore the picture and guess.</p>
           )}
           {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
+          {cutOff && !running && <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-200">The reply stopped at the model&apos;s token limit. → Continue picks up where it left off (or raise the connection&apos;s max tokens in Settings).</div>}
           <AssistReasoning runId={runId} />
           <div className="flex items-center justify-between text-xs text-slate-500">
             <span>{running ? <span className="animate-pulse text-violet-300">writing…</span> : 'Result'}</span>
