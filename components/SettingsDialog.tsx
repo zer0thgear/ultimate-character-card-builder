@@ -17,6 +17,7 @@ import { assistRequest } from '@/hooks/useLlmStream';
 import { ASSIST_JOBS, ASSIST_TEMPLATES, DEFAULT_TEMPLATES } from '@/lib/assist';
 import { newCard } from '@/lib/cardSpec';
 import { useModelPrices } from '@/hooks/useModelPrices';
+import { MaxRequestCost } from '@/components/llm/MaxRequestCost';
 import { formatPrice, isOpenRouter, priceLabel } from '@/lib/modelPricing';
 import { useProjectStore } from '@/store/projectStore';
 import { AccountStatus } from '@/components/AccountStatus';
@@ -428,6 +429,7 @@ function ConnectionEditor({ connection: c }: { connection: LlmConnection }) {
             </span>
           )}
           {isOpenRouter(c) && c.model && prices && !price && <span className="text-[11px] text-slate-500">No price listed for this model id on OpenRouter.</span>}
+          {isOpenRouter(c) && <MaxRequestCost price={price} contextSize={c.params.max_context} maxTokens={c.params.max_tokens} />}
         </label>
       </div>
 

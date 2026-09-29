@@ -25,3 +25,31 @@ describe('model prices', () => {
     expect(isOpenRouter({ kind: 'novelai', baseUrl: '' })).toBe(false);
   });
 });
+
+describe('the most a request can cost', () => {
+  it('is a full context of input plus a full-length reply', async () => {
+    const { maxRequestCost, formatDollars } = await import('@/lib/modelPricing');
+    // GLM-5.3 Flash-ish: $0.15 in, $0.50 out per 1M, 128k context.
+    const price = { input: 0.15e-6, output: 0.5e-6, context: 131072 };
+    const r = maxRequestCost(price, { contextSize: 32768, maxTokens: 4000 })!;
+    expect(r).toMatchObject({ context: 32768, input: 28768, output: 4000 });
+    expect(r.cost).toBeCloseTo(28768 * 0.15e-6 + 4000 * 0.5e-6, 12);
+    expect(formatDollars(r.cost)).toBe('$0.0063');
+  });
+  it("uses the model's context when none is set, or when it's smaller", async () => {
+    const { maxRequestCost } = await import('@/lib/modelPricing');
+    const price = { input: 1e-6, output: 2e-6, context: 8192 };
+    expect(maxRequestCost(price, { maxTokens: 1000 })?.context).toBe(8192);
+    expect(maxRequestCost(price, { contextSize: 100000, maxTokens: 1000 })?.context).toBe(8192);
+    expect(maxRequestCost({ input: 1e-6, output: 2e-6 }, { maxTokens: 1000 })).toBeNull();
+    expect(maxRequestCost({ input: -1, output: -1, context: 8192 }, { maxTokens: 1000 })).toBeNull();
+  });
+  it('reads well at every size', async () => {
+    const { formatDollars } = await import('@/lib/modelPricing');
+    expect(formatDollars(0)).toBe('free');
+    expect(formatDollars(1.234)).toBe('$1.23');
+    expect(formatDollars(0.00003)).toBe('<$0.0001');
+    expect(formatDollars(0.045)).toBe('$0.045');
+    expect(formatDollars(0.198)).toBe('$0.20');
+  });
+});

@@ -5,6 +5,9 @@ import { useLlmStore } from '@/store/llmStore';
 import { toast } from '@/store/uiStore';
 import { duplicatePreset, newPreset, newPresetPrompt, parseStPreset, PRESET_EFFORTS, PresetImportError, toStPreset, type ChatPreset, type PresetPrompt, type PresetSamplers } from '@/lib/stPreset';
 import { assistablePrompts } from '@/lib/assistPreset';
+import { isOpenRouter } from '@/lib/modelPricing';
+import { useModelPrices } from '@/hooks/useModelPrices';
+import { MaxRequestCost } from '@/components/llm/MaxRequestCost';
 import { SortableList, arrayMove } from '@/components/SortableList';
 import { AutoTextarea, Button, IconButton, Modal, NumberInput, Tabs, TokenBadge, Toggle, confirmDialog, cx, downloadBlob, inputClass, pickFiles } from '@/components/ui';
 
@@ -165,12 +168,22 @@ function SamplerField({ label, hint, value, onChange, step, min, max }: { label:
 
 function SamplerEditor({ preset, set }: { preset: ChatPreset; set: (patch: Partial<ChatPreset>) => void }) {
   const s = preset.samplers;
+  // What this preset's context and reply length can cost on the chat's connection.
+  const chat = useLlmStore((st) => st.connections.find((c) => c.id === st.chatConnectionId));
+  const prices = useModelPrices(isOpenRouter(chat));
+  const price = isOpenRouter(chat) && chat ? prices?.[chat.model] : undefined;
   const setS = (patch: Partial<PresetSamplers>) => set({ samplers: { ...s, ...patch } });
   return (
     <div className="flex flex-col gap-3">
       <p className="text-[11px] text-slate-500">
         Blank ones aren&apos;t sent, so the connection&apos;s own setting (or the model&apos;s default) applies. Claude only takes the reply length and reasoning effort; current Claude models refuse the rest.
       </p>
+      {chat && price && (
+        <p className="text-[11px] text-slate-500">
+          With the chat&apos;s connection ({chat.model}):{' '}
+          <MaxRequestCost price={price} contextSize={preset.maxContext ?? chat.params.max_context} maxTokens={s.max_tokens ?? chat.params.max_tokens} className="text-[11px] text-slate-400" />
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <SamplerField label="Temperature" hint="Randomness: higher is more varied, lower more predictable" value={s.temperature} onChange={(temperature) => setS({ temperature })} step={0.05} min={0} max={2} />
         <SamplerField label="Top P" hint="Only the most likely tokens that together make up this share of the probability" value={s.top_p} onChange={(top_p) => setS({ top_p })} step={0.01} min={0} max={1} />

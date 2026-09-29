@@ -22,13 +22,18 @@ export async function openRouterPrices(): Promise<Record<string, ModelPrice>> {
     try {
       const res = await fetch(URL, { signal: AbortSignal.timeout(20_000) });
       if (!res.ok) throw new Error(`OpenRouter answered ${res.status}`);
-      const json = (await res.json()) as { data?: { id: string; pricing?: Record<string, unknown> }[] };
+      const json = (await res.json()) as { data?: { id: string; pricing?: Record<string, unknown>; context_length?: unknown }[] };
       const prices: Record<string, ModelPrice> = {};
       for (const m of json.data ?? []) {
         const input = num(m.pricing?.prompt);
         const output = num(m.pricing?.completion);
         if (input === undefined || output === undefined) continue;
-        prices[m.id] = { input, output, ...(num(m.pricing?.input_cache_read) !== undefined ? { cacheRead: num(m.pricing?.input_cache_read) } : {}) };
+        prices[m.id] = {
+          input,
+          output,
+          ...(num(m.pricing?.input_cache_read) !== undefined ? { cacheRead: num(m.pricing?.input_cache_read) } : {}),
+          ...(num(m.context_length) ? { context: num(m.context_length) } : {}),
+        };
       }
       cached = { at: Date.now(), prices };
       return prices;

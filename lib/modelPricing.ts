@@ -11,6 +11,33 @@ export interface ModelPrice {
   output: number;
   /** Dollars per cached input token, where the model caches. */
   cacheRead?: number;
+  /** The model's context length, in tokens. */
+  context?: number;
+}
+
+/**
+ * The most one request can cost, as SillyTavern works it out for metered
+ * connections: a full context of input and a full-length reply. The context
+ * is the connection's size, or the model's own if that's smaller or there's
+ * none set; the reply's tokens come out of it. Null when the price varies
+ * or there's no context size to go on.
+ */
+export function maxRequestCost(price: ModelPrice, opts: { contextSize?: number; maxTokens: number }): { cost: number; context: number; input: number; output: number } | null {
+  if (price.input < 0 || price.output < 0) return null;
+  const sizes = [opts.contextSize, price.context].filter((n): n is number => typeof n === 'number' && n > 0);
+  if (!sizes.length) return null;
+  const context = Math.min(...sizes);
+  const output = Math.min(opts.maxTokens, context);
+  const input = Math.max(0, context - output);
+  return { cost: input * price.input + output * price.output, context, input, output };
+}
+
+/** A dollar amount at a readable precision: "$0.0061", "$1.24", "free". */
+export function formatDollars(d: number): string {
+  if (d === 0) return 'free';
+  if (d >= 0.1) return `$${d.toFixed(2)}`;
+  if (d < 0.0001) return '<$0.0001';
+  return `$${d.toLocaleString('en-US', { maximumSignificantDigits: 2, maximumFractionDigits: 6 })}`;
 }
 
 export type PriceUnit = '1M' | '1K';
