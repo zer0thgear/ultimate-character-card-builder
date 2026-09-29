@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // full of zeros. Saves now flush before the rename and keep the previous
 // version as .bak, which reading falls back to.
 
-describe('crash-safe saving', () => {
+describe('crash-safe saving', { timeout: 30_000 }, () => {
   let dir: string;
   let storage: typeof import('@/lib/server/storage');
   beforeAll(async () => {

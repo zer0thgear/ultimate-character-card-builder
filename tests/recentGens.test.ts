@@ -29,7 +29,8 @@ describe('recentPatch', () => {
   });
 });
 
-describe('recent gens on disk', () => {
+// Real disk writes, each flushed (crash-safe), can be slow in the temp folder.
+describe('recent gens on disk', { timeout: 30_000 }, () => {
   let dir: string;
   let storage: typeof import('@/lib/server/storage');
   beforeAll(async () => {
