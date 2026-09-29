@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 // UCCB runs as a local server (`npm run dev` / `npm start`): its API routes
@@ -16,7 +18,35 @@ const extensions = {
   "@local/server": pick("local/server.ts", "lib/extensions/fallback/server.ts"),
 };
 
+// In development, Next.js only serves its dev resources (hot reload) to
+// pages opened at localhost unless told otherwise. Opening UCCB by this
+// computer's name or address (from a phone over Tailscale, say) is the
+// same app, so those are allowed: the hostname, its Tailscale name (which
+// can differ, and its full *.ts.net form, as `tailscale serve` gives it),
+// and every address this machine has. Who may connect at all is still
+// server.mjs's check.
+function tailscaleNames(): string[] {
+  try {
+    const status = JSON.parse(execFileSync("tailscale", ["status", "--json"], { encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] }));
+    const full = String(status?.Self?.DNSName ?? "").replace(/\.$/, "").toLowerCase();
+    return full ? [full, full.split(".")[0]] : [];
+  } catch {
+    return []; // no Tailscale here
+  }
+}
+const host = os.hostname().toLowerCase();
+const ownOrigins = [
+  host,
+  `${host}.*.ts.net`,
+  ...tailscaleNames(),
+  ...Object.values(os.networkInterfaces())
+    .flat()
+    .filter((a): a is os.NetworkInterfaceInfo => !!a && !a.internal)
+    .map((a) => (a.family === "IPv6" ? `[${a.address.split("%")[0]}]` : a.address)),
+];
+
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ownOrigins,
   // Off: in the phone layout it sat on the bottom bar. Errors still show.
   devIndicators: false,
   // sharp is a native module; keep it out of the server bundle.

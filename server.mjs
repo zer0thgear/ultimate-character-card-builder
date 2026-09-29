@@ -8,6 +8,7 @@
 //   node server.mjs --dev    development, with hot reload
 
 import { createServer } from 'node:http';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -78,6 +79,13 @@ server.listen(port, () => {
     .filter((a) => a && a.family === 'IPv4' && isTailscale(a.address))
     .map((a) => a.address);
   console.log(`UCCB ${dev ? '(dev) ' : ''}running at http://localhost:${port}`);
-  if (tailscale.length) console.log(`  From your Tailscale devices: http://${os.hostname().toLowerCase()}:${port} (or http://${tailscale[0]}:${port})`);
+  // The machine's Tailscale name can differ from its hostname.
+  let name = os.hostname().toLowerCase();
+  try {
+    name = JSON.parse(execFileSync('tailscale', ['status', '--json'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] })).Self.DNSName.split('.')[0] || name;
+  } catch {
+    /* no Tailscale CLI: the hostname is the best guess */
+  }
+  if (tailscale.length) console.log(`  From your Tailscale devices: http://${name}:${port} (or http://${tailscale[0]}:${port})`);
   console.log(`  Other devices: ${allowLan() ? 'home network allowed too' : 'Tailscale only (home network off in Settings)'}`);
 });
