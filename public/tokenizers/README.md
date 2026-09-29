@@ -11,4 +11,5 @@ counter is shown, and only the file for the selected model.
 
 The T5 and Qwen files are redistributed under the Apache License 2.0 (see
 `LICENSE-Apache-2.0.txt`); the CLIP file under the MIT License (see
-`LICENSE-MIT-OpenAI-CLIP.txt`). Regenerate them with `scripts/build-tokenizers.mjs`.
+`LICENSE-MIT-OpenAI-CLIP.txt`). They were taken from the sources above as
+described.

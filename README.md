@@ -108,6 +108,20 @@ Features you'd rather not publish can live in a `local/` folder beside the app. 
 
 Without the folder, the app runs as usual. Restart after adding or removing it.
 
+## Acknowledgements
+
+UCCB stands on the shoulders of other people's work, and wouldn't exist without it:
+
+- **[SillyTavern](https://github.com/SillyTavern/SillyTavern)**: the frontend UCCB's test chat is built to match. The card formats it reads and writes, how the chat prompt is assembled, the chat-completion presets and their prompt manager, macros and `{{#if}}` conditionals, lorebooks, personas, and a lot of the chat's feel (swipes, message numbers, avatar shapes) all follow SillyTavern, so a card that plays well here plays the same way there. UCCB reimplements that behaviour to be compatible with it; it doesn't contain SillyTavern's code.
+- **[More Flexible Continues](https://github.com/LenAnderson/SillyTavern-MoreFlexibleContinues)** by LenAnderson: the idea behind the chat's continue tree (rerolling and undoing continues, and picking a path from every continue you've made).
+- **[Guided Generations](https://github.com/Samueras/Guided-Generations)** by Samueras: the idea behind 🧭 Guide, steering a reply, swipe, continue or impersonation with an instruction, sent in wording modelled on the extension's.
+- **[NovelAI](https://novelai.net)**: the image models UCCB's generator is built around (its requests, presets, costs, token counts and Enhance are made to match novelai.net's own), and text models usable for the chat and the writing assistant.
+- **[AUTOMATIC1111's Stable Diffusion web UI](https://github.com/AUTOMATIC1111/stable-diffusion-webui)**, **[Forge](https://github.com/lllyasviel/stable-diffusion-webui-forge)** and **[ComfyUI](https://github.com/comfyanonymous/ComfyUI)**: the other image backends UCCB can generate with, through their APIs.
+- **[Tailscale](https://tailscale.com)**: how UCCB reaches your other devices safely.
+- **Tokenizer data** in `public/tokenizers/`, for NovelAI's token counts: T5 (Google) and Qwen (Alibaba Cloud) under the Apache License 2.0, and OpenAI's CLIP under the MIT License; see [its README](public/tokenizers/README.md).
+
+UCCB is an independent project, not affiliated with or endorsed by any of these projects or companies. Their names and trademarks belong to their owners.
+
 ## License
 
 MIT; see [LICENSE](LICENSE). The tokenizer data in `public/tokenizers/` keeps its own licenses (Apache 2.0 and MIT), included beside it.
