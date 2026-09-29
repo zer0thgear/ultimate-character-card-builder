@@ -29,7 +29,7 @@ export function Shell() {
   const project = useProjectStore((s) => s.project);
   const loading = useProjectStore((s) => s.loading);
   const { sidebarOpen, setSidebarOpen, dockWidth, setDockWidth, phoneView } = useUiStore();
-  const chatFull = useUiStore((s) => s.chatFull && s.dockTab === 'chat');
+  const fullPane = useUiStore((s) => s.fullPane);
   const workspace = useRef<HTMLDivElement>(null);
   // Phones get one screen at a time with a bottom bar, and the card list
   // as a drawer.
@@ -123,7 +123,7 @@ export function Shell() {
       {/* Typing on a phone, the header and bottom bar make way for the text. */}
       {!(phone && keyboard) && <Header phone={phone} onMenu={() => (phone ? setDrawer(true) : setSidebarOpen(!sidebarOpen))} />}
       <div className="flex min-h-0 flex-1">
-        {!phone && sidebarOpen && !(chatFull && project) && <ProjectSidebar />}
+        {!phone && sidebarOpen && !(fullPane && project) && <ProjectSidebar />}
         <div ref={workspace} className="flex min-w-0 flex-1">
           {project && phone ? (
             // Both stay mounted, so a generation or a reply carries on
@@ -138,13 +138,14 @@ export function Shell() {
             </>
           ) : project ? (
             <>
-              {/* A full-window chat hides the card (kept mounted, so it
-                  comes back as it was). */}
-              <main className="min-w-0 border-r border-slate-800" style={{ width: `${(1 - dockWidth) * 100}%` }} hidden={chatFull}>
+              {/* One side can fill the window; the other stays mounted
+                  (hidden), so it comes back as it was and a gen or a reply
+                  carries on. */}
+              <main className={cx('min-w-0 border-slate-800', fullPane === 'card' ? 'flex-1' : 'border-r')} style={fullPane === 'card' ? undefined : { width: `${(1 - dockWidth) * 100}%` }} hidden={fullPane === 'dock'}>
                 <CardEditor />
               </main>
-              {!chatFull && <div onPointerDown={startResize} className="w-1 flex-shrink-0 cursor-col-resize bg-slate-900 hover:bg-violet-500/50" title="Drag to resize" />}
-              <aside className="min-w-0 flex-1">
+              {!fullPane && <div onPointerDown={startResize} className="w-1 flex-shrink-0 cursor-col-resize bg-slate-900 hover:bg-violet-500/50" title="Drag to resize" />}
+              <aside className="min-w-0 flex-1" hidden={fullPane === 'card'}>
                 <Dock />
               </aside>
             </>

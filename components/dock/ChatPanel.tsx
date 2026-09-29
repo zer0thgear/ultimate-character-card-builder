@@ -42,8 +42,8 @@ export function ChatPanel() {
   const personas = usePersonaStore((s) => s.personas);
   const phone = useMediaQuery(PHONE_QUERY);
   const keyboard = useKeyboard((s) => s.open);
-  const full = useUiStore((s) => s.chatFull) && !phone;
-  const setFull = useUiStore((s) => s.setChatFull);
+  // With the dock filling the window, the chat keeps to a centred column.
+  const full = useUiStore((s) => s.fullPane === 'dock') && !phone;
   const { chatFullWidth, setChatFullWidth } = useUiStore();
   /** The full-window column: a share of the window, centred. */
   const column = full ? { className: 'mx-auto w-full', style: { maxWidth: `${Math.round(chatFullWidth * 100)}%` } } : {};
@@ -382,9 +382,6 @@ export function ChatPanel() {
                   className="w-20 accent-violet-500"
                 />
               )}
-              <IconButton title={full ? 'Back to the card and the chat side by side' : 'Fill the window with the chat (hides the card)'} onClick={() => setFull(!full)}>
-                {full ? '⤡' : '⤢'}
-              </IconButton>
             </div>
           )}
         </div>

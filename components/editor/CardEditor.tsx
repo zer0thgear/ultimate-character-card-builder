@@ -11,6 +11,7 @@ import { LorebookPanel } from '@/components/editor/LorebookPanel';
 import { CreatorPanel, NotesPanel, PromptsPanel, ToolsPanel } from '@/components/editor/OtherPanels';
 import { openVisionWrite } from '@/components/VisionWriteDialog';
 import { ExtensionImageActions } from '@/components/ExtensionSlots';
+import { FullPaneButton } from '@/components/FullPaneButton';
 
 export function CardEditor() {
   const { editorTab, setEditorTab, showAvatar } = useUiStore();
@@ -28,7 +29,10 @@ export function CardEditor() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       {showAvatar && <AvatarStrip />}
-      <Tabs value={editorTab} onChange={setEditorTab} tabs={tabs} className="px-3" />
+      <div className="flex items-center border-b border-slate-800 pr-1">
+        <Tabs value={editorTab} onChange={setEditorTab} tabs={tabs} className="min-w-0 flex-1 border-b-0 px-3" />
+        <FullPaneButton pane="card" />
+      </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 phone:px-3">
         <div className="mx-auto max-w-4xl">
           {editorTab === 'basics' && <BasicsPanel />}

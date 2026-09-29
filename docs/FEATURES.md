@@ -80,7 +80,7 @@ Search: comma-separated terms, all required; `-term` excludes; `a | b` is either
 - **Swipe gesture** on a touch screen, as in SillyTavern's phone layout: swipe the last reply left for its next version (past the last one, a new one is written) and right for the one before; the greeting swipes between greetings. Scrolling up and down is unaffected. Chat settings → **Swipe gesture on the last reply** turns it off.
 - **Message numbers**, as SillyTavern shows them: #0 is the greeting, #1 your first message, and so on, on each message's bottom line (beside the swipes on the last reply). Chat settings → Show message numbers turns them off.
 - **Avatars** as circles, squares, rectangles (2:3 portraits, which suit card art) or not at all, as SillyTavern lets you choose: Chat settings → Avatars. It's shared by every device, like the other chat settings. Tap an avatar to see the picture full size.
-- **⤢ Full window** (in the chat's top row, not on a phone, where the chat is a screen of its own already): the chat fills the window, the card and the card list make way, and the messages take 80% of its width, centred; the slider beside ⤡ sets that from 40% to 100%. ⤡ puts things back. It only applies while the Test chat tab is open: other dock tabs show beside the card as usual, and it's remembered on this device.
+- **Full window**: with the dock filling the window (⤢ at the end of its tab bar; see [Layout](#layout)), the messages take 80% of its width, centred, and a slider in the chat's top row sets that from 40% to 100%.
 - Reasoning from thinking models is shown folded, apart from the reply.
 - Messages show *actions* in italics, **bold**, and "speech" highlighted, nested either way: italics inside quotes keep the speech's colour, as in SillyTavern. Pictures embedded in the greeting or messages, as `![alt](url)` or `<img src="url">`, are shown (web and inline images only).
 - While a reply streams, the chat follows it only until the reply's start reaches the top, so you read it from the beginning; scroll up and it stays where you put it. **↓** jumps to the end (and keeps following it for the rest of that reply).
@@ -157,6 +157,10 @@ Settings → LLM connections:
 Each connection has its own max tokens, sampler settings and stop sequences, and a **Test connection** button. The test chat, the assistant and Write from image each pick their own connection (**Use for chat / assistant / vision**).
 
 **OpenRouter prices**: an OpenRouter connection shows its model's price (input and output, in US dollars, from OpenRouter's public model list) in the connection list, under its model (with the cached-input price where there is one), beside each model **List** fetches, and in the model pickers around the app. Settings → LLM connections switches between per **1M tokens** and per **1K tokens**. Free models say so; OpenRouter's routers, whose price depends on the model they pick, say it varies.
+
+## Layout
+
+The card editor is on the left and the dock (Image, Gallery, Library, Test chat, Brainstorm) on the right; drag the bar between them to share the width. **⤢** at the end of either side's tab bar makes that side fill the window: the other side and the card list make way, and the dock keeps whichever tab you switch to. **⤡** puts them back side by side. The other side stays loaded while it's hidden, so a gen or a reply carries on, and the choice is remembered on this device. On a phone each side is already a screen of its own.
 
 ## On a phone
 

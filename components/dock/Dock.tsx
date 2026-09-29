@@ -4,6 +4,7 @@ import { useUiStore, type DockTab } from '@/store/uiStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { useProjectStore } from '@/store/projectStore';
 import { Tabs } from '@/components/ui';
+import { FullPaneButton } from '@/components/FullPaneButton';
 import { ImagePanel } from '@/components/dock/ImagePanel';
 import { GalleryPanel } from '@/components/dock/GalleryPanel';
 import { LibraryPanel } from '@/components/dock/LibraryPanel';
@@ -34,7 +35,12 @@ export function Dock({ phone = false }: { phone?: boolean }) {
   );
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {!phone && <Tabs value={dockTab} onChange={setDockTab} tabs={tabs} className="flex-shrink-0 px-2" />}
+      {!phone && (
+        <div className="flex flex-shrink-0 items-center border-b border-slate-800 pr-1">
+          <Tabs value={dockTab} onChange={setDockTab} tabs={tabs} className="min-w-0 flex-1 border-b-0 px-2" />
+          <FullPaneButton pane="dock" />
+        </div>
+      )}
       <div className="min-h-0 flex-1">
         {panel('image', <ImagePanel />)}
         {panel('gallery', <GalleryPanel />)}

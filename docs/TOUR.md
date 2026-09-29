@@ -73,7 +73,7 @@ Open **💬 Test chat** and start a chat. It builds the prompt the way SillyTave
 - **🔍** shows exactly what the next reply would send, part by part with token counts, and which lorebook entries fired and why.
 - **Personas** (Settings → Personas) set who you are in the chat. Pick one from the chat's toolbar.
 - **SillyTavern presets**: import a chat-completion preset in Settings → Chat preset, and the chat uses its prompts, order and samplers.
-- **⤢** fills the window with the chat, to try the card without the definitions in view.
+- **⤢** at the end of the dock's tabs fills the window with it (the chat, or whichever tab is open), to try the card without the definitions in view; the card editor's own ⤢ does the same for the card.
 
 ## 5. Share it
 

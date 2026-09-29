@@ -30,10 +30,11 @@ interface UiState {
   setDockWidth: (w: number) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
-  /** The test chat fills the window (the card and the list make way);
-   *  only while the Chat tab is showing, and not on a phone. */
-  chatFull: boolean;
-  setChatFull: (full: boolean) => void;
+  /** One side fills the window: the card editor, or the dock (whichever
+   *  tab is open); the other side and the card list make way. Not on a
+   *  phone, where each is a screen of its own already. */
+  fullPane: 'card' | 'dock' | null;
+  setFullPane: (pane: 'card' | 'dock' | null) => void;
   /** How much of the window a full-window chat's messages take, 0.4–1. */
   chatFullWidth: number;
   setChatFullWidth: (w: number) => void;
@@ -72,8 +73,8 @@ export const useUiStore = create<UiState>()(
       dockWidth: 0.45,
       setDockWidth: (w) => set({ dockWidth: Math.min(0.75, Math.max(0.25, w)) }),
       sidebarOpen: true,
-      chatFull: false,
-      setChatFull: (chatFull) => set({ chatFull }),
+      fullPane: null,
+      setFullPane: (fullPane) => set({ fullPane }),
       chatFullWidth: 0.8,
       setChatFullWidth: (w) => set({ chatFullWidth: Math.min(1, Math.max(0.4, w)) }),
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
