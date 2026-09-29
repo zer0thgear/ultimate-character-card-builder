@@ -25,6 +25,9 @@ const ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 
 export class NotFoundError extends Error {}
 export class BadRequestError extends Error {}
+/** A file that's there but can't be read (a crash mid-save), with no
+ *  readable backup either. */
+export class DamagedFileError extends Error {}
 
 /** Ids come from URLs; anything else could walk out of the data folder. */
 export function checkId(id: string): string {
@@ -34,21 +37,66 @@ export function checkId(id: string): string {
 
 const projectDir = (id: string) => path.join(PROJECTS, checkId(id));
 
-async function readJson<T>(file: string): Promise<T | null> {
+/** The previous version of a JSON file, kept beside it (writeFileAtomic). */
+export const backupOf = (file: string) => `${file}.bak`;
+
+/**
+ * A JSON file, or null if there's none. One that can't be read (a crash can
+ * leave a file full of zeros) falls back to its backup, the version before;
+ * with no readable backup either, it's a DamagedFileError.
+ */
+export async function readJson<T>(file: string): Promise<T | null> {
+  let text: string;
   try {
-    return JSON.parse(await fs.readFile(file, 'utf8')) as T;
+    text = await fs.readFile(file, 'utf8');
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw err;
   }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    try {
+      const saved = JSON.parse(await fs.readFile(backupOf(file), 'utf8')) as T;
+      console.warn(`${file} couldn't be read (damaged, probably by a crash); using its backup, ${backupOf(file)}.`);
+      return saved;
+    } catch {
+      throw new DamagedFileError(`${path.relative(DATA_DIR, file)} is damaged (probably by a crash while it was being saved) and has no readable backup.`);
+    }
+  }
 }
 
-/** Written to a temp file and renamed over, so a crash mid-write can't
- *  leave half a project behind. */
-export async function writeFileAtomic(file: string, data: string | Uint8Array) {
+/** Deletes a JSON file and its backup. */
+export async function removeJson(file: string) {
+  await Promise.all([fs.rm(file, { force: true }), fs.rm(backupOf(file), { force: true })]);
+}
+
+/**
+ * Written to a temp file, forced onto the disk, then renamed over the old
+ * one, so a crash mid-write can't leave half a file (or, on Windows, a file
+ * of zeros: without the flush, the rename can reach the disk before the
+ * data does). A JSON file's previous version is kept as `<file>.bak` first,
+ * so there's always one good copy to fall back on (readJson).
+ */
+export async function writeFileAtomic(file: string, data: string | Uint8Array, { backup = file.endsWith('.json') }: { backup?: boolean } = {}) {
   await fs.mkdir(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tmp, data);
+  const handle = await fs.open(tmp, 'w');
+  try {
+    await handle.writeFile(data);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  if (backup) {
+    // Only a readable old version is worth keeping (never copy damage over the backup).
+    try {
+      JSON.parse(await fs.readFile(file, 'utf8'));
+      await fs.copyFile(file, backupOf(file));
+    } catch {
+      /* no old version, or a damaged one */
+    }
+  }
   await fs.rename(tmp, file);
 }
 
@@ -108,7 +156,10 @@ export async function listProjects(): Promise<ProjectSummary[]> {
   const out: ProjectSummary[] = [];
   await Promise.all(
     dirs.filter((d) => ID_RE.test(d)).map(async (id) => {
-      const p = await readJson<CardProject>(path.join(PROJECTS, id, 'project.json')).catch(() => null);
+      const p = await readJson<CardProject>(path.join(PROJECTS, id, 'project.json')).catch((err) => {
+        if (err instanceof DamagedFileError) console.warn(err.message);
+        return null;
+      });
       if (!p) return;
       out.push({
         id,
@@ -142,9 +193,19 @@ const locks = new Map<string, Promise<unknown>>();
  * Card edits, kept gens and the avatar all save through here, so one can't
  * write back a stale copy over another.
  */
-export async function updateProject(id: string, change: (p: CardProject) => CardProject | Promise<CardProject>): Promise<CardProject> {
+export async function updateProject(id: string, change: (p: CardProject) => CardProject | Promise<CardProject>, ifDamaged?: CardProject): Promise<CardProject> {
   const prev = locks.get(id) ?? Promise.resolve();
-  const next = prev.catch(() => {}).then(async () => saveProject(await change(await getProject(id))));
+  const current = async () => {
+    try {
+      return await getProject(id);
+    } catch (err) {
+      // A tab that still has the card open can save it back over a file a
+      // crash damaged (it's the only copy left).
+      if (err instanceof DamagedFileError && ifDamaged) return withDefaults({ ...ifDamaged, id });
+      throw err;
+    }
+  };
+  const next = prev.catch(() => {}).then(async () => saveProject(await change(await current())));
   locks.set(id, next);
   try {
     return await next;
@@ -209,7 +270,7 @@ export async function saveChat(projectId: string, chat: ChatSession): Promise<Ch
 }
 
 export async function deleteChat(projectId: string, chatId: string) {
-  await fs.rm(chatPath(projectId, chatId), { force: true });
+  await removeJson(chatPath(projectId, chatId));
 }
 
 // ─── Personas ────────────────────────────────────────────────────────────────
@@ -282,7 +343,7 @@ export const recentGenPath = (id: string) => path.join(RECENT, `${checkId(id)}.p
 const recentMetaPath = (id: string) => path.join(RECENT, `${checkId(id)}.json`);
 
 export async function deleteRecentGens(ids: string[]) {
-  await Promise.all(ids.map((id) => Promise.all([fs.rm(recentGenPath(id), { force: true }), fs.rm(recentMetaPath(id), { force: true })])));
+  await Promise.all(ids.map((id) => Promise.all([fs.rm(recentGenPath(id), { force: true }), removeJson(recentMetaPath(id))])));
 }
 
 /** Every recent gen, newest first, after deleting expired ones. */

@@ -16,7 +16,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     // The avatar and kept gens are changed through their own routes, so the
     // copy on disk wins: a save from a tab that hasn't seen a new one yet
     // mustn't drop it.
-    return Response.json(await updateProject(id, (current) => ({ ...body, id, avatar: current.avatar, kept: current.kept })));
+    return Response.json(await updateProject(id, (current) => ({ ...body, id, avatar: current.avatar, kept: current.kept }), body));
   });
 }
 

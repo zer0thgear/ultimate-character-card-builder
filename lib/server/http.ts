@@ -1,5 +1,5 @@
 import 'server-only';
-import { BadRequestError, NotFoundError } from '@/lib/server/storage';
+import { BadRequestError, DamagedFileError, NotFoundError } from '@/lib/server/storage';
 
 /** Runs a route handler, turning thrown errors into JSON error responses. */
 export async function handle(fn: () => Promise<Response>): Promise<Response> {
@@ -11,7 +11,9 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
         ? 404
         : err instanceof BadRequestError
           ? 400
-          : 500;
+          : err instanceof DamagedFileError
+            ? 409
+            : 500;
     if (status === 500) console.error(err);
     return Response.json({ error: err instanceof Error ? err.message : String(err) }, { status });
   }

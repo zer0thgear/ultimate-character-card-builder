@@ -156,12 +156,12 @@ async function runScan() {
         progress.done++;
         if (++sinceSave >= 1000) {
           sinceSave = 0;
-          await writeFileAtomic(INDEX_FILE, JSON.stringify(idx));
+          await writeFileAtomic(INDEX_FILE, JSON.stringify(idx), { backup: false });
         }
       }
     }),
   );
-  await writeFileAtomic(INDEX_FILE, JSON.stringify(idx));
+  await writeFileAtomic(INDEX_FILE, JSON.stringify(idx), { backup: false });
   lastScan = Date.now();
   lastScanFolders = folders;
 }
