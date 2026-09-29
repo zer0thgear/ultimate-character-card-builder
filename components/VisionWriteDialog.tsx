@@ -9,7 +9,7 @@ import { useLlmStream } from '@/hooks/useLlmStream';
 import { visionMessages, type VisionJob } from '@/lib/assist';
 import { imageForVision } from '@/lib/visionImage';
 import { copyText } from '@/lib/clipboard';
-import { AutoTextarea, Button, Modal, TokenBadge, confirmDialog, cx, inputClass } from '@/components/ui';
+import { AutoTextarea, Button, Modal, TokenBadge, confirmDialog, cx, enterSends } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { AssistReasoning } from '@/components/llm/AssistTrace';
 
@@ -187,13 +187,20 @@ function VisionWriteDialog({ blob, url }: { blob: Blob; url: string }) {
               </button>
             ))}
           </div>
-          <div className="flex gap-2">
-            <input
+          <div className="flex items-start gap-2">
+            <AutoTextarea
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !running && !blind && !needsQuestion && void go()}
+              onKeyDown={(e) => {
+              if (enterSends(e)) {
+                e.preventDefault();
+                if (!running && !blind && !needsQuestion) void go();
+              }
+            }}
+              minRows={1}
+              maxRows={8}
               placeholder={JOBS.find((j) => j.value === job)?.placeholder}
-              className={inputClass}
+              className="flex-1"
             />
             {running ? (
               <Button variant="danger" onClick={stop}>

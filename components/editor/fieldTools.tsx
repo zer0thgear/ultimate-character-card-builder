@@ -7,7 +7,7 @@ import { useLlmStore } from '@/store/llmStore';
 import { getPath, setPath, fieldLabel } from '@/lib/cardPath';
 import { FIELD_ACTIONS, fieldActionMessages, type FieldAction } from '@/lib/assist';
 import { useLlmStream } from '@/hooks/useLlmStream';
-import { AutoTextarea, Button, IconButton, Modal, TextField, TokenBadge, cx, inputClass } from '@/components/ui';
+import { AutoTextarea, Button, IconButton, Modal, TextField, TokenBadge, cx, enterSends, inputClass } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { AssistReasoning } from '@/components/llm/AssistTrace';
 import { ReferenceTray, referenceConnectionId, useReferences } from '@/components/llm/References';
@@ -138,15 +138,22 @@ function AssistDialog({ path, onClose }: { path: string; onClose: () => void }) 
             </button>
           ))}
         </div>
-        <div className="flex gap-2">
-          <input
+        <div className="flex items-start gap-2">
+          <AutoTextarea
             autoFocus
             value={instruction}
             onChange={(e) => setInstruction(e.target.value)}
             onPaste={refs.onPaste}
-            onKeyDown={(e) => e.key === 'Enter' && !running && void go()}
+            onKeyDown={(e) => {
+              if (enterSends(e)) {
+                e.preventDefault();
+                if (!running) void go();
+              }
+            }}
+            minRows={1}
+            maxRows={8}
             placeholder={action === 'draft' ? 'What should it cover? (optional)' : 'Instruction (optional), e.g. "more playful", "add her fear of water"'}
-            className={inputClass}
+            className="flex-1"
           />
           {running ? (
             <Button variant="danger" onClick={stop}>

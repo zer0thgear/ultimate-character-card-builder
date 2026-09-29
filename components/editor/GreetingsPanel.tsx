@@ -6,7 +6,7 @@ import { useBridgeStore } from '@/store/bridgeStore';
 import { useLlmStore } from '@/store/llmStore';
 import { SortableList, arrayMove, remapIndex } from '@/components/SortableList';
 import { FieldActions, useCardField } from '@/components/editor/fieldTools';
-import { AutoTextarea, Button, IconButton, Modal, TokenBadge, confirmDialog, Section, Empty, inputClass } from '@/components/ui';
+import { AutoTextarea, Button, IconButton, Modal, TokenBadge, confirmDialog, Section, Empty, enterSends } from '@/components/ui';
 import { useLlmStream } from '@/hooks/useLlmStream';
 import { newGreetingMessages } from '@/lib/assist';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
@@ -238,8 +238,23 @@ function NewGreetingDialog({ onClose }: { onClose: () => void }) {
       }
     >
       <div className="flex flex-col gap-3">
-        <div className="flex gap-2">
-          <input autoFocus value={instruction} onChange={(e) => setInstruction(e.target.value)} onPaste={refs.onPaste} onKeyDown={(e) => e.key === 'Enter' && !running && void go()} placeholder='The situation, e.g. "they meet at a rainy bus stop" (optional)' className={inputClass} />
+        <div className="flex items-start gap-2">
+          <AutoTextarea
+            autoFocus
+            value={instruction}
+            onChange={(e) => setInstruction(e.target.value)}
+            onPaste={refs.onPaste}
+            onKeyDown={(e) => {
+              if (enterSends(e)) {
+                e.preventDefault();
+                if (!running) void go();
+              }
+            }}
+            minRows={1}
+            maxRows={8}
+            placeholder='The situation, e.g. "they meet at a rainy bus stop" (optional)'
+            className="flex-1"
+          />
           {running ? (
             <Button variant="danger" onClick={stop}>
               Stop

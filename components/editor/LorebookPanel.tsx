@@ -12,7 +12,7 @@ import { lorebookEntryMessages, parseLorebookEntry } from '@/lib/assist';
 import { useLlmStream } from '@/hooks/useLlmStream';
 import { SortableList, arrayMove, remapIndex } from '@/components/SortableList';
 import { FieldActions, useCardField } from '@/components/editor/fieldTools';
-import { AutoTextarea, Button, ChipInput, Empty, IconButton, Modal, NumberInput, Section, TokenBadge, Toggle, confirmDialog, cx, downloadBlob, fileBytes, inputClass, pickFiles } from '@/components/ui';
+import { AutoTextarea, Button, ChipInput, Empty, IconButton, Modal, NumberInput, Section, TokenBadge, Toggle, confirmDialog, cx, downloadBlob, enterSends, fileBytes, inputClass, pickFiles } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { AssistReasoning } from '@/components/llm/AssistTrace';
 import { ReferenceTray, referenceConnectionId, useReferences } from '@/components/llm/References';
@@ -325,15 +325,22 @@ function WriteEntryDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (e: 
       }
     >
       <div className="flex flex-col gap-3">
-        <div className="flex gap-2">
-          <input
+        <div className="flex items-start gap-2">
+          <AutoTextarea
             autoFocus
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
             onPaste={refs.onPaste}
-            onKeyDown={(e) => e.key === 'Enter' && topic.trim() && !running && write()}
+            onKeyDown={(e) => {
+              if (enterSends(e)) {
+                e.preventDefault();
+                if (topic.trim() && !running) write();
+              }
+            }}
+            minRows={1}
+            maxRows={8}
             placeholder='What about? e.g. "her hometown", "the royal guard"'
-            className={inputClass}
+            className="flex-1"
           />
           {running ? (
             <Button variant="danger" onClick={stop}>
