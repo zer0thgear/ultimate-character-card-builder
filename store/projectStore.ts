@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { useSessionStore } from '@/store/sessionStore';
 import { PROJECT_GEN_KEYS, useSettingsStore, DEFAULT_NEGATIVE } from '@/store/settingsStore';
 import { useUiStore, type AppMode } from '@/store/uiStore';
+import { notesSnippet } from '@/lib/cardSummary';
 
 // The open card project: loading, editing with undo/redo, and saving it
 // back to disk a moment after each change. Only one project is open at a
@@ -60,7 +61,18 @@ let lastEdit = { key: '', at: 0 };
 let applyingGen = false;
 
 function summaryOf(p: CardProject): ProjectSummary {
-  return { id: p.id, name: p.card.data.name, tags: p.card.data.tags, avatar: p.avatar, ...(p.chatOnly ? { chatOnly: true } : {}), createdAt: p.createdAt, updatedAt: p.updatedAt };
+  const notes = notesSnippet(p.card.data.creator_notes);
+  return {
+    id: p.id,
+    name: p.card.data.name,
+    tags: p.card.data.tags,
+    avatar: p.avatar,
+    ...(p.chatOnly ? { chatOnly: true } : {}),
+    ...(p.card.data.creator.trim() ? { creator: p.card.data.creator.trim() } : {}),
+    ...(notes ? { notes } : {}),
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+  };
 }
 
 /** Where each mode remembers the card it had open, to reopen next time. */

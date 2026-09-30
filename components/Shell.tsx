@@ -25,6 +25,7 @@ import { useSessionStore as useGenSession } from '@/store/sessionStore';
 import { VisionWriteHost } from '@/components/VisionWriteDialog';
 import { ExtensionHosts } from '@/components/ExtensionSlots';
 import { ChatCardList, ChatHome, ChatScreen, importChatCard, switchAppMode } from '@/components/chatmode/ChatMode';
+import { CardListMeta } from '@/components/CardListMeta';
 
 export function Shell() {
   const project = useProjectStore((s) => s.project);
@@ -339,7 +340,7 @@ function ModeSwitch({ className }: { className?: string }) {
           aria-selected={appMode === m.mode}
           title={m.title}
           onClick={() => void switchAppMode(m.mode)}
-          className={cx('flex-1 px-2 py-0.5', appMode === m.mode ? 'bg-violet-600 text-white' : 'text-slate-300 hover:bg-slate-800')}
+          className={cx('flex-1 px-2 py-0.5 whitespace-nowrap', appMode === m.mode ? 'bg-violet-600 text-white' : 'text-slate-300 hover:bg-slate-800')}
         >
           {m.icon} {m.label}
         </button>
@@ -414,6 +415,7 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-sm text-slate-200">{s.name || <em className="text-slate-500">Unnamed</em>}</span>
+                  <CardListMeta summary={s} />
                   <span className="block truncate text-[10px] text-slate-500">{new Date(s.updatedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
                 </span>
               </button>
@@ -506,6 +508,7 @@ function CardsHome() {
                   </div>
                   <div className="px-2 py-1.5">
                     <div className="truncate text-sm text-slate-200">{s.name || <em className="text-slate-500">Unnamed</em>}</div>
+                    <CardListMeta summary={s} />
                     <div className="truncate text-[10px] text-slate-500">{new Date(s.updatedAt).toLocaleDateString()}</div>
                   </div>
                 </button>

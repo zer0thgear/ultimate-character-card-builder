@@ -13,6 +13,7 @@ import { LorebookPanel } from '@/components/editor/LorebookPanel';
 import { PromptsPanel } from '@/components/editor/OtherPanels';
 import { WritingToolsContext } from '@/components/editor/fieldTools';
 import { openLightbox } from '@/components/Lightbox';
+import { CardListMeta } from '@/components/CardListMeta';
 import type { ProjectSummary } from '@/types/project';
 
 // Chat mode: the app as a chat frontend. Your cards and the ones imported
@@ -102,6 +103,7 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-sm text-slate-200">{s.name || <em className="text-slate-500">Unnamed</em>}</span>
+                  <CardListMeta summary={s} />
                   <span className="block truncate text-[10px] text-slate-500">
                     {!s.chatOnly && <span title="Your card from Builder (edits and chats are shared with it)">🛠 Builder · </span>}
                     {new Date(s.updatedAt).toLocaleDateString()}
@@ -162,6 +164,7 @@ export function ChatHome({ loading }: { loading: boolean }) {
                   </div>
                   <div className="px-2 py-1.5">
                     <div className="truncate text-sm text-slate-200">{s.name || <em className="text-slate-500">Unnamed</em>}</div>
+                    <CardListMeta summary={s} />
                     <div className="truncate text-[10px] text-slate-500">{s.chatOnly ? new Date(s.updatedAt).toLocaleDateString() : '🛠 Builder'}</div>
                   </div>
                 </button>

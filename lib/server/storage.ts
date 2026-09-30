@@ -6,6 +6,7 @@ import type { AppConfig, CardProject, ChatSession, ChatSummary, Persona, Project
 import { DEFAULT_CONFIG } from '@/types/project';
 import { newCard } from '@/lib/cardSpec';
 import { normalizeCard } from '@/lib/cardSpec';
+import { notesSnippet } from '@/lib/cardSummary';
 
 // Everything UCCB saves lives under data/ (gitignored):
 //   data/config.json                    AppConfig
@@ -167,6 +168,8 @@ export async function listProjects(): Promise<ProjectSummary[]> {
         tags: p.card?.data?.tags ?? [],
         avatar: p.avatar,
         ...(p.chatOnly ? { chatOnly: true } : {}),
+        ...(p.card?.data?.creator?.trim() ? { creator: p.card.data.creator.trim() } : {}),
+        ...(notesSnippet(p.card?.data?.creator_notes) ? { notes: notesSnippet(p.card?.data?.creator_notes) } : {}),
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
       });

@@ -89,7 +89,7 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
 function GeneralTab() {
   const { apiKey, setApiKey } = useSessionStore();
   const { config, update } = useConfigStore();
-  const { theme, setTheme, exportKeepsMetadata, setExportKeepsMetadata, exportMaxSize, exportCompression, setExportImage } = useUiStore();
+  const { theme, setTheme, exportKeepsMetadata, setExportKeepsMetadata, exportMaxSize, exportCompression, setExportImage, listShowsCreator, listShowsNotes, setCardList } = useUiStore();
   const [show, setShow] = useState(false);
   return (
     <div className="flex flex-col gap-5">
@@ -120,6 +120,10 @@ function GeneralTab() {
             Light
           </Button>
         </div>
+      </Row>
+      <Row label="Card lists" hint="Under each card's name in the card lists (both modes), as SillyTavern shows them.">
+        <Toggle checked={listShowsCreator} onChange={(listShowsCreator) => setCardList({ listShowsCreator })} label="Show the card's author" />
+        <Toggle checked={listShowsNotes} onChange={(listShowsNotes) => setCardList({ listShowsNotes })} label="Show the start of the creator's notes" />
       </Row>
       <Row label="Card PNG export" hint="NovelAI writes the prompt and settings into every image it makes.">
         <Toggle checked={exportKeepsMetadata} onChange={setExportKeepsMetadata} label="Keep the avatar's generation metadata in exported cards" />

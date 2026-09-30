@@ -69,6 +69,10 @@ export interface ProjectSummary {
   avatar?: AvatarInfo;
   /** See CardProject.chatOnly. */
   chatOnly?: boolean;
+  /** The card's author, and the start of its creator's notes as plain
+   *  text (lib/cardSummary.ts), for the card lists. */
+  creator?: string;
+  notes?: string;
   updatedAt: number;
   createdAt: number;
 }

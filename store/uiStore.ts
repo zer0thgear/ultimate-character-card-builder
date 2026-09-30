@@ -59,6 +59,10 @@ interface UiState {
   setExportImage: (patch: { exportMaxSize?: number; exportCompression?: 'off' | 'lossless' | 'palette' }) => void;
   personaSort: PersonaSort;
   setPersonaSort: (s: PersonaSort) => void;
+  /** The card lists: each card's author, and the start of its creator's notes. */
+  listShowsCreator: boolean;
+  listShowsNotes: boolean;
+  setCardList: (patch: { listShowsCreator?: boolean; listShowsNotes?: boolean }) => void;
   /** Local extensions whose buttons on pictures are hidden (by id). */
   hiddenImageActions: string[];
   setImageActionsHidden: (extension: string, hidden: boolean) => void;
@@ -103,6 +107,9 @@ export const useUiStore = create<UiState>()(
       setExportImage: (patch) => set(patch),
       personaSort: 'name',
       setPersonaSort: (personaSort) => set({ personaSort }),
+      listShowsCreator: true,
+      listShowsNotes: true,
+      setCardList: (patch) => set(patch),
       hiddenImageActions: [],
       setImageActionsHidden: (extension, hidden) =>
         set((s) => ({ hiddenImageActions: hidden ? [...new Set([...s.hiddenImageActions, extension])] : s.hiddenImageActions.filter((id) => id !== extension) })),
