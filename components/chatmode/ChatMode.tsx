@@ -4,8 +4,7 @@ import { useState } from 'react';
 import { lastCardKey, useProjectStore } from '@/store/projectStore';
 import { toast, useUiStore, type AppMode } from '@/store/uiStore';
 import { api } from '@/lib/api';
-import { importAsProject } from '@/lib/cardExport';
-import { Button, IconButton, Tabs, confirmDialog, cx, inputClass, pickFiles } from '@/components/ui';
+import { Button, IconButton, Tabs, confirmDialog, cx, inputClass } from '@/components/ui';
 import { ChatPanel } from '@/components/dock/ChatPanel';
 import { BasicsPanel } from '@/components/editor/BasicsPanel';
 import { GreetingsPanel } from '@/components/editor/GreetingsPanel';
@@ -15,6 +14,7 @@ import { WritingToolsContext } from '@/components/editor/fieldTools';
 import { openLightbox } from '@/components/Lightbox';
 import { CardListMeta } from '@/components/CardListMeta';
 import { importFromUrl } from '@/components/ImportUrl';
+import { importCards } from '@/components/ImportCards';
 import type { ProjectSummary } from '@/types/project';
 
 // Chat mode: the app as a chat frontend. Your cards and the ones imported
@@ -52,18 +52,8 @@ export async function switchAppMode(mode: AppMode) {
   else if (open) await store.close();
 }
 
-/** Imports a card as a Chat-mode card (a file dropped, or one picked). */
-export async function importChatCard(file?: File) {
-  const picked = file ?? (await pickFiles('.png,.json,.charx'))[0];
-  if (!picked) return;
-  const { create, setAvatar } = useProjectStore.getState();
-  try {
-    const imported = await importAsProject(picked, create, setAvatar, { chatOnly: true });
-    toast(`Imported ${imported.card.data.name || 'the card'}. It's in Chat mode only; "Add to Builder" puts it in Builder too.`, 'success');
-  } catch (err) {
-    toast((err as Error).message, 'error');
-  }
-}
+/** Imports cards as Chat-mode cards (files dropped, or picked; any number). */
+export const importChatCard = (files?: File[]) => importCards({ chatOnly: true }, files);
 
 const avatarOf = (s: ProjectSummary) => api.avatarUrl(s.id, s.avatar);
 

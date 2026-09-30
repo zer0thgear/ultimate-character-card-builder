@@ -7,8 +7,8 @@ import { useSessionStore } from '@/store/sessionStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { usePersonaStore } from '@/store/personaStore';
 import { api } from '@/lib/api';
-import { exportCharx, exportJson, exportPng, importAsProject } from '@/lib/cardExport';
-import { importCardFile, CardImportError } from '@/lib/cardFile';
+import { exportCharx, exportJson, exportPng} from '@/lib/cardExport';
+import { importCardFile } from '@/lib/cardFile';
 import { Button, ConfirmHost, IconButton, confirmDialog, cx, inputClass, pickFiles } from '@/components/ui';
 import { SettingsDialog, openSettings } from '@/components/SettingsDialog';
 import { FieldToolsHost } from '@/components/editor/fieldTools';
@@ -24,9 +24,10 @@ import { useKeyboard, watchKeyboard } from '@/hooks/useKeyboard';
 import { useSessionStore as useGenSession } from '@/store/sessionStore';
 import { VisionWriteHost } from '@/components/VisionWriteDialog';
 import { ExtensionHosts } from '@/components/ExtensionSlots';
-import { ChatCardActions, ChatCardList, ChatHeaderAvatar, ChatHome, ChatScreen, importChatCard, switchAppMode } from '@/components/chatmode/ChatMode';
+import { ChatCardActions, ChatCardList, ChatHeaderAvatar, ChatHome, ChatScreen, switchAppMode } from '@/components/chatmode/ChatMode';
 import { CardListMeta } from '@/components/CardListMeta';
 import { importFromUrl } from '@/components/ImportUrl';
+import { importCards } from '@/components/ImportCards';
 
 export function Shell() {
   const project = useProjectStore((s) => s.project);
@@ -83,21 +84,14 @@ export function Shell() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Dropping a card file anywhere imports it.
+  // Dropping card files anywhere imports them (Chat-mode cards in Chat mode).
   const [dropping, setDropping] = useState(false);
   const onDrop = async (e: React.DragEvent) => {
     setDropping(false);
-    const file = e.dataTransfer.files[0];
-    if (!file) return;
+    const files = [...e.dataTransfer.files];
+    if (!files.length) return;
     e.preventDefault();
-    if (useUiStore.getState().appMode === 'chat') return void importChatCard(file);
-    const { create, setAvatar } = useProjectStore.getState();
-    try {
-      const imported = await importAsProject(file, create, setAvatar);
-      toast(`Imported ${imported.card.data.name || 'the card'}.`, 'success');
-    } catch (err) {
-      toast(err instanceof CardImportError ? err.message : `Couldn't import: ${(err as Error).message}`, 'error');
-    }
+    await importCards(useUiStore.getState().appMode === 'chat' ? { chatOnly: true } : {}, files);
   };
 
   const startResize = (e: React.PointerEvent) => {
@@ -359,7 +353,7 @@ function ModeSwitch({ className }: { className?: string }) {
 }
 
 function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; className?: string }) {
-  const { summaries: all, project, open: openProject, create: createProject, remove, setAvatar } = useProjectStore();
+  const { summaries: all, project, open: openProject, create: createProject, remove } = useProjectStore();
   // Cards imported in Chat mode stay there until they're added to Builder.
   const summaries = all.filter((s) => !s.chatOnly);
   // In the phone's drawer, picking a card closes it.
@@ -376,14 +370,7 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
   const q = filter.trim().toLowerCase();
   const shown = summaries.filter((s) => !q || s.name.toLowerCase().includes(q) || s.tags.some((t) => t.toLowerCase().includes(q)));
   const importFile = async () => {
-    const [file] = await pickFiles('.png,.json,.charx');
-    if (!file) return;
-    try {
-      const imported = await importAsProject(file, create, setAvatar);
-      toast(`Imported ${imported.card.data.name || 'the card'}${imported.source === 'chara' ? ' (V2 card)' : ''}.`, 'success');
-    } catch (err) {
-      toast((err as Error).message, 'error');
-    }
+    if (await importCards()) onPicked?.();
   };
   return (
     <nav className={cx('flex h-full w-60 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950', className)}>
@@ -473,19 +460,10 @@ function Home({ loading }: { loading: boolean }) {
 }
 
 function CardsHome() {
-  const { summaries: all, open, create, setAvatar } = useProjectStore();
+  const { summaries: all, open, create } = useProjectStore();
   const summaries = all.filter((s) => !s.chatOnly);
   const setHomeTab = useUiStore((s) => s.setHomeTab);
-  const importFile = async () => {
-    const [file] = await pickFiles('.png,.json,.charx');
-    if (!file) return;
-    try {
-      const imported = await importAsProject(file, create, setAvatar);
-      toast(`Imported ${imported.card.data.name || 'the card'}.`, 'success');
-    } catch (err) {
-      toast((err as Error).message, 'error');
-    }
-  };
+  const importFile = () => importCards();
   return (
     <div className="h-full overflow-y-auto p-4 phone:p-3">
       <div className="mx-auto flex max-w-5xl flex-col gap-4">
