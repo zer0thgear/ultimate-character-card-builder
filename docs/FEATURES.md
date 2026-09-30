@@ -121,6 +121,19 @@ Search: comma-separated terms, all required; `-term` excludes; `a | b` is either
 
 Text-completion (instruct/context) presets aren't supported yet.
 
+## Chat mode
+
+The **🛠 Builder | 💬 Chat** switch in the header (at the top of the ☰ drawer on a phone) turns UCCB into a chat frontend, with the building tools out of the way. Each mode reopens the card it had open last.
+
+- **Cards**: the list has your Builder cards (marked 🛠 Builder; their chats and edits are shared with Builder) and cards imported in Chat mode (**Import a card**, or drop one anywhere). Those stay out of Builder until **+ Add to Builder**, which puts them in both. **🛠 Open in Builder** takes a Builder card there.
+- **The chat** fills the window (in the full-width column, its width set by the slider), with everything the test chat has: presets, personas, swipes, continues, 🧭 guides, the prompt inspector.
+- **📝 Card** opens the card's definitions beside the chat (over it, on a phone): Character, Greetings, Lorebook and Prompts, to read or change. Edits save to the card, with undo; the ✨ writing tools stay in Builder.
+- **🎨 Picture** draws into the chat:
+  - **Draw this moment**: the assistant writes the prompt from the last few messages (as ✨ From greeting does, with the card's character prompts), and it's drawn after the last message.
+  - **Describe a picture…**: write the scene and character prompts yourself, or have them written (with an optional note on what to show) and change them first.
+
+  Pictures use the image connection and the Image tab's model, size and style, without changing the Image tab. They stay in the chat after the message they illustrate (and go if it's deleted), but they're never sent to the model, numbered or exported. On each one, ↻ draws it again with a new seed, ✎ changes its prompt, ★ keeps it with the card (Builder's Gallery), and 🗑 removes it.
+
 ## Brainstorm
 
 **✨ Brainstorm** is a free-form chat with the writing assistant, which always sees the card as it is right now. Replies can be copied or added to the card's Notes.

@@ -56,6 +56,9 @@ export const api = {
   getChat: (id: string, chatId: string) => call<ChatSession>(`/api/projects/${id}/chats/${chatId}`),
   saveChat: (id: string, chat: ChatSession) => call<ChatSession>(`/api/projects/${id}/chats/${chat.id}`, json('PUT', chat)),
   deleteChat: (id: string, chatId: string) => call<{ ok: true }>(`/api/projects/${id}/chats/${chatId}`, { method: 'DELETE' }),
+  chatImageUrl: (id: string, file: string) => `/api/projects/${id}/chat-images/${file}`,
+  putChatImage: (id: string, file: string, png: Blob) => call<{ file: string }>(`/api/projects/${id}/chat-images/${file}`, { method: 'PUT', body: png, headers: { 'Content-Type': 'image/png' } }),
+  deleteChatImage: (id: string, file: string) => call<{ ok: true }>(`/api/projects/${id}/chat-images/${file}`, { method: 'DELETE' }),
 
   listPersonas: () => call<Persona[]>('/api/personas'),
   savePersonas: (list: Persona[]) => call<Persona[]>('/api/personas', json('PUT', list)),

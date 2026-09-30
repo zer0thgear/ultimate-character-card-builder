@@ -91,6 +91,23 @@ export interface ChatMessage {
   continues?: (ContinueNode | undefined)[];
 }
 
+/** A picture drawn in a chat: shown in it, never sent to the model or
+ *  counted as a message. */
+export interface ChatImage {
+  id: string;
+  /** The message it follows (its id), or null for right after the greeting. */
+  after: string | null;
+  /** In the project's chat-images folder. */
+  file: string;
+  width: number;
+  height: number;
+  /** What it was drawn from, to draw it again: the scene prompt and the
+   *  character prompts. */
+  scene: string;
+  characters: { label: string; prompt: string; center?: { x: number; y: number } }[];
+  createdAt: number;
+}
+
 export interface ChatSession {
   id: string;
   name: string;
@@ -100,6 +117,8 @@ export interface ChatSession {
   messages: ChatMessage[];
   /** A persona locked to this chat, used instead of the active one. */
   personaId?: string;
+  /** Pictures drawn in the chat (Chat mode's 🎨), each after a message. */
+  images?: ChatImage[];
   createdAt: number;
   updatedAt: number;
 }

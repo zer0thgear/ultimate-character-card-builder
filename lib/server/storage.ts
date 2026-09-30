@@ -237,6 +237,13 @@ export function galleryPath(id: string, file: string) {
   return path.join(projectDir(id), 'gallery', file);
 }
 
+/** A picture drawn in a chat. Named after its chat (`<chatId>-…`), so a
+ *  deleted chat's pictures go with it. */
+export function chatImagePath(id: string, file: string) {
+  if (!FILE_RE.test(file) || file.includes('..')) throw new BadRequestError(`Bad file name: ${file}`);
+  return path.join(projectDir(id), 'chat-images', file);
+}
+
 // ─── Chats ───────────────────────────────────────────────────────────────────
 
 const chatPath = (projectId: string, chatId: string) => path.join(projectDir(projectId), 'chats', `${checkId(chatId)}.json`);
@@ -272,6 +279,9 @@ export async function saveChat(projectId: string, chat: ChatSession): Promise<Ch
 
 export async function deleteChat(projectId: string, chatId: string) {
   await removeJson(chatPath(projectId, chatId));
+  const dir = path.join(projectDir(projectId), 'chat-images');
+  const files = await fs.readdir(dir).catch(() => [] as string[]);
+  await Promise.all(files.filter((f) => f.startsWith(`${checkId(chatId)}-`)).map((f) => fs.rm(path.join(dir, f), { force: true })));
 }
 
 // ─── Personas ────────────────────────────────────────────────────────────────

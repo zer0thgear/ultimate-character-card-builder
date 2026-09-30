@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import type { ChatMessage, ChatSession, ChatSummary } from '@/types/project';
+import type { ChatImage, ChatMessage, ChatSession, ChatSummary } from '@/types/project';
 import { api } from '@/lib/api';
 import { uuid } from '@/lib/uuid';
 
@@ -24,6 +24,9 @@ interface ChatState {
   /** Lock a persona to this chat (undefined unlocks it). */
   setPersonaLock: (personaId: string | undefined) => void;
   setMessages: (change: (m: ChatMessage[]) => ChatMessage[]) => void;
+  /** Adds a picture to the chat, or replaces one with the same id. */
+  putImage: (image: ChatImage) => void;
+  removeImage: (id: string) => void;
   flush: () => Promise<void>;
 }
 
@@ -92,7 +95,24 @@ export const useChatStore = create<ChatState>((set, get) => {
     rename: (name) => updateChat((c) => ({ ...c, name })),
     setGreeting: (greeting) => updateChat((c) => ({ ...c, greeting })),
     setPersonaLock: (personaId) => updateChat((c) => ({ ...c, personaId })),
-    setMessages: (change) => updateChat((c) => ({ ...c, messages: change(c.messages) })),
+    setMessages: (change) =>
+      updateChat((c) => {
+        const messages = change(c.messages);
+        // A picture goes with the message it follows.
+        const ids = new Set(messages.map((m) => m.id));
+        const gone = (c.images ?? []).filter((i) => i.after !== null && !ids.has(i.after));
+        const { projectId } = get();
+        if (projectId) for (const i of gone) void api.deleteChatImage(projectId, i.file).catch(() => {});
+        return { ...c, messages, ...(gone.length ? { images: c.images!.filter((i) => !gone.includes(i)) } : {}) };
+      }),
+    putImage: (image) => updateChat((c) => ({ ...c, images: (c.images ?? []).some((i) => i.id === image.id) ? c.images!.map((i) => (i.id === image.id ? image : i)) : [...(c.images ?? []), image] })),
+    removeImage: (id) =>
+      updateChat((c) => {
+        const image = c.images?.find((i) => i.id === id);
+        const { projectId } = get();
+        if (image && projectId) void api.deleteChatImage(projectId, image.file).catch(() => {});
+        return { ...c, images: (c.images ?? []).filter((i) => i.id !== id) };
+      }),
 
     flush: async () => {
       if (timer) {

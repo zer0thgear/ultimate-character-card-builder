@@ -14,7 +14,7 @@ import { MODELS, maxCharacters } from '@/lib/models';
 import { SAMPLERS } from '@/lib/samplers';
 import { getAvailableQualityLevels, getAvailableUcLevels, QUALITY_LEVEL_LABELS, UC_LEVEL_LABELS } from '@/lib/naiPresets';
 import { isV3Model, promptSource, randomSeed } from '@/lib/imageRequest';
-import { buildGenerateRequest, POSITIONS, SIZE_PRESETS, type Img2ImgBase } from '@/lib/genRequest';
+import { buildBackendRequest, buildGenerateRequest, POSITIONS, SIZE_PRESETS, type Img2ImgBase } from '@/lib/genRequest';
 import { applyEditorResult, type EditorMode, type Img2ImgSource } from '@/lib/editorResult';
 import { hasInpaintStrength, toInpaintingModel } from '@/lib/inpaint';
 import { CanvasEditor } from '@/components/CanvasEditor';
@@ -40,9 +40,9 @@ import type { LlmMessage } from '@/types/llm';
 import { uuid } from '@/lib/uuid';
 import { AssistTraceButton } from '@/components/llm/AssistTrace';
 import { activeImageConnection, loadBackendOptions, selectImageConnection, updateImageConnection, useActiveImageConnection, useBackendOptions } from '@/store/imageConnections';
-import { composeBackendPrompts, IMAGE_KIND_LABELS, SD_DEFAULT_NEGATIVE } from '@/lib/imageBackends';
+import { IMAGE_KIND_LABELS, SD_DEFAULT_NEGATIVE } from '@/lib/imageBackends';
 import { joinPromptParts } from '@/lib/promptText';
-import type { BackendGenRequest, ImageConnection } from '@/types/imageBackend';
+import type { ImageConnection } from '@/types/imageBackend';
 
 const promptClass = cx(inputClass, 'min-h-16 resize-y font-mono text-[13px] leading-relaxed');
 
@@ -167,7 +167,7 @@ function PromptForm() {
         const now = useSettingsStore.getState();
         const { request, resolved } = buildGenerateRequest(now, seed, base);
         const opts = { projectId, source: promptSource(form, resolved), wildcardPicks: resolved.picks, forceStandard: !!base };
-        const made = nai ? await generate(request, opts) : await generateOn(connection, backendRequest(connection, now, resolved, seed, base), request, opts);
+        const made = nai ? await generate(request, opts) : await generateOn(connection, buildBackendRequest(connection, now, resolved, seed, base), request, opts);
         if (!made) break;
         if (useConfigStore.getState().config.autoSaveGens) for (const img of made) void saveSessionImage(img, true);
         if (i < form.copies - 1) await new Promise((r) => setTimeout(r, 1200));
@@ -777,25 +777,6 @@ function CharactersSection({ counts, nai }: { counts: Record<string, { prompt: n
 }
 
 // ─── Other backends ──────────────────────────────────────────────────────────
-
-/** A1111 / ComfyUI's request, from the form: the prompt with the characters
- *  appended, and the connection's checkpoint, sampler and scheduler. */
-function backendRequest(c: ImageConnection, form: ReturnType<typeof useSettingsStore.getState>, resolved: Parameters<typeof composeBackendPrompts>[1], seed: number, base?: Img2ImgBase): BackendGenRequest {
-  const { prompt, negative } = composeBackendPrompts(form, resolved);
-  return {
-    prompt,
-    negative,
-    width: base?.width ?? form.width,
-    height: base?.height ?? form.height,
-    steps: form.steps,
-    cfg: form.scale,
-    seed,
-    checkpoint: c.checkpoint,
-    sampler: c.sampler,
-    scheduler: c.scheduler,
-    ...(base ? { init: { image: base.image, strength: base.strength } } : {}),
-  };
-}
 
 /** Which connection gens go to, when there's a choice. */
 function ImageConnectionPicker({ current }: { current: ImageConnection }) {

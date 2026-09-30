@@ -17,6 +17,7 @@ import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { ChatPresetSelect, PresetPicker } from '@/components/llm/PresetManager';
 import { PersonaAvatar, PersonaPicker, avatarFrame } from '@/components/llm/Personas';
 import { openLightbox } from '@/components/Lightbox';
+import { ChatPictureBubble, DescribeDialog, DrawButton, PendingPicture, useChatPictures, type DrawSpec } from '@/components/chatmode/ChatPictures';
 import { addContinue, addReroll, branchCount, choose, onPath, pathDepth, pathText, rerollBase, startTree, undoContinue, type ContinueNode } from '@/lib/continueTree';
 import { api } from '@/lib/api';
 import { resolvePersona, usePersonaStore } from '@/store/personaStore';
@@ -27,7 +28,7 @@ import { chatFileName, chatToStJsonl, chatToText } from '@/lib/chatExport';
 import type { Persona } from '@/types/project';
 import { useTextTokens, formatTokens } from '@/lib/textTokens';
 import type { CardData } from '@/types/card';
-import type { ChatMessage } from '@/types/project';
+import type { ChatImage, ChatMessage } from '@/types/project';
 import { uuid } from '@/lib/uuid';
 import { copyText } from '@/lib/clipboard';
 import { formatChat, type FormatNode } from '@/lib/chatFormat';
@@ -64,6 +65,9 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const [guide, setGuide] = useState('');
   const [guideOpen, setGuideOpen] = useState(false);
   const [guidePinned, setGuidePinned] = useState(false);
+  // 🎨 Pictures drawn into the chat (Chat mode).
+  const pictures = useChatPictures();
+  const [describing, setDescribing] = useState<{ spec: DrawSpec; replacing?: ChatImage } | null>(null);
   const [treeFor, setTreeFor] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
@@ -128,6 +132,34 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   if (!project) return null;
   const card = project.card.data;
   const greetingCount = 1 + card.alternate_greetings.length;
+
+  /** The pictures drawn after a message (null: after the greeting), and one
+   *  on its way there. */
+  const picturesAfter = (after: string | null) => {
+    if (!chat || !project) return null;
+    const here = (chat.images ?? []).filter((img) => img.after === after);
+    const p = pictures.pending;
+    return (
+      <>
+        {here.map((img) =>
+          p?.replacing === img.id && !p.error ? (
+            <PendingPicture key={img.id} pending={p} genError={pictures.genError} onDismiss={pictures.dismiss} />
+          ) : (
+            <ChatPictureBubble
+              key={img.id}
+              image={img}
+              projectId={project.id}
+              busy={!!p && !p.error}
+              onRedraw={() => void pictures.draw({ scene: img.scene, characters: img.characters }, img.after, img)}
+              onEdit={() => setDescribing({ spec: { scene: img.scene, characters: img.characters }, replacing: img })}
+            />
+          ),
+        )}
+        {p && p.after === after && !p.replacing && <PendingPicture pending={p} genError={pictures.genError} onDismiss={pictures.dismiss} />}
+        {p?.replacing && p.error && here.some((img) => img.id === p.replacing) && <PendingPicture pending={p} genError={pictures.genError} onDismiss={pictures.dismiss} />}
+      </>
+    );
+  };
 
   /** The chat as the model sees it: the live greeting, then the messages. */
   const history = (messages: ChatMessage[]) => {
@@ -401,8 +433,9 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
           ) : (
             <div className={cx('flex flex-col gap-3', column.className)} style={column.style}>
               <GreetingBubble card={card} index={chat.greeting} count={greetingCount} onSwipe={setGreeting} userName={me.name} showId={showIds} />
+              {picturesAfter(null)}
               {chat.messages.map((m, i) => (
-                <div key={m.id} data-msg={m.id}>
+                <div key={m.id} data-msg={m.id} className="flex flex-col gap-3">
                   <Bubble
                     card={card}
                     message={m}
@@ -421,6 +454,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     onUndoContinue={() => undoLastContinue(m)}
                     onShowTree={() => setTreeFor(m.id)}
                   />
+                  {picturesAfter(m.id)}
                 </div>
               ))}
               {error && !running && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
@@ -511,6 +545,14 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
               <span className={cx(phone && 'px-0.5 text-base leading-none')}>🧭</span>
               {guide.trim() ? (phone ? (guidePinned ? '📌' : '') : guidePinned ? ' Guided 📌' : ' Guided') : ''}
             </Button>
+            {wide && (
+              <DrawButton
+                phone={phone}
+                disabled={!!pictures.pending && !pictures.pending.error}
+                onMoment={() => void pictures.drawMoment(card, greetingText(card, chat.greeting), chat.messages, me.name)}
+                onDescribe={() => setDescribing({ spec: { scene: '', characters: pictures.formCharacters() } })}
+              />
+            )}
             {lastPrompt && !phone && (
               <button type="button" className="ml-auto text-[11px] text-slate-500 hover:text-slate-300" onClick={() => setInspect(lastPrompt)}>
                 Last prompt · {lastPrompt.lore.active.length} lore
@@ -521,6 +563,15 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
         </div>
       )}
       {inspect && <PromptInspector prompt={inspect} onClose={() => setInspect(null)} />}
+      {describing && chat && (
+        <DescribeDialog
+          initial={describing.spec}
+          redrawing={!!describing.replacing}
+          onWrite={(instruction) => pictures.writeFromChat(card, greetingText(card, chat.greeting), chat.messages, me.name, instruction)}
+          onDraw={(spec) => void pictures.draw(spec, chat.messages.at(-1)?.id ?? null, describing.replacing)}
+          onClose={() => setDescribing(null)}
+        />
+      )}
     </div>
   );
 }

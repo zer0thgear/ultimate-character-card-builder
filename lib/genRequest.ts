@@ -13,6 +13,9 @@ import type { ParsedNaiMetadata } from '@/lib/naiMetadata';
 import { MODELS } from '@/lib/models';
 import { SAMPLERS } from '@/lib/samplers';
 import { uuid } from '@/lib/uuid';
+import { composeBackendPrompts } from '@/lib/imageBackends';
+import type { BackendGenRequest, ImageConnection } from '@/types/imageBackend';
+import type { ResolvedRequestPrompts } from '@/lib/wildcards';
 
 // One Generate's request, built the way novelai.net's own client builds
 // it, so gens here match novelai.net's: a plain generation, Image2Image
@@ -60,6 +63,25 @@ export function buildGenerateRequest(form: FormSettings, seed: number, base?: Im
     },
   });
   return { request, resolved };
+}
+
+/** A1111 / ComfyUI's request, from the form: the prompt with the characters
+ *  appended, and the connection's checkpoint, sampler and scheduler. */
+export function buildBackendRequest(c: ImageConnection, form: FormSettings, resolved: ResolvedRequestPrompts, seed: number, base?: Img2ImgBase): BackendGenRequest {
+  const { prompt, negative } = composeBackendPrompts(form, resolved);
+  return {
+    prompt,
+    negative,
+    width: base?.width ?? form.width,
+    height: base?.height ?? form.height,
+    steps: form.steps,
+    cfg: form.scale,
+    seed,
+    checkpoint: c.checkpoint,
+    sampler: c.sampler,
+    scheduler: c.scheduler,
+    ...(base ? { init: { image: base.image, strength: base.strength } } : {}),
+  };
 }
 
 /**
