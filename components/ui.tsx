@@ -282,17 +282,23 @@ export function ChipInput({ values, onChange, placeholder }: { values: string[];
     if (items.length) onChange([...values, ...items.filter((i) => !values.includes(i))]);
     setDraft('');
   };
+  const input = useRef<HTMLInputElement>(null);
   return (
-    <div className={cx(inputClass, 'flex min-h-8 flex-wrap items-center gap-1 py-1')}>
-      {values.map((v, i) => (
-        <span key={`${v}-${i}`} className="inline-flex items-center gap-1 rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-200">
-          {v}
-          <button type="button" className="text-slate-500 hover:text-red-400" onClick={() => onChange(values.filter((_, j) => j !== i))} aria-label={`Remove ${v}`}>
-            ×
-          </button>
-        </span>
-      ))}
+    <div
+      className={cx(inputClass, 'flex min-h-8 cursor-text flex-wrap items-center gap-1 py-1')}
+      // A click on the box (not a chip's ×) is for typing.
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          e.preventDefault();
+          input.current?.focus();
+        }
+      }}
+    >
+      {/* The text box comes first in the page (shown last): in a <label>, a
+          click anywhere goes to the label's first control, which must be
+          this, not the first chip's ×. */}
       <input
+        ref={input}
         value={draft}
         placeholder={values.length ? '' : placeholder}
         onChange={(e) => (e.target.value.includes(',') ? add(e.target.value) : setDraft(e.target.value))}
@@ -303,8 +309,27 @@ export function ChipInput({ values, onChange, placeholder }: { values: string[];
           } else if (e.key === 'Backspace' && !draft && values.length) onChange(values.slice(0, -1));
         }}
         onBlur={() => draft && add(draft)}
-        className="min-w-24 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-500"
+        className="order-last min-w-24 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-500"
       />
+      {values.map((v, i) => (
+        <span key={`${v}-${i}`} className="inline-flex items-center gap-1 rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-200">
+          {v}
+          <button
+            type="button"
+            className="text-slate-500 hover:text-red-400"
+            // Keeps the text box's focus, so a half-typed tag isn't added
+            // (from its blur) and then lost under this remove.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onChange(values.filter((_, j) => j !== i));
+            }}
+            aria-label={`Remove ${v}`}
+          >
+            ×
+          </button>
+        </span>
+      ))}
     </div>
   );
 }
