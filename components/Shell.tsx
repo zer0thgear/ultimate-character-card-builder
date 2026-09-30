@@ -24,7 +24,7 @@ import { useKeyboard, watchKeyboard } from '@/hooks/useKeyboard';
 import { useSessionStore as useGenSession } from '@/store/sessionStore';
 import { VisionWriteHost } from '@/components/VisionWriteDialog';
 import { ExtensionHosts } from '@/components/ExtensionSlots';
-import { ChatCardList, ChatHome, ChatScreen, importChatCard, switchAppMode } from '@/components/chatmode/ChatMode';
+import { ChatCardActions, ChatCardList, ChatHeaderAvatar, ChatHome, ChatScreen, importChatCard, switchAppMode } from '@/components/chatmode/ChatMode';
 import { CardListMeta } from '@/components/CardListMeta';
 
 export function Shell() {
@@ -241,16 +241,23 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
       {project && (
         <>
           {!phone && <span className="text-slate-700">/</span>}
-          <span className="max-w-64 min-w-0 truncate text-sm text-slate-200 phone:max-w-[34vw]">{project.card.data.name || 'Unnamed character'}</span>
-          <SaveStatus />
-          <div className="ml-2 flex items-center">
-            <IconButton title="Undo (Ctrl+Z outside a text box)" disabled={!past.length} onClick={undo}>
-              ↶
-            </IconButton>
-            <IconButton title="Redo (Ctrl+Y)" disabled={!future.length} onClick={redo}>
-              ↷
-            </IconButton>
-          </div>
+          {/* Chat mode has no card bar of its own: the picture is here. */}
+          {chatMode && <ChatHeaderAvatar />}
+          <span className={cx('max-w-64 min-w-0 truncate text-sm text-slate-200', chatMode ? 'phone:max-w-[44vw]' : 'phone:max-w-[34vw]')}>{project.card.data.name || 'Unnamed character'}</span>
+          {/* A phone's chat keeps the header to the card and its buttons. */}
+          {!(phone && chatMode) && (
+            <>
+              <SaveStatus />
+              <div className="ml-2 flex items-center">
+                <IconButton title="Undo (Ctrl+Z outside a text box)" disabled={!past.length} onClick={undo}>
+                  ↶
+                </IconButton>
+                <IconButton title="Redo (Ctrl+Y)" disabled={!future.length} onClick={redo}>
+                  ↷
+                </IconButton>
+              </div>
+            </>
+          )}
         </>
       )}
       <div className="ml-auto flex items-center gap-1.5">
@@ -279,9 +286,10 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
                 </Button>
               </>
             )}
+            {chatMode && <ChatCardActions phone={phone} />}
             <div className="relative">
-              <Button size="sm" variant="primary" onClick={() => setExportOpen(!exportOpen)}>
-                Export ▾
+              <Button size="sm" variant={chatMode ? 'secondary' : 'primary'} onClick={() => setExportOpen(!exportOpen)} title="Export the card (PNG, JSON or CHARX)">
+                {phone && chatMode ? '⬇' : 'Export ▾'}
               </Button>
               {exportOpen && (
                 <div className="absolute right-0 z-30 mt-1 w-56 rounded-md border border-slate-700 bg-slate-900 p-1 shadow-xl" onMouseLeave={() => setExportOpen(false)}>

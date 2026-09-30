@@ -128,6 +128,7 @@ The **🛠 Builder | 💬 Chat** switch in the header (at the top of the ☰ dra
 - **Card lists** (in both modes) show each card's author and the start of its creator's notes under its name, as SillyTavern's does; either can be switched off in Settings → General.
 - **Cards**: the list has your Builder cards (marked 🛠 Builder; their chats and edits are shared with Builder) and cards imported in Chat mode (**Import a card**, or drop one anywhere). Those stay out of Builder until **+ Add to Builder**, which puts them in both. **🛠 Open in Builder** takes a Builder card there.
 - **The chat** fills the window (in the full-width column, its width set by the slider), with everything the test chat has: presets, personas, swipes, continues, 🧭 guides, the prompt inspector.
+- **The header** holds the card's picture (tap for full size), its name, **📝 Card**, Export and Builder, so the chat keeps the rest of the screen; on a phone the top is just the header and the chat's own row.
 - **📝 Card** opens the card's definitions beside the chat (over it, on a phone): Character, Greetings, Lorebook and Prompts, to read or change. Edits save to the card, with undo; the ✨ writing tools stay in Builder.
 - **🎨 Picture** draws into the chat:
   - **Draw this moment**: the assistant writes the prompt from the last few messages (as ✨ From greeting does, with the card's character prompts), and it's drawn after the last message.

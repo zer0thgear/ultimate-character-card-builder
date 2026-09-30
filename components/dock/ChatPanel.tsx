@@ -7,12 +7,12 @@ import { useLlmStore } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
-import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, buildChatPrompt, displayText, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
+import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, withoutSwipe, buildChatPrompt, displayText, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
 import { buildPresetPrompt } from '@/lib/presetPrompt';
 import { presetParams, type ChatPreset } from '@/lib/stPreset';
 import type { LlmConnection, SamplerParams } from '@/types/llm';
 import { describeEntry } from '@/lib/lorebookScan';
-import { AutoTextarea, Button, IconButton, Modal, NumberInput, TokenBadge, Toggle, confirmDialog, textDialog, cx, downloadBlob, enterSends, inputClass } from '@/components/ui';
+import { AutoTextarea, Button, IconButton, Modal, NumberInput, TokenBadge, Toggle, choiceDialog, confirmDialog, textDialog, cx, downloadBlob, enterSends, inputClass } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { ChatPresetSelect, PresetPicker } from '@/components/llm/PresetManager';
 import { PersonaAvatar, PersonaPicker, avatarFrame } from '@/components/llm/Personas';
@@ -305,16 +305,35 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
     else setInput(r.text.trim());
   };
 
-  // Beside the message box, at its foot (where it stays as the box grows).
+  // Beside the message box, level with its top (where it stays as the box
+  // grows), as SillyTavern's is: an icon, to leave the box the width.
   const sendButton = running ? (
-    <Button variant="danger" onClick={stop} className="h-10 flex-shrink-0 px-4">
-      Stop
+    <Button variant="danger" onClick={stop} title="Stop" aria-label="Stop" className="h-10 w-10 flex-shrink-0">
+      <span className="text-base leading-none">■</span>
     </Button>
   ) : (
-    <Button variant="primary" onClick={() => void send()} className="h-10 flex-shrink-0 px-4">
-      Send
+    <Button variant="primary" onClick={() => void send()} title="Send (Enter)" aria-label="Send" className="h-10 w-10 flex-shrink-0">
+      <span className="text-lg leading-none">➤</span>
     </Button>
   );
+
+  /** Deletes a message; with more than one version, asks whether it's just
+   *  the one showing or the lot. */
+  const deleteMessage = async (m: ChatMessage) => {
+    if (m.swipes.length > 1) {
+      const which = await choiceDialog({
+        title: 'Delete this version or the whole message?',
+        body: `This reply has ${m.swipes.length} versions; version ${m.swipe + 1} is showing.`,
+        choices: [
+          { value: 'swipe', label: `Just version ${m.swipe + 1}` },
+          { value: 'message', label: 'The whole message', danger: true },
+        ],
+      });
+      if (!which) return;
+      if (which === 'swipe') return setMessages((ms) => ms.map((x) => (x.id === m.id ? withoutSwipe(x, x.swipe) : x)));
+    }
+    setMessages((ms) => ms.filter((x) => x.id !== m.id));
+  };
 
   const preview = () => setInspect(build(chat?.messages ?? []));
   const renameChat = async () => {
@@ -452,7 +471,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     isLast={i === chat.messages.length - 1}
                     busy={running}
                     onChange={(patch) => setMessages((ms) => ms.map((x) => (x.id === m.id ? { ...x, ...patch } : x)))}
-                    onDelete={() => setMessages((ms) => ms.filter((x) => x.id !== m.id))}
+                    onDelete={() => void deleteMessage(m)}
                     onDeleteAfter={() => setMessages((ms) => ms.slice(0, i + 1))}
                     onSwipeNew={() => void reply(chat.messages, m)}
                     onRerollContinue={() => void rerollContinue(m)}
@@ -512,7 +531,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
               </IconButton>
             </div>
           )}
-          <div className="flex items-end gap-1.5">
+          <div className="flex items-start gap-1.5">
             <AutoTextarea
               value={input}
               onChange={(e) => setInput(e.target.value)}

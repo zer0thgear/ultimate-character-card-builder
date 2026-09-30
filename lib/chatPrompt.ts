@@ -354,6 +354,24 @@ export function newMessage(role: ChatMessage['role'], text: string, model?: stri
   return { id: uuid(), role, swipes: [text], swipe: 0, createdAt: now, swipeDates: [now], model };
 }
 
+/** A message without one of its versions (and that version's reasoning,
+ *  continues and time). The one showing stays showing if it's another;
+ *  if it's the one removed, the next takes its place (or the last). */
+export function withoutSwipe(m: ChatMessage, i: number): ChatMessage {
+  if (m.swipes.length < 2 || i < 0 || i >= m.swipes.length) return m;
+  const drop = <T,>(list: T[] | undefined) => list?.filter((_, j) => j !== i);
+  // Older messages have no per-version times: keep the first's before it goes.
+  const dates = m.swipeDates ?? m.swipes.map((_, j) => (j === 0 ? m.createdAt : undefined));
+  return {
+    ...m,
+    swipes: drop(m.swipes)!,
+    swipe: Math.min(m.swipe > i ? m.swipe - 1 : m.swipe, m.swipes.length - 2),
+    reasoning: drop(m.reasoning),
+    continues: drop(m.continues),
+    swipeDates: drop(dates),
+  };
+}
+
 /** When a version of a message was written (the one showing, by default). */
 export const swipeDate = (m: Pick<ChatMessage, 'createdAt' | 'swipeDates' | 'swipe'>, i = m.swipe): number => m.swipeDates?.[i] ?? m.createdAt;
 

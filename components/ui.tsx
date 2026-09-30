@@ -184,6 +184,8 @@ export const AutoTextarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAt
       el.style.height = '0px';
       const content = el.scrollHeight; // content + padding
       el.style.height = `${Math.min(Math.max(content, minRows * line + padding), maxRows * line + padding) + border}px`;
+      // Its drag handle can't make it shorter than one line.
+      el.style.minHeight = `${line + padding + border}px`;
       for (const [p, top] of kept) p.scrollTop = top;
       // Typing at the end as it grows: keep that end in view (above the
       // on-screen keyboard too).
@@ -439,6 +441,48 @@ export function textDialog(opts: Omit<TextRequest, 'resolve'>): Promise<string |
   return new Promise((resolve) => useTextPromptStore.getState().set({ ...opts, resolve }));
 }
 
+interface ChoiceRequest {
+  title: string;
+  body?: ReactNode;
+  choices: { value: string; label: string; danger?: boolean }[];
+  resolve: (value: string | null) => void;
+}
+
+const useChoiceStore = create<{ req: ChoiceRequest | null; set: (r: ChoiceRequest | null) => void }>((set) => ({ req: null, set: (req) => set({ req }) }));
+
+/** Asks which of a few things to do; null if cancelled. */
+export function choiceDialog(opts: Omit<ChoiceRequest, 'resolve'>): Promise<string | null> {
+  return new Promise((resolve) => useChoiceStore.getState().set({ ...opts, resolve }));
+}
+
+function ChoiceHost() {
+  const { req, set } = useChoiceStore();
+  const close = (value: string | null) => {
+    req?.resolve(value);
+    set(null);
+  };
+  return (
+    <Modal
+      open={!!req}
+      onClose={() => close(null)}
+      title={req?.title}
+      size="sm"
+      footer={
+        <>
+          <Button onClick={() => close(null)}>Cancel</Button>
+          {req?.choices.map((c, i) => (
+            <Button key={c.value} variant={c.danger ? 'danger' : 'primary'} onClick={() => close(c.value)} autoFocus={i === 0}>
+              {c.label}
+            </Button>
+          ))}
+        </>
+      }
+    >
+      <div className="text-sm text-slate-300">{req?.body}</div>
+    </Modal>
+  );
+}
+
 function TextPromptHost() {
   const { req, set } = useTextPromptStore();
   const [text, setText] = useState('');
@@ -491,6 +535,7 @@ export function ConfirmHost() {
   return (
     <>
       <TextPromptHost />
+      <ChoiceHost />
       <Modal
         open={!!req}
         onClose={() => close(false)}

@@ -177,58 +177,69 @@ export function ChatHome({ loading }: { loading: boolean }) {
   );
 }
 
-/** A card open in Chat mode: its bar, the chat, and its definitions. */
-export function ChatScreen({ phone }: { phone: boolean }) {
+/** The open card's picture, in the header (full size on a tap). */
+export function ChatHeaderAvatar() {
   const project = useProjectStore((s) => s.project);
-  const addToBuilder = useProjectStore((s) => s.addToBuilder);
-  const { chatCardOpen, setChatCardOpen } = useUiStore();
   if (!project) return null;
   const url = api.avatarUrl(project.id, project.avatar);
   const name = project.card.data.name || 'Unnamed';
+  return url ? (
+    <button type="button" onClick={() => openLightbox(url)} title="Show full size" className="h-7 w-7 flex-shrink-0 cursor-zoom-in overflow-hidden rounded-full bg-slate-800">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt="" className="h-full w-full object-cover object-top" />
+    </button>
+  ) : (
+    <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-slate-800 text-xs text-slate-400">{name[0]?.toUpperCase()}</span>
+  );
+}
+
+/** A Chat-mode card joining Builder, with word of it. */
+function addToBuilderNow(id: string, name: string) {
+  void useProjectStore
+    .getState()
+    .addToBuilder(id)
+    .then(
+      () => toast(`${name} is in Builder now, too.`, 'success'),
+      (err: Error) => toast(err.message, 'error'),
+    );
+}
+
+/** The header's buttons for the open card in Chat mode: its definitions,
+ *  and Builder (on a phone, "Add to Builder" is in the card drawer). */
+export function ChatCardActions({ phone }: { phone: boolean }) {
+  const project = useProjectStore((s) => s.project);
+  const { chatCardOpen, setChatCardOpen } = useUiStore();
+  if (!project) return null;
+  const name = project.card.data.name || 'Unnamed';
+  return (
+    <>
+      {!phone &&
+        (project.chatOnly ? (
+          <Button size="sm" variant="ghost" title="Put this card in Builder too, to work on it there (its chats come along)" onClick={() => addToBuilderNow(project.id, name)}>
+            + Add to Builder
+          </Button>
+        ) : (
+          <Button size="sm" variant="ghost" title="Work on this card in Builder" onClick={() => void switchAppMode('builder')}>
+            🛠 Open in Builder
+          </Button>
+        ))}
+      <Button size="sm" variant={chatCardOpen ? 'primary' : 'secondary'} onClick={() => setChatCardOpen(!chatCardOpen)} title="The card's definitions and lorebook, to read or change">
+        📝{!phone && ' Card'}
+      </Button>
+    </>
+  );
+}
+
+/** A card open in Chat mode: the chat, and its definitions. The card's
+ *  picture, name and buttons are in the header, leaving the chat the room. */
+export function ChatScreen({ phone }: { phone: boolean }) {
+  const project = useProjectStore((s) => s.project);
+  const { chatCardOpen, setChatCardOpen } = useUiStore();
+  if (!project) return null;
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1">
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex flex-shrink-0 items-center gap-2 border-b border-slate-800 px-3 py-1.5">
-          {url ? (
-            <button type="button" onClick={() => openLightbox(url)} title="Show full size" className="h-9 w-9 flex-shrink-0 cursor-zoom-in overflow-hidden rounded-full bg-slate-800">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} alt="" className="h-full w-full object-cover object-top" />
-            </button>
-          ) : (
-            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-slate-800 text-sm text-slate-400">{name[0]?.toUpperCase()}</span>
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium text-slate-100">{name}</div>
-            {project.card.data.creator && <div className="truncate text-[11px] text-slate-500">by {project.card.data.creator}</div>}
-          </div>
-          {project.chatOnly ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              title="Put this card in Builder too, to work on it there (its chats come along)"
-              onClick={() =>
-                void addToBuilder(project.id).then(
-                  () => toast(`${name} is in Builder now, too.`, 'success'),
-                  (err: Error) => toast(err.message, 'error'),
-                )
-              }
-            >
-              {phone ? '+ Builder' : '+ Add to Builder'}
-            </Button>
-          ) : (
-            !phone && (
-              <Button size="sm" variant="ghost" title="Work on this card in Builder" onClick={() => void switchAppMode('builder')}>
-                🛠 Open in Builder
-              </Button>
-            )
-          )}
-          <Button size="sm" variant={chatCardOpen ? 'primary' : 'secondary'} onClick={() => setChatCardOpen(!chatCardOpen)} title="The card's definitions and lorebook, to read or change">
-            📝 Card
-          </Button>
-        </div>
-        <div className="min-h-0 flex-1">
-          <ChatPanel wide />
-        </div>
+      <div className="min-h-0 min-w-0 flex-1">
+        <ChatPanel wide />
       </div>
       {chatCardOpen &&
         (phone ? (
@@ -250,10 +261,19 @@ type DrawerTab = 'basics' | 'greetings' | 'lorebook' | 'prompts';
  *  tools (Builder has those). Edits save to the card, with undo. */
 function CardDrawer({ onClose }: { onClose: () => void }) {
   const card = useProjectStore((s) => s.project?.card.data);
+  const project = useProjectStore((s) => s.project);
   const [tab, setTab] = useState<DrawerTab>('basics');
-  if (!card) return null;
+  if (!card || !project) return null;
   return (
     <WritingToolsContext.Provider value={false}>
+      {project.chatOnly && (
+        <div className="flex flex-shrink-0 items-center gap-2 border-b border-slate-800 px-3 py-1.5 text-xs text-slate-400">
+          <span className="flex-1">Imported for chatting: it&apos;s in Chat mode only.</span>
+          <Button size="sm" variant="ghost" title="Put this card in Builder too, to work on it there (its chats come along)" onClick={() => addToBuilderNow(project.id, card.name || 'Unnamed')}>
+            + Add to Builder
+          </Button>
+        </div>
+      )}
       <div className="flex flex-shrink-0 items-center border-b border-slate-800 pr-1">
         <Tabs
           value={tab}
