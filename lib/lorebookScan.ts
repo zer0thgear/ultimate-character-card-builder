@@ -9,6 +9,17 @@ import { entryName } from '@/lib/cardSpec';
 // past the token budget the lowest-priority ones are dropped first.
 
 export const DEFAULT_SCAN_DEPTH = 2;
+/** How many times recursive scanning goes round, at most. */
+export const DEFAULT_MAX_RECURSION = 5;
+
+/** What the scan falls back on where a lorebook doesn't say (the test
+ *  chat's settings); a lorebook's own scan depth and budget win. */
+export interface LoreDefaults {
+  scanDepth?: number;
+  /** Tokens; 0 or none: no limit. */
+  tokenBudget?: number;
+  maxRecursion?: number;
+}
 
 export interface ActivatedEntry {
   entry: LorebookEntry;
@@ -73,15 +84,16 @@ export function scanLorebook(
   book: Lorebook | undefined,
   /** Chat messages, oldest first (the greeting included). */
   history: string[],
-  opts: { scanDepth?: number; tokenBudget?: number; count?: (text: string) => number } = {},
+  opts: { scanDepth?: number; tokenBudget?: number; count?: (text: string) => number; defaults?: LoreDefaults } = {},
 ): ScanResult {
   if (!book || book.entries.length === 0) return { active: [], dropped: [] };
-  const depth = opts.scanDepth ?? book.scan_depth ?? DEFAULT_SCAN_DEPTH;
+  const d = opts.defaults ?? {};
+  const depth = opts.scanDepth ?? book.scan_depth ?? d.scanDepth ?? DEFAULT_SCAN_DEPTH;
   const count = opts.count ?? roughTokens;
   let scanText = history.slice(-Math.max(1, depth)).join('\n');
 
   const fired = new Map<number, ActivatedEntry>();
-  const passes = book.recursive_scanning ? 5 : 1;
+  const passes = book.recursive_scanning ? Math.max(1, d.maxRecursion ?? DEFAULT_MAX_RECURSION) : 1;
   for (let pass = 0; pass < passes; pass++) {
     const before = fired.size;
     const newContent: string[] = [];
@@ -110,7 +122,7 @@ export function scanLorebook(
   }
 
   const all = [...fired.values()];
-  const budget = opts.tokenBudget ?? book.token_budget;
+  const budget = opts.tokenBudget ?? book.token_budget ?? d.tokenBudget;
   const dropped: ActivatedEntry[] = [];
   let kept = all;
   if (budget && budget > 0) {

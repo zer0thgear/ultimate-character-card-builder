@@ -7,7 +7,7 @@ import { useLlmStore } from '@/store/llmStore';
 import { toast } from '@/store/uiStore';
 import { backfillEntryNames, entryName, hasMismatchedEntryNames, lorebookFile, newEntry, newLorebook } from '@/lib/cardSpec';
 import { importLorebookFile, cardFileName } from '@/lib/cardFile';
-import { scanLorebook } from '@/lib/lorebookScan';
+import { DEFAULT_SCAN_DEPTH, scanLorebook } from '@/lib/lorebookScan';
 import { lorebookEntryMessages, parseLorebookEntry } from '@/lib/assist';
 import { useLlmStream } from '@/hooks/useLlmStream';
 import { SortableList, arrayMove, remapIndex } from '@/components/SortableList';
@@ -23,6 +23,8 @@ export function LorebookPanel() {
   const book = useProjectStore((s) => s.project?.card.data.character_book);
   const card = useProjectStore((s) => s.project?.card);
   const updateCard = useProjectStore((s) => s.updateCard);
+  const loreDepth = useLlmStore((s) => s.chatSettings.loreScanDepth ?? DEFAULT_SCAN_DEPTH);
+  const loreBudget = useLlmStore((s) => s.chatSettings.loreTokenBudget ?? 0);
 
   const setBook = (b: Lorebook | undefined, key?: string) =>
     updateCard((d) => {
@@ -104,13 +106,13 @@ export function LorebookPanel() {
           <input value={book.description ?? ''} onChange={(e) => setBook({ ...book, description: e.target.value }, 'book.description')} placeholder="Description" className={inputClass} />
         </div>
         <div className="flex flex-wrap items-end gap-4">
-          <label className="flex w-32 flex-col gap-0.5 text-xs text-slate-400" title="How many recent messages are searched for keys (frontend default if empty, usually 2)">
+          <label className="flex w-32 flex-col gap-0.5 text-xs text-slate-400" title={`How many recent messages are searched for keys. Blank: whatever the frontend defaults to (the test chat's is ${loreDepth}, set in its ⚙ Chat settings).`}>
             Scan depth
-            <NumberInput value={book.scan_depth} onChange={(v) => setBook({ ...book, scan_depth: v })} min={0} step={1} allowEmpty placeholder="default" />
+            <NumberInput value={book.scan_depth} onChange={(v) => setBook({ ...book, scan_depth: v })} min={0} step={1} allowEmpty placeholder={`default (${loreDepth})`} />
           </label>
-          <label className="flex w-32 flex-col gap-0.5 text-xs text-slate-400" title="Most tokens the lorebook may add per message">
+          <label className="flex w-32 flex-col gap-0.5 text-xs text-slate-400" title={`Most tokens the lorebook may add per message. Blank: whatever the frontend defaults to (the test chat's is ${loreBudget ? loreBudget : 'no limit'}, set in its ⚙ Chat settings).`}>
             Token budget
-            <NumberInput value={book.token_budget} onChange={(v) => setBook({ ...book, token_budget: v })} min={0} step={50} allowEmpty placeholder="default" />
+            <NumberInput value={book.token_budget} onChange={(v) => setBook({ ...book, token_budget: v })} min={0} step={50} allowEmpty placeholder={`default (${loreBudget ? loreBudget : 'none'})`} />
           </label>
           <Toggle checked={!!book.recursive_scanning} onChange={(v) => setBook({ ...book, recursive_scanning: v })} label="Recursive scanning" title="Entries' content can trigger other entries" />
         </div>

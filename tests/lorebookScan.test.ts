@@ -52,4 +52,23 @@ describe('scanLorebook', () => {
     expect(r.active.map((a) => a.entry.content[0])).toEqual(['b', 'c']);
     expect(r.dropped.map((a) => a.entry.content[0])).toEqual(['a']);
   });
+
+  it("falls back on the chat's defaults where the lorebook sets none", () => {
+    const deep = book([entry({ keys: ['sword'] })]);
+    expect(scanLorebook(deep, ['sword', 'a', 'b']).active).toHaveLength(0);
+    expect(scanLorebook(deep, ['sword', 'a', 'b'], { defaults: { scanDepth: 3 } }).active).toHaveLength(1);
+    // The lorebook's own depth wins.
+    expect(scanLorebook({ ...deep, scan_depth: 1 }, ['sword', 'a', 'b'], { defaults: { scanDepth: 3 } }).active).toHaveLength(0);
+
+    const two = [entry({ keys: ['x'], content: 'a'.repeat(40), priority: 2 }), entry({ keys: ['x'], content: 'b'.repeat(40), priority: 1 })];
+    expect(scanLorebook(book(two), ['x'], { defaults: { tokenBudget: 0 } }).active).toHaveLength(2);
+    expect(scanLorebook(book(two), ['x'], { defaults: { tokenBudget: 15 } }).active).toHaveLength(1);
+    expect(scanLorebook(book(two, { token_budget: 100 }), ['x'], { defaults: { tokenBudget: 15 } }).active).toHaveLength(2);
+
+    // A chain a → b → c → d: each recursion step reaches one further.
+    const chain = [entry({ keys: ['a'], content: 'b' }), entry({ keys: ['b'], content: 'c' }), entry({ keys: ['c'], content: 'd' }), entry({ keys: ['d'], content: 'end' })];
+    const rec = book(chain, { recursive_scanning: true });
+    expect(scanLorebook(rec, ['a'], { defaults: { maxRecursion: 2 } }).active).toHaveLength(2);
+    expect(scanLorebook(rec, ['a']).active).toHaveLength(4);
+  });
 });

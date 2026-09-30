@@ -8,6 +8,7 @@ import {
   guideText,
   exampleBlocks,
   historyParts,
+  loreDefaults,
   lorePlace,
   macroExpander,
   toMessages,
@@ -44,7 +45,7 @@ export function buildPresetPrompt(card: CardData, history: ChatMessage[], settin
   let chat = prefillContinue ? history.slice(0, -1) : history;
   const { x, char, user, texts, setFields } = macroExpander(card, chat, settings, opts);
 
-  const lore = settings.useLorebook ? scanLorebook(card.character_book, texts) : { active: [], dropped: [] };
+  const lore = settings.useLorebook ? scanLorebook(card.character_book, texts, { defaults: loreDefaults(settings) }) : { active: [], dropped: [] };
   const loreText = (place: 'before' | 'after') =>
     lore.active
       .filter((a) => lorePlace(a.entry) === place)

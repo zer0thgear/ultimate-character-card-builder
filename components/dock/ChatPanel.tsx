@@ -7,11 +7,11 @@ import { useLlmStore } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
-import { buildChatPrompt, displayText, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
+import { DEFAULT_CHAT_SETTINGS, buildChatPrompt, displayText, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
 import { buildPresetPrompt } from '@/lib/presetPrompt';
 import { presetParams } from '@/lib/stPreset';
 import { describeEntry } from '@/lib/lorebookScan';
-import { AutoTextarea, Button, IconButton, Modal, TokenBadge, Toggle, confirmDialog, cx, downloadBlob, enterSends, inputClass } from '@/components/ui';
+import { AutoTextarea, Button, IconButton, Modal, NumberInput, TokenBadge, Toggle, confirmDialog, cx, downloadBlob, enterSends, inputClass } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { PresetPicker } from '@/components/llm/PresetManager';
 import { PersonaAvatar, PersonaPicker, avatarFrame } from '@/components/llm/Personas';
@@ -917,6 +917,23 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
         <Toggle checked={s.useCardPostHistory} onChange={(v) => setChatSettings({ useCardPostHistory: v })} label={<span className="text-xs">Card&apos;s post-history instructions replace {usingPreset ? 'Post-History Instructions' : 'the default'}</span>} />
         <Toggle checked={s.includeExamples} onChange={(v) => setChatSettings({ includeExamples: v })} label={<span className="text-xs">Send example messages</span>} />
         <Toggle checked={s.useLorebook} onChange={(v) => setChatSettings({ useLorebook: v })} label={<span className="text-xs">Use the lorebook</span>} />
+        {s.useLorebook && (
+          <div className="flex w-full flex-wrap items-end gap-3" title="Used where the card's lorebook leaves its own blank; a lorebook's scan depth and token budget win. Only this test chat uses these: other frontends have their own defaults.">
+            <span className="w-full text-xs text-slate-500">Lorebook defaults, where the card&apos;s lorebook sets none:</span>
+            <label className="flex w-28 flex-col gap-0.5 text-xs text-slate-400" title="How many recent messages are searched for keys">
+              Scan depth
+              <NumberInput value={s.loreScanDepth ?? DEFAULT_CHAT_SETTINGS.loreScanDepth} onChange={(v) => setChatSettings({ loreScanDepth: v ?? DEFAULT_CHAT_SETTINGS.loreScanDepth })} min={1} step={1} />
+            </label>
+            <label className="flex w-28 flex-col gap-0.5 text-xs text-slate-400" title="The most tokens the lorebook's entries may add to a prompt; past it, the lowest-priority ones are left out. Blank or 0: no limit.">
+              Token budget
+              <NumberInput value={s.loreTokenBudget || undefined} onChange={(v) => setChatSettings({ loreTokenBudget: v ?? 0 })} min={0} step={100} allowEmpty placeholder="no limit" />
+            </label>
+            <label className="flex w-28 flex-col gap-0.5 text-xs text-slate-400" title="With recursive scanning on (a lorebook setting), how many rounds of entries triggering entries, at most">
+              Recursion steps
+              <NumberInput value={s.loreMaxRecursion ?? DEFAULT_CHAT_SETTINGS.loreMaxRecursion} onChange={(v) => setChatSettings({ loreMaxRecursion: v ?? DEFAULT_CHAT_SETTINGS.loreMaxRecursion })} min={1} max={20} step={1} />
+            </label>
+          </div>
+        )}
         <Toggle checked={s.showMessageIds} onChange={(v) => setChatSettings({ showMessageIds: v })} label={<span className="text-xs">Show message numbers (#0 is the greeting)</span>} />
         <label className="flex w-full flex-col gap-0.5 text-xs text-slate-400">
           🧭 Guide template <span className="text-slate-500">({'{{guide}}'} is where your guide goes; sent last, just before the reply)</span>

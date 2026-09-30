@@ -2,7 +2,7 @@ import type { CardData, LorebookEntry } from '@/types/card';
 import type { LlmMessage, ProviderKind } from '@/types/llm';
 import type { ChatMessage } from '@/types/project';
 import { expandMacros, type MacroContext } from '@/lib/macros';
-import { scanLorebook, describeEntry, type ScanResult, type ActivatedEntry } from '@/lib/lorebookScan';
+import { scanLorebook, describeEntry, type ScanResult, type ActivatedEntry, DEFAULT_SCAN_DEPTH, DEFAULT_MAX_RECURSION, type LoreDefaults } from '@/lib/lorebookScan';
 import { uuid } from '@/lib/uuid';
 
 // Builds the prompt a test chat sends, the way a SillyTavern-style frontend
@@ -25,6 +25,13 @@ export interface ChatPromptSettings {
   useCardPostHistory: boolean;
   includeExamples: boolean;
   useLorebook: boolean;
+  /** Where a lorebook doesn't set its own: messages scanned for keys. */
+  loreScanDepth?: number;
+  /** Where a lorebook doesn't set its own: the most tokens its entries may
+   *  add (0: no limit). */
+  loreTokenBudget?: number;
+  /** How many times recursive scanning goes round, at most. */
+  loreMaxRecursion?: number;
   /** The active persona (see store/personaStore.ts); null uses userName
    *  and persona above. */
   personaId: string | null;
@@ -42,6 +49,13 @@ export interface ChatPromptSettings {
   /** How a 🧭 guide is put to the model, with {{guide}} where it goes. */
   guideTemplate: string;
 }
+
+/** The chat settings' lorebook defaults, for scanLorebook. */
+export const loreDefaults = (s: Pick<ChatPromptSettings, 'loreScanDepth' | 'loreTokenBudget' | 'loreMaxRecursion'>): LoreDefaults => ({
+  scanDepth: s.loreScanDepth,
+  tokenBudget: s.loreTokenBudget,
+  maxRecursion: s.loreMaxRecursion,
+});
 
 export type AvatarShape = 'circle' | 'square' | 'rectangle' | 'none';
 
@@ -65,6 +79,9 @@ export const DEFAULT_CHAT_SETTINGS: ChatPromptSettings = {
   useCardPostHistory: true,
   includeExamples: true,
   useLorebook: true,
+  loreScanDepth: DEFAULT_SCAN_DEPTH,
+  loreTokenBudget: 0,
+  loreMaxRecursion: DEFAULT_MAX_RECURSION,
   personaId: null,
   presetId: null,
   presetSamplers: true,
@@ -262,7 +279,7 @@ export function buildChatPrompt(card: CardData, history: ChatMessage[], settings
   };
 
   // The lorebook first, so the main prompt's {{#if wiBefore}} knows what fired.
-  const lore = settings.useLorebook ? scanLorebook(card.character_book, texts) : { active: [], dropped: [] };
+  const lore = settings.useLorebook ? scanLorebook(card.character_book, texts, { defaults: loreDefaults(settings) }) : { active: [], dropped: [] };
   const loreAt = (place: LorePlace) => lore.active.filter((a) => lorePlace(a.entry) === place).map((a) => ({ name: describeEntry(a), content: x(a.entry.content) }));
   setFields({ wiBefore: loreAt('before').map((e) => e.content).filter(Boolean).join('\n'), wiAfter: loreAt('after').map((e) => e.content).filter(Boolean).join('\n') });
 
