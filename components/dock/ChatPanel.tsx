@@ -680,14 +680,22 @@ function MessageId({ id, className }: { id: number; className?: string }) {
 
 function GreetingBubble({ card, index, count, onSwipe, userName, showId }: { card: CardData; index: number; count: number; onSwipe: (i: number) => void; userName: string; showId: boolean }) {
   const text = greetingText(card, index);
+  const shown = text.trim() ? displayText(card, text, userName) : '';
+  // As the model gets it: {{char}} and {{user}} filled in.
+  const tokens = useTextTokens(shown, 400);
   const swipe = useSwipeGesture(count > 1 ? () => onSwipe(index >= count - 1 ? 0 : index + 1) : null, count > 1 ? () => onSwipe(index <= 0 ? count - 1 : index - 1) : null);
   return (
     <div className="flex gap-2">
       <Avatar role="assistant" />
       <div className="min-w-0 flex-1 rounded-lg bg-slate-900 px-3 py-2" {...swipe.props} style={swipe.style}>
         <div className="mb-1 flex items-center gap-2 text-xs">
-          <span className="font-semibold text-slate-200">{card.nickname || card.name || 'Character'}</span>
-          <span className="text-slate-500">greeting · live from the card</span>
+          <span className="max-w-[50%] flex-shrink-0 truncate font-semibold text-slate-200">{card.nickname || card.name || 'Character'}</span>
+          <span className="min-w-0 truncate text-slate-500">greeting · live from the card</span>
+          {shown && (
+            <span className="flex-shrink-0 text-[10px] whitespace-nowrap text-slate-600 tabular-nums" title="Estimated tokens in this greeting (o200k tokenizer; your model may count a little differently)">
+              {formatTokens(tokens)} tok
+            </span>
+          )}
           {showId && <MessageId id={0} className="ml-auto" />}
           {count > 1 && (
             <span className={cx('flex items-center gap-1 text-slate-400', !showId && 'ml-auto')}>
@@ -703,7 +711,7 @@ function GreetingBubble({ card, index, count, onSwipe, userName, showId }: { car
             </span>
           )}
         </div>
-        {text.trim() ? <Formatted text={displayText(card, text, userName)} /> : <em className="text-sm text-slate-500">This greeting is empty.</em>}
+        {shown ? <Formatted text={shown} /> : <em className="text-sm text-slate-500">This greeting is empty.</em>}
       </div>
     </div>
   );
