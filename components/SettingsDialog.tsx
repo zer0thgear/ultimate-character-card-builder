@@ -8,7 +8,7 @@ import { useLlmStore, requestConnection } from '@/store/llmStore';
 import { REASONING_EFFORTS, type LlmConnection, type ProviderKind, type SamplerParams } from '@/types/llm';
 import { api, streamLlm } from '@/lib/api';
 import { AutoTextarea, Button, IconButton, Modal, NumberInput, Select, Tabs, Toggle, confirmDialog, cx, inputClass } from '@/components/ui';
-import { AssistPresetPicker, PresetPicker } from '@/components/llm/PresetManager';
+import { AssistPresetPicker, ChatPresetTab } from '@/components/llm/PresetManager';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { PersonaManager } from '@/components/llm/Personas';
 import { MessageList, inspectAssistRun } from '@/components/llm/AssistTrace';
@@ -33,23 +33,32 @@ export function SettingsDialog() {
   const { tab, set } = useSettingsDialog();
   if (!tab) return null;
   return (
-    <Modal open onClose={() => set(null)} title="Settings" size="lg" footer={<Button onClick={() => set(null)}>Done</Button>}>
-      <Tabs
-        value={tab}
-        onChange={set}
-        className="mb-4"
-        tabs={[
-          { value: 'general', label: 'General' },
-          { value: 'folders', label: 'Folders' },
-          { value: 'image', label: 'Image' },
-          { value: 'llm', label: 'LLM connections' },
-          { value: 'chat', label: 'Chat preset' },
-          { value: 'assist', label: 'Assistant' },
-          { value: 'personas', label: 'Personas' },
-          // Local extensions' settings, when any are installed.
-          ...(hasExtensionSettings ? [{ value: 'extensions' as const, label: 'Extensions' }] : []),
-        ]}
-      />
+    <Modal
+      open
+      onClose={() => set(null)}
+      title="Settings"
+      size="lg"
+      fixedHeight
+      footer={<Button onClick={() => set(null)}>Done</Button>}
+      // The tabs stay in view, and the dialog keeps one height from tab to tab.
+      pinned={
+        <Tabs
+          value={tab}
+          onChange={set}
+          tabs={[
+            { value: 'general', label: 'General' },
+            { value: 'folders', label: 'Folders' },
+            { value: 'image', label: 'Image' },
+            { value: 'llm', label: 'LLM connections' },
+            { value: 'chat', label: 'Chat preset' },
+            { value: 'assist', label: 'Assistant' },
+            { value: 'personas', label: 'Personas' },
+            // Local extensions' settings, when any are installed.
+            ...(hasExtensionSettings ? [{ value: 'extensions' as const, label: 'Extensions' }] : []),
+          ]}
+        />
+      }
+    >
       {tab === 'general' && <GeneralTab />}
       {tab === 'folders' && <FoldersTab />}
       {tab === 'image' && <ImageConnectionsTab onOpenGeneral={() => set('general')} />}
@@ -57,14 +66,7 @@ export function SettingsDialog() {
       {tab === 'assist' && <AssistTab />}
       {tab === 'personas' && <PersonaManager />}
       {tab === 'extensions' && <ExtensionSettings />}
-      {tab === 'chat' && (
-        <div className="flex flex-col gap-3">
-          <p className="text-xs text-slate-500">
-            The SillyTavern chat-completion preset the test chat builds its prompt from. It applies to every chat on every card, and stays picked until you change it. The same picker is in the chat&apos;s ⚙ panel.
-          </p>
-          <PresetPicker />
-        </div>
-      )}
+      {tab === 'chat' && <ChatPresetTab />}
     </Modal>
   );
 }

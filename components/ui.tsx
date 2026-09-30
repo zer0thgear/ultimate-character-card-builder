@@ -344,6 +344,8 @@ export function Modal({
   children,
   footer,
   size = 'md',
+  pinned,
+  fixedHeight = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -351,6 +353,11 @@ export function Modal({
   children: ReactNode;
   footer?: ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+  /** Above the scrolling content and always in view (a dialog's tabs). */
+  pinned?: ReactNode;
+  /** The same height whatever it holds, so a tabbed dialog doesn't grow
+   *  and shrink from tab to tab. */
+  fixedHeight?: boolean;
 }) {
   const closeRef = useRef(onClose);
   useLayoutEffect(() => {
@@ -377,6 +384,7 @@ export function Modal({
         className={cx(
           'flex max-h-[92vh] w-full flex-col rounded-lg border border-slate-700 bg-slate-900 shadow-2xl',
           width,
+          fixedHeight && 'h-[min(92vh,760px)]',
           // A phone gets the whole screen (clear of the notch and home bar).
           size === 'sm' ? 'phone:mx-3' : 'phone:h-[100dvh] phone:max-h-none phone:max-w-none phone:rounded-none phone:border-0 phone:pt-[env(safe-area-inset-top)] phone:pb-[env(safe-area-inset-bottom)]',
         )}
@@ -389,6 +397,7 @@ export function Modal({
             ✕
           </IconButton>
         </div>
+        {pinned && <div className="px-4 pt-3">{pinned}</div>}
         <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
         {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-slate-800 px-4 py-2.5">{footer}</div>}
       </div>

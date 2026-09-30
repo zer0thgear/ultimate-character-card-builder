@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useLlmStore } from '@/store/llmStore';
+import { formatTokens, useTextTokens } from '@/lib/textTokens';
 import { toast } from '@/store/uiStore';
 import { duplicatePreset, newPreset, newPresetPrompt, parseStPreset, PRESET_EFFORTS, PresetImportError, toStPreset, type ChatPreset, type PresetPrompt, type PresetSamplers } from '@/lib/stPreset';
 import { assistablePrompts } from '@/lib/assistPreset';
@@ -16,9 +17,13 @@ import { AutoTextarea, Button, IconButton, Modal, NumberInput, Tabs, TokenBadge,
 // Configuration panel (samplers, the prompt manager, the utility prompts).
 // Edits change UCCB's copy; Export writes it back out as a SillyTavern file.
 
-export function PresetPicker() {
+/** The chat's preset picker. With `onEdit`, editing is left to the caller
+ *  (Settings → Chat preset, which opens the editor on a given tab). */
+export function PresetPicker({ onEdit }: { onEdit?: (tab: EditorTab) => void } = {}) {
   const { presets, chatSettings, setChatSettings, addPreset } = useLlmStore();
-  const [editing, setEditing] = useState(false);
+  const [ownEditing, setOwnEditing] = useState(false);
+  const setEditing = (on: boolean) => (onEdit ? on && onEdit('samplers') : setOwnEditing(on));
+  const editing = !onEdit && ownEditing;
   const preset = presets.find((p) => p.id === chatSettings.presetId) ?? null;
 
   const importPreset = async () => {
@@ -70,6 +75,218 @@ export function PresetPicker() {
   );
 }
 
+/** Settings → Chat preset: the picker, what the chosen preset does at a
+ *  glance (its prompts in order, samplers and options, each a click from
+ *  its place in the editor), and every preset you have. */
+export function ChatPresetTab() {
+  const { presets, chatSettings, setChatSettings, updatePreset } = useLlmStore();
+  const [editing, setEditing] = useState<{ id: string; tab: EditorTab } | null>(null);
+  const preset = presets.find((p) => p.id === chatSettings.presetId) ?? null;
+  const editingPreset = editing ? presets.find((p) => p.id === editing.id) : undefined;
+  const edit = (tab: EditorTab, p = preset) => p && setEditing({ id: p.id, tab });
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-xs text-slate-500">
+        The SillyTavern chat-completion preset the test chat builds its prompt from. It applies to every chat on every card, and stays picked until you change it. The same picker is in the chat&apos;s ⚙ panel.
+      </p>
+      <PresetPicker onEdit={(tab) => edit(tab)} />
+      {preset ? (
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+          <OverviewBox title="Prompts, in order" action={<Button size="sm" variant="ghost" onClick={() => edit('prompts')}>Edit…</Button>}>
+            <PromptOrderGlance preset={preset} onToggle={(i, enabled) => updatePreset(preset.id, { order: preset.order.map((o, j) => (j === i ? { ...o, enabled } : o)) })} onOpen={() => edit('prompts')} />
+          </OverviewBox>
+          <div className="flex flex-col gap-3">
+            <OverviewBox title="Samplers" action={<Button size="sm" variant="ghost" onClick={() => edit('samplers')}>Edit…</Button>}>
+              <SamplerGlance preset={preset} />
+            </OverviewBox>
+            <OverviewBox title="Other options" action={<Button size="sm" variant="ghost" onClick={() => edit('other')}>Edit…</Button>}>
+              <OptionsGlance preset={preset} />
+            </OverviewBox>
+          </div>
+        </div>
+      ) : (
+        <OverviewBox title="Built-in prompt">
+          <p className="text-[11px] text-slate-500">
+            With no preset, the chat sends the card as SillyTavern&apos;s default prompt does: this main prompt (or the card&apos;s system prompt), lorebook, description, personality, scenario, your persona, examples, the chat, then post-history instructions. The connection&apos;s own samplers apply.
+          </p>
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
+            <span className="flex justify-between">
+              Main prompt <TokenBadge text={chatSettings.mainPrompt} />
+            </span>
+            <AutoTextarea value={chatSettings.mainPrompt} onChange={(e) => setChatSettings({ mainPrompt: e.target.value })} minRows={2} maxRows={8} />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
+            Default post-history instructions
+            <AutoTextarea value={chatSettings.defaultPostHistory} onChange={(e) => setChatSettings({ defaultPostHistory: e.target.value })} minRows={1} maxRows={6} placeholder="Optional, sent after the chat" />
+          </label>
+        </OverviewBox>
+      )}
+      <PresetLibrary onEdit={(p) => edit('samplers', p)} />
+      {editingPreset && editing && <PresetEditor key={`${editing.id}.${editing.tab}`} preset={editingPreset} initialTab={editing.tab} onClose={() => setEditing(null)} />}
+    </div>
+  );
+}
+
+function OverviewBox({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="flex min-w-0 flex-col gap-2 rounded-md border border-slate-800 p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-xs font-semibold tracking-wide text-slate-400 uppercase">{title}</h3>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** The prompt manager as a list: on/off right here, the rest in the editor. */
+function PromptOrderGlance({ preset, onToggle, onOpen }: { preset: ChatPreset; onToggle: (i: number, on: boolean) => void; onOpen: () => void }) {
+  const byId = new Map(preset.prompts.map((p) => [p.identifier, p]));
+  const on = preset.order.filter((o) => o.enabled);
+  const ownText = on.map((o) => byId.get(o.identifier)).filter((p) => p && !p.marker).map((p) => p!.content).join('\n\n');
+  const tokens = useTextTokens(ownText);
+  return (
+    <>
+      <ol className="flex flex-col">
+        {preset.order.map((item, i) => {
+          const p = byId.get(item.identifier);
+          if (!p) return null;
+          return (
+            <li key={item.identifier} className={cx('flex items-center gap-1.5 rounded px-1 py-0.5 hover:bg-slate-800/50', !item.enabled && 'opacity-45')}>
+              <span className="w-4 text-right text-[10px] text-slate-600 tabular-nums">{i + 1}</span>
+              <Toggle checked={item.enabled} onChange={(v) => onToggle(i, v)} />
+              <button
+                type="button"
+                onClick={onOpen}
+                title={p.marker ? 'Filled in from the card or chat' : p.content.slice(0, 400) || '(empty)'}
+                className={cx('min-w-0 flex-1 truncate text-left text-xs', p.marker ? 'text-slate-500 italic' : 'text-slate-200')}
+              >
+                {p.name}
+              </button>
+              {p.injectionPosition === 1 && <span className="rounded bg-amber-500/15 px-1 text-[9px] text-amber-300">@{p.injectionDepth}</span>}
+              {!p.marker && <span className={cx('rounded px-1 text-[9px] uppercase', p.role === 'system' ? 'bg-violet-500/15 text-violet-300' : p.role === 'user' ? 'bg-sky-500/15 text-sky-300' : 'bg-emerald-500/15 text-emerald-300')}>{p.role}</span>}
+              {!p.marker && <TokenBadge text={p.content} />}
+            </li>
+          );
+        })}
+      </ol>
+      <p className="text-[11px] text-slate-500">
+        {on.length} of {preset.order.length} on · about {formatTokens(tokens)} tokens of the preset&apos;s own text in every request, before the card and chat. Grey ones are filled in from the card or chat.
+      </p>
+    </>
+  );
+}
+
+const SAMPLER_ROWS: [keyof PresetSamplers, string][] = [
+  ['temperature', 'Temperature'],
+  ['top_p', 'Top P'],
+  ['top_k', 'Top K'],
+  ['min_p', 'Min P'],
+  ['top_a', 'Top A'],
+  ['repetition_penalty', 'Repetition penalty'],
+  ['frequency_penalty', 'Frequency penalty'],
+  ['presence_penalty', 'Presence penalty'],
+  ['seed', 'Seed'],
+  ['reasoning_effort', 'Reasoning effort'],
+];
+
+function GlanceRow({ label, value, dim }: { label: string; value: React.ReactNode; dim?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 text-xs">
+      <span className="text-slate-400">{label}</span>
+      <span className={cx('truncate text-right tabular-nums', dim ? 'text-slate-600' : 'text-slate-200')}>{value}</span>
+    </div>
+  );
+}
+
+function SamplerGlance({ preset }: { preset: ChatPreset }) {
+  const { chatSettings, setChatSettings } = useLlmStore();
+  const chat = useLlmStore((st) => st.connections.find((c) => c.id === st.chatConnectionId));
+  const prices = useModelPrices(isOpenRouter(chat));
+  const price = isOpenRouter(chat) && chat ? prices?.[chat.model] : undefined;
+  const s = preset.samplers;
+  const used = chatSettings.presetSamplers;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Toggle checked={used} onChange={(presetSamplers) => setChatSettings({ presetSamplers })} label={<span className="text-xs">Use these (off: the connection&apos;s own)</span>} />
+      <div className={cx('flex flex-col gap-0.5', !used && 'opacity-50')}>
+        <GlanceRow label="Reply length" value={s.max_tokens ? `${s.max_tokens.toLocaleString()} tokens` : 'not set'} dim={!s.max_tokens} />
+        <GlanceRow label="Context size" value={preset.maxContext ? `${preset.maxContext.toLocaleString()} tokens` : 'not set'} dim={!preset.maxContext} />
+        {SAMPLER_ROWS.map(([key, label]) => {
+          const v = s[key];
+          return <GlanceRow key={key} label={label} value={v === undefined || v === '' ? 'not set' : String(v)} dim={v === undefined || v === ''} />;
+        })}
+      </div>
+      <p className="text-[11px] text-slate-500">&quot;Not set&quot; isn&apos;t sent: the connection&apos;s setting or the model&apos;s default applies.</p>
+      {chat && price && (
+        <MaxRequestCost price={price} contextSize={preset.maxContext ?? chat.params.max_context} maxTokens={(used ? s.max_tokens : undefined) ?? chat.params.max_tokens} className="text-[11px] text-slate-400" />
+      )}
+    </div>
+  );
+}
+
+const NAMES_BEHAVIOR: Record<number, string> = { [-1]: 'None', 0: 'Default', 1: 'Completion object', 2: 'In message content' };
+
+function OptionsGlance({ preset: p }: { preset: ChatPreset }) {
+  const set = (text: string) => (text.trim() ? 'set' : 'empty');
+  return (
+    <div className="flex flex-col gap-0.5">
+      <GlanceRow label="→ Continue" value={p.continuePrefill ? 'by prefilling the reply' : 'with the nudge prompt'} />
+      <GlanceRow label="Impersonation prompt" value={set(p.impersonationPrompt)} dim={!p.impersonationPrompt.trim()} />
+      <GlanceRow label="Assistant prefill (Claude)" value={set(p.assistantPrefill)} dim={!p.assistantPrefill.trim()} />
+      <GlanceRow label="Send if empty" value={set(p.sendIfEmpty)} dim={!p.sendIfEmpty.trim()} />
+      <GlanceRow label="Character names" value={NAMES_BEHAVIOR[p.namesBehavior] ?? String(p.namesBehavior)} />
+      <GlanceRow label="Squash system messages" value={p.squashSystemMessages ? 'on' : 'off'} dim={!p.squashSystemMessages} />
+    </div>
+  );
+}
+
+/** Every preset: which the chat and the assistant use, and what to do with each. */
+function PresetLibrary({ onEdit }: { onEdit: (p: ChatPreset) => void }) {
+  const { presets, chatSettings, setChatSettings, assistSettings } = useLlmStore();
+  if (!presets.length) return <p className="text-[11px] text-slate-500">No presets yet: import one from SillyTavern (AI Response Configuration → Export preset), or start one with + New.</p>;
+  return (
+    <OverviewBox title={`Your presets (${presets.length})`}>
+      <ul className="flex flex-col gap-1">
+        {presets.map((p) => {
+          const inChat = chatSettings.presetId === p.id;
+          const inAssist = assistSettings.presetId === p.id;
+          return (
+            <li key={p.id} className={cx('flex flex-wrap items-center gap-1.5 rounded border px-2 py-1', inChat ? 'border-violet-500/40 bg-violet-500/5' : 'border-slate-800')}>
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-xs text-slate-200">{p.name}</span>
+                <span className="text-[10px] text-slate-500">
+                  {p.order.filter((o) => o.enabled).length} of {p.order.length} prompts on · {samplerSummary(p)} · added {new Date(p.importedAt).toLocaleDateString()}
+                </span>
+              </div>
+              {inChat && <span className="rounded bg-violet-500/15 px-1.5 text-[10px] text-violet-300">chat</span>}
+              {inAssist && <span className="rounded bg-sky-500/15 px-1.5 text-[10px] text-sky-300" title="Settings → Assistant uses it too">assistant</span>}
+              {!inChat && (
+                <Button size="sm" variant="ghost" onClick={() => setChatSettings({ presetId: p.id })} title="Build the test chat's prompt from this one">
+                  Use
+                </Button>
+              )}
+              <IconButton title="Edit" onClick={() => onEdit(p)}>
+                ✎
+              </IconButton>
+              <IconButton title="Duplicate (a copy to experiment on; it becomes the chat's)" onClick={() => copyPreset(p)}>
+                ⧉
+              </IconButton>
+              <IconButton title="Export as a SillyTavern preset file" onClick={() => exportPreset(p)}>
+                ⬇
+              </IconButton>
+              <IconButton title="Remove UCCB's copy" tone="danger" onClick={() => void removePresetAsk(p)}>
+                🗑
+              </IconButton>
+            </li>
+          );
+        })}
+      </ul>
+    </OverviewBox>
+  );
+}
+
 function samplerSummary(p: ChatPreset) {
   const s = p.samplers;
   const bits = [
@@ -85,25 +302,32 @@ function samplerSummary(p: ChatPreset) {
 
 type EditorTab = 'samplers' | 'prompts' | 'other';
 
+const exportPreset = (preset: ChatPreset) => {
+  downloadBlob(JSON.stringify(toStPreset(preset), null, 4), `${preset.name.replace(/[\\/:*?"<>|]+/g, '_')}.json`, 'application/json');
+  toast('Exported. In SillyTavern: AI Response Configuration → Import preset.', 'success');
+};
+const copyPreset = (preset: ChatPreset) => {
+  const copy = duplicatePreset(preset);
+  useLlmStore.getState().addPreset(copy);
+  toast(`Made "${copy.name}"; it's the one in use now.`, 'success');
+};
+/** Removes UCCB's copy, once you've said so. */
+const removePresetAsk = async (preset: ChatPreset) => {
+  if (!(await confirmDialog({ title: `Remove "${preset.name}"?`, body: 'Only UCCB’s copy goes; any file you imported or exported is untouched.', confirmLabel: 'Remove', danger: true }))) return false;
+  useLlmStore.getState().removePreset(preset.id);
+  return true;
+};
+
 /** The whole preset, as SillyTavern's AI Response Configuration panel has it. */
-function PresetEditor({ preset, onClose }: { preset: ChatPreset; onClose: () => void }) {
-  const { addPreset, updatePreset, removePreset, chatSettings, setChatSettings } = useLlmStore();
-  const [tab, setTab] = useState<EditorTab>('samplers');
+function PresetEditor({ preset, onClose, initialTab = 'samplers' }: { preset: ChatPreset; onClose: () => void; initialTab?: EditorTab }) {
+  const { updatePreset, chatSettings, setChatSettings } = useLlmStore();
+  const [tab, setTab] = useState<EditorTab>(initialTab);
   const set = (patch: Partial<ChatPreset>) => updatePreset(preset.id, patch);
 
-  const exportIt = () => {
-    downloadBlob(JSON.stringify(toStPreset(preset), null, 4), `${preset.name.replace(/[\\/:*?"<>|]+/g, '_')}.json`, 'application/json');
-    toast('Exported. In SillyTavern: AI Response Configuration → Import preset.', 'success');
-  };
-  const duplicate = () => {
-    const copy = duplicatePreset(preset);
-    addPreset(copy);
-    toast(`Made "${copy.name}"; it's the one in use now.`, 'success');
-  };
+  const exportIt = () => exportPreset(preset);
+  const duplicate = () => copyPreset(preset);
   const remove = async () => {
-    if (!(await confirmDialog({ title: `Remove "${preset.name}"?`, body: 'Only UCCB’s copy goes; any file you imported or exported is untouched.', confirmLabel: 'Remove', danger: true }))) return;
-    removePreset(preset.id);
-    onClose();
+    if (await removePresetAsk(preset)) onClose();
   };
 
   return (
@@ -112,6 +336,24 @@ function PresetEditor({ preset, onClose }: { preset: ChatPreset; onClose: () => 
       onClose={onClose}
       title="Preset"
       size="lg"
+      fixedHeight
+      pinned={
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
+            Name
+            <input value={preset.name} onChange={(e) => set({ name: e.target.value })} className={inputClass} />
+          </label>
+          <Tabs
+            value={tab}
+            onChange={setTab}
+            tabs={[
+              { value: 'samplers', label: 'Samplers' },
+              { value: 'prompts', label: 'Prompts', badge: <span className="text-[10px] text-slate-500">{preset.order.filter((o) => o.enabled).length}</span> },
+              { value: 'other', label: 'Other prompts & options' },
+            ]}
+          />
+        </div>
+      }
       footer={
         <>
           <Button variant="ghost" className="mr-auto text-red-300" onClick={() => void remove()}>
@@ -130,24 +372,11 @@ function PresetEditor({ preset, onClose }: { preset: ChatPreset; onClose: () => 
       }
     >
       <div className="flex flex-col gap-3">
-        <label className="flex flex-col gap-1 text-xs text-slate-400">
-          Name
-          <input value={preset.name} onChange={(e) => set({ name: e.target.value })} className={inputClass} />
-        </label>
         {chatSettings.presetId === preset.id && !chatSettings.presetSamplers && tab === 'samplers' && (
           <button type="button" onClick={() => setChatSettings({ presetSamplers: true })} className="rounded-md bg-amber-500/10 px-3 py-2 text-left text-xs text-amber-200">
             The chat is set to ignore the preset&apos;s samplers (the connection&apos;s own apply). Click to use these.
           </button>
         )}
-        <Tabs
-          value={tab}
-          onChange={setTab}
-          tabs={[
-            { value: 'samplers', label: 'Samplers' },
-            { value: 'prompts', label: 'Prompts', badge: <span className="text-[10px] text-slate-500">{preset.order.filter((o) => o.enabled).length}</span> },
-            { value: 'other', label: 'Other prompts & options' },
-          ]}
-        />
         {tab === 'samplers' && <SamplerEditor preset={preset} set={set} />}
         {tab === 'prompts' && <PromptManager preset={preset} />}
         {tab === 'other' && <OtherSettings preset={preset} set={set} />}

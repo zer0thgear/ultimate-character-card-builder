@@ -108,6 +108,13 @@ Search: comma-separated terms, all required; `-term` excludes; `a | b` is either
   - **Other prompts & options**: the impersonation prompt, continue nudge (or continuing by prefill, with what follows it), send if empty, the assistant prefill, the new-chat and example markers, the world info, scenario and personality formats, character names, and squashing system messages.
   - **Duplicate** makes a copy to experiment on, and **Export** saves it as a SillyTavern preset file, which ST imports. Settings UCCB doesn't use (logit bias, other providers' fields) are kept from the imported file and written back.
 - **+ New** starts a preset from SillyTavern's default prompts and order.
+- **The Chat preset tab** shows the chosen preset at a glance:
+  - its prompts in order, each switchable right there, with roles, depths, tokens, and how much of the preset's own text goes in every request;
+  - its samplers, with those it leaves unset, and the most a request can cost on the chat's connection (OpenRouter);
+  - its other options;
+  - each box's **Edit…** opens the editor on that part.
+
+  Below, **Your presets** lists every one, showing which the chat and the assistant use, with Use, Edit, Duplicate, Export and Remove. With no preset, the tab shows the built-in prompt's main prompt and post-history instructions instead.
 
 **The writing assistant can use a preset too** (Settings → Assistant), chosen separately from the chat's. Its samplers can apply, and its own prompts are wrapped around every assistant request (✨ on fields, new greetings, lorebook entries, tags, the review, the art prompts, Brainstorm): those ordered before Chat History go first, the rest after. The card is already in the request, so placeholders are skipped. Untick any prompt that fights a writing task, such as a roleplay "write {{char}}'s next reply"; that choice is the assistant's alone and doesn't touch the chat.
 
