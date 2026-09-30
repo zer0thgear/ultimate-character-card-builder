@@ -50,6 +50,9 @@ interface UiState {
   setExportImage: (patch: { exportMaxSize?: number; exportCompression?: 'off' | 'lossless' | 'palette' }) => void;
   personaSort: PersonaSort;
   setPersonaSort: (s: PersonaSort) => void;
+  /** Local extensions whose buttons on pictures are hidden (by id). */
+  hiddenImageActions: string[];
+  setImageActionsHidden: (extension: string, hidden: boolean) => void;
 }
 
 export type PersonaSort = 'name' | 'name-desc' | 'newest' | 'oldest';
@@ -87,6 +90,9 @@ export const useUiStore = create<UiState>()(
       setExportImage: (patch) => set(patch),
       personaSort: 'name',
       setPersonaSort: (personaSort) => set({ personaSort }),
+      hiddenImageActions: [],
+      setImageActionsHidden: (extension, hidden) =>
+        set((s) => ({ hiddenImageActions: hidden ? [...new Set([...s.hiddenImageActions, extension])] : s.hiddenImageActions.filter((id) => id !== extension) })),
     }),
     { name: 'uccb-ui', storage: createJSONStorage(() => localStorage) },
   ),

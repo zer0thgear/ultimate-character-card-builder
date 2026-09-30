@@ -2,15 +2,17 @@
 
 import { clientExtensions, imageActions } from '@/lib/extensions/client';
 import type { ExtensionImage } from '@/lib/extensions/types';
-import { Button, IconButton } from '@/components/ui';
-import { toast } from '@/store/uiStore';
+import { Button, IconButton, Toggle } from '@/components/ui';
+import { toast, useUiStore } from '@/store/uiStore';
 
 // Where local extensions (lib/extensions/types.ts) appear in the app. With
 // none installed, each of these renders nothing.
 
 /** Extensions' actions on a picture: icons in a toolbar, or buttons. */
 export function ExtensionImageActions({ image, variant = 'button', onDone }: { image: ExtensionImage; variant?: 'icon' | 'button' | 'chip'; onDone?: () => void }) {
-  if (!imageActions.length) return null;
+  const hidden = useUiStore((s) => s.hiddenImageActions);
+  const actions = imageActions.filter((a) => !hidden.includes(a.extension));
+  if (!actions.length) return null;
   const run = async (action: (typeof imageActions)[number]) => {
     try {
       await action.run(image);
@@ -21,7 +23,7 @@ export function ExtensionImageActions({ image, variant = 'button', onDone }: { i
   };
   return (
     <>
-      {imageActions.map((a) =>
+      {actions.map((a) =>
         variant === 'icon' ? (
           <IconButton key={`${a.extension}.${a.id}`} title={a.title ?? a.label} onClick={() => void run(a)}>
             {a.icon}
@@ -52,20 +54,29 @@ export function ExtensionHosts() {
   );
 }
 
-export const hasExtensionSettings = clientExtensions.some((e) => e.Settings);
+export const hasExtensionSettings = clientExtensions.some((e) => e.Settings || e.imageActions?.length);
 
 /** Settings → Extensions. */
 export function ExtensionSettings() {
+  const { hiddenImageActions, setImageActionsHidden } = useUiStore();
   return (
     <div className="flex flex-col gap-5">
       {clientExtensions
-        .filter((e) => e.Settings)
+        .filter((e) => e.Settings || e.imageActions?.length)
         .map((e) => {
-          const Settings = e.Settings!;
+          const Settings = e.Settings;
           return (
             <section key={e.id} className="flex flex-col gap-2">
               <h3 className="text-xs font-semibold tracking-wide text-slate-400 uppercase">{e.name}</h3>
-              <Settings />
+              {!!e.imageActions?.length && (
+                <Toggle
+                  checked={!hiddenImageActions.includes(e.id)}
+                  onChange={(show) => setImageActionsHidden(e.id, !show)}
+                  label={`Show its buttons on pictures (${e.imageActions.map((a) => a.label).join(', ')})`}
+                  title="Off hides them everywhere (the Image tab, the gallery, the library and the avatar), e.g. for screenshots. This device only."
+                />
+              )}
+              {Settings && <Settings />}
             </section>
           );
         })}

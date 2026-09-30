@@ -101,7 +101,7 @@ tests/              Vitest
 ### Local extensions
 
 Features you'd rather not publish can live in a `local/` folder beside the app. Keep it out of git by adding `/local/` to `.git/info/exclude`, which stays on your machine, rather than to `.gitignore`, which is published. `local/client.tsx` default-exports a list of client extensions and `local/server.ts` a list of server ones (see `lib/extensions/types.ts`); either can be left out. An extension can add:
-- actions on pictures (gens, kept gens, library images, the avatar);
+- actions on pictures (gens, kept gens, library images, the avatar), which a switch in Settings → Extensions hides, e.g. for screenshots;
 - a section in Settings → Extensions;
 - its own dialogs;
 - an API under `/api/ext/<id>/`, with private storage in `data/ext/<id>/`.
