@@ -11,7 +11,7 @@ import { DEFAULT_SCAN_DEPTH, scanLorebook } from '@/lib/lorebookScan';
 import { lorebookEntryMessages, parseLorebookEntry } from '@/lib/assist';
 import { useLlmStream } from '@/hooks/useLlmStream';
 import { SortableList, arrayMove, remapIndex } from '@/components/SortableList';
-import { FieldActions, useCardField } from '@/components/editor/fieldTools';
+import { FieldActions, useCardField, useWritingTools } from '@/components/editor/fieldTools';
 import { AutoTextarea, Button, ChipInput, Empty, IconButton, Modal, NumberInput, Section, TokenBadge, Toggle, confirmDialog, cx, downloadBlob, enterSends, fileBytes, inputClass, pickFiles } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { CutOffNotice } from '@/components/llm/CutOffNotice';
@@ -127,6 +127,7 @@ function Entries({ book, setBook }: { book: Lorebook; setBook: (b: Lorebook, key
   const [open, setOpen] = useState<Set<number>>(new Set());
   const [filter, setFilter] = useState('');
   const [writing, setWriting] = useState(false);
+  const writingTools = useWritingTools();
   const entries = book.entries;
   const setEntries = (next: LorebookEntry[], key?: string) => setBook({ ...book, entries: next }, key);
   const setEntry = (i: number, patch: Partial<LorebookEntry>, key?: string) => setEntries(entries.map((e, j) => (j === i ? { ...e, ...patch } : e)), key && `entry.${i}.${key}`);
@@ -166,9 +167,11 @@ function Entries({ book, setBook }: { book: Lorebook; setBook: (b: Lorebook, key
               {open.size ? 'Fold all' : 'Unfold all'}
             </Button>
           )}
-          <Button size="sm" onClick={() => setWriting(true)}>
-            ✨ Write one
-          </Button>
+          {writingTools && (
+            <Button size="sm" onClick={() => setWriting(true)}>
+              ✨ Write one
+            </Button>
+          )}
           <Button size="sm" onClick={() => add()}>
             + Add
           </Button>

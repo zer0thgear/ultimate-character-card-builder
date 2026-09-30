@@ -36,7 +36,9 @@ import { formatChat, type FormatNode } from '@/lib/chatFormat';
 // lib/chatPrompt.ts), with swipes, edits, the greeting read live from the
 // card, and an inspector showing exactly what was sent.
 
-export function ChatPanel() {
+/** `wide`: the chat has the window's width (Chat mode), so it keeps to a
+ *  centred column as it does with the dock filling the window. */
+export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const project = useProjectStore((s) => s.project);
   const { chat, list, loadFor, newChat, openChat, deleteChat, rename, setGreeting, setMessages } = useChatStore();
   const { connections, chatConnectionId, setChatConnection, chatSettings, presets } = useLlmStore();
@@ -44,7 +46,8 @@ export function ChatPanel() {
   const phone = useMediaQuery(PHONE_QUERY);
   const keyboard = useKeyboard((s) => s.open);
   // With the dock filling the window, the chat keeps to a centred column.
-  const full = useUiStore((s) => s.fullPane === 'dock') && !phone;
+  const dockFull = useUiStore((s) => s.fullPane === 'dock');
+  const full = (wide || dockFull) && !phone;
   const { chatFullWidth, setChatFullWidth } = useUiStore();
   /** The full-window column: a share of the window, centred. */
   const column = full ? { className: 'mx-auto w-full', style: { maxWidth: `${Math.round(chatFullWidth * 100)}%` } } : {};
@@ -293,7 +296,7 @@ export function ChatPanel() {
           gone while you type. */}
       {!(phone && keyboard) && (
         <div className="flex flex-shrink-0 flex-wrap items-center gap-1.5 border-b border-slate-800 p-2 phone:flex-nowrap">
-          <select value={chat?.id ?? ''} onChange={(e) => e.target.value && void openChat(e.target.value)} className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs')}>
+          <select value={chat?.id ?? ''} onChange={(e) => e.target.value && void openChat(e.target.value)} className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs', !phone && 'min-w-36')}>
             {!chat && <option value="">No chat open</option>}
             {list.map((c) => (
               <option key={c.id} value={c.id}>
@@ -390,7 +393,7 @@ export function ChatPanel() {
         <div ref={scroller} onScroll={onScroll} className="relative h-full overflow-y-auto px-3 py-3">
           {!chat ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-slate-500">
-              Test how the card plays.
+              {wide ? `Chat with ${card.name || 'this character'}.` : 'Test how the card plays.'}
               <Button variant="primary" onClick={() => void newChat(0)}>
                 Start a chat
               </Button>

@@ -11,7 +11,16 @@ import { api } from '@/lib/api';
 export type EditorTab = 'basics' | 'greetings' | 'lorebook' | 'prompts' | 'creator' | 'notes' | 'tools';
 export type DockTab = 'image' | 'gallery' | 'library' | 'chat' | 'assist';
 
+/** Builder: writing and drawing cards. Chat: chatting with them, the
+ *  building tools out of the way. */
+export type AppMode = 'builder' | 'chat';
+
 interface UiState {
+  appMode: AppMode;
+  setAppMode: (m: AppMode) => void;
+  /** Chat mode: the card's definitions beside the chat. */
+  chatCardOpen: boolean;
+  setChatCardOpen: (open: boolean) => void;
   theme: 'dark' | 'light';
   setTheme: (t: 'dark' | 'light') => void;
   editorTab: EditorTab;
@@ -60,6 +69,10 @@ export type PersonaSort = 'name' | 'name-desc' | 'newest' | 'oldest';
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
+      appMode: 'builder',
+      setAppMode: (appMode) => set({ appMode }),
+      chatCardOpen: false,
+      setChatCardOpen: (chatCardOpen) => set({ chatCardOpen }),
       theme: 'dark',
       setTheme: (theme) => {
         document.documentElement.dataset.theme = theme;

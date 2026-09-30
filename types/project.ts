@@ -55,6 +55,8 @@ export interface CardProject {
   kept: KeptImage[];
   /** Free-form notes for the creator: ideas, todo, what the art should show. */
   notes: string;
+  /** Imported in Chat mode: shown there only, until it's added to Builder. */
+  chatOnly?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -65,6 +67,8 @@ export interface ProjectSummary {
   name: string;
   tags: string[];
   avatar?: AvatarInfo;
+  /** See CardProject.chatOnly. */
+  chatOnly?: boolean;
   updatedAt: number;
   createdAt: number;
 }

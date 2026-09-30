@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { useState } from 'react';
+import { useState, createContext, useContext } from 'react';
 import { useProjectStore } from '@/store/projectStore';
 import { useLlmStore } from '@/store/llmStore';
 import { getPath, setPath, fieldLabel } from '@/lib/cardPath';
@@ -33,13 +33,21 @@ const useFieldTools = create<{ assist: string | null; focus: string | null; open
 
 export const openAssist = (path: string) => useFieldTools.getState().open('assist', path);
 
+/** Whether the card panels offer the ✨ writing tools: off where they're
+ *  shown for reading and light edits (Chat mode's card drawer). */
+export const WritingToolsContext = createContext(true);
+export const useWritingTools = () => useContext(WritingToolsContext);
+
 export function FieldActions({ path }: { path: string }) {
   const open = useFieldTools((s) => s.open);
+  const writing = useWritingTools();
   return (
     <>
-      <IconButton title="Writing assistant" tone="accent" onClick={() => open('assist', path)}>
-        ✨
-      </IconButton>
+      {writing && (
+        <IconButton title="Writing assistant" tone="accent" onClick={() => open('assist', path)}>
+          ✨
+        </IconButton>
+      )}
       <IconButton title="Open in a large editor" onClick={() => open('focus', path)}>
         ⤢
       </IconButton>

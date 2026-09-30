@@ -166,6 +166,7 @@ export async function listProjects(): Promise<ProjectSummary[]> {
         name: p.card?.data?.name ?? '',
         tags: p.card?.data?.tags ?? [],
         avatar: p.avatar,
+        ...(p.chatOnly ? { chatOnly: true } : {}),
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
       });

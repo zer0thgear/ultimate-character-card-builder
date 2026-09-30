@@ -5,7 +5,7 @@ import { useProjectStore } from '@/store/projectStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { useLlmStore } from '@/store/llmStore';
 import { SortableList, arrayMove, remapIndex } from '@/components/SortableList';
-import { FieldActions, useCardField } from '@/components/editor/fieldTools';
+import { FieldActions, useCardField, useWritingTools } from '@/components/editor/fieldTools';
 import { AutoTextarea, Button, IconButton, Modal, TokenBadge, confirmDialog, Section, Empty, enterSends } from '@/components/ui';
 import { useLlmStream } from '@/hooks/useLlmStream';
 import { newGreetingMessages } from '@/lib/assist';
@@ -27,6 +27,7 @@ export function GreetingsPanel() {
   const alts = useProjectStore((s) => s.project?.card.data.alternate_greetings ?? []);
   const groups = useProjectStore((s) => s.project?.card.data.group_only_greetings ?? []);
   const [generating, setGenerating] = useState(false);
+  const writing = useWritingTools();
   return (
     <div className="flex flex-col gap-6">
       <FirstMessage />
@@ -35,9 +36,11 @@ export function GreetingsPanel() {
         title={`Alternate greetings (${alts.length})`}
         items={alts}
         extraActions={
-          <Button size="sm" onClick={() => setGenerating(true)} title="Write a new alternate greeting with the assistant">
-            ✨ New
-          </Button>
+          writing && (
+            <Button size="sm" onClick={() => setGenerating(true)} title="Write a new alternate greeting with the assistant">
+              ✨ New
+            </Button>
+          )
         }
       />
       <GreetingList listKey="group_only_greetings" title={`Group-only greetings (${groups.length})`} items={groups} />

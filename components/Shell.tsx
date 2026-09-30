@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useProjectStore } from '@/store/projectStore';
+import { lastCardKey, useProjectStore } from '@/store/projectStore';
 import { useUiStore, useConfigStore, useToastStore, toast } from '@/store/uiStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -24,12 +24,14 @@ import { useKeyboard, watchKeyboard } from '@/hooks/useKeyboard';
 import { useSessionStore as useGenSession } from '@/store/sessionStore';
 import { VisionWriteHost } from '@/components/VisionWriteDialog';
 import { ExtensionHosts } from '@/components/ExtensionSlots';
+import { ChatCardList, ChatHome, ChatScreen, importChatCard, switchAppMode } from '@/components/chatmode/ChatMode';
 
 export function Shell() {
   const project = useProjectStore((s) => s.project);
   const loading = useProjectStore((s) => s.loading);
   const { sidebarOpen, setSidebarOpen, dockWidth, setDockWidth, phoneView } = useUiStore();
   const fullPane = useUiStore((s) => s.fullPane);
+  const chatMode = useUiStore((s) => s.appMode === 'chat');
   const workspace = useRef<HTMLDivElement>(null);
   // Phones get one screen at a time with a bottom bar, and the card list
   // as a drawer.
@@ -46,13 +48,15 @@ export function Shell() {
     void usePersonaStore.getState().load();
     const store = useProjectStore.getState();
     void store.refreshList().then(() => {
+      // The card this mode had open last time (a Chat-mode card only in Chat).
+      const chat = useUiStore.getState().appMode === 'chat';
       let last: string | null = null;
       try {
-        last = localStorage.getItem('uccb-last-project');
+        last = localStorage.getItem(lastCardKey());
       } catch {
         /* private mode */
       }
-      if (last && useProjectStore.getState().summaries.some((s) => s.id === last)) void store.open(last);
+      if (last && useProjectStore.getState().summaries.some((s) => s.id === last && (chat || !s.chatOnly))) void store.open(last);
     });
   }, []);
 
@@ -84,6 +88,7 @@ export function Shell() {
     const file = e.dataTransfer.files[0];
     if (!file) return;
     e.preventDefault();
+    if (useUiStore.getState().appMode === 'chat') return void importChatCard(file);
     const { create, setAvatar } = useProjectStore.getState();
     try {
       const imported = await importAsProject(file, create, setAvatar);
@@ -123,42 +128,51 @@ export function Shell() {
       {/* Typing on a phone, the header and bottom bar make way for the text. */}
       {!(phone && keyboard) && <Header phone={phone} onMenu={() => (phone ? setDrawer(true) : setSidebarOpen(!sidebarOpen))} />}
       <div className="flex min-h-0 flex-1">
-        {!phone && sidebarOpen && !(fullPane && project) && <ProjectSidebar />}
-        <div ref={workspace} className="flex min-w-0 flex-1">
-          {project && phone ? (
-            // Both stay mounted, so a generation or a reply carries on
-            // while the other screen is showing.
-            <>
-              <main className="min-w-0 flex-1" hidden={phoneView !== 'card'}>
-                <CardEditor />
-              </main>
-              <aside className="min-w-0 flex-1" hidden={phoneView !== 'dock'}>
-                <Dock phone />
-              </aside>
-            </>
-          ) : project ? (
-            <>
-              {/* One side can fill the window; the other stays mounted
-                  (hidden), so it comes back as it was and a gen or a reply
-                  carries on. */}
-              <main className={cx('min-w-0 border-slate-800', fullPane === 'card' ? 'flex-1' : 'border-r')} style={fullPane === 'card' ? undefined : { width: `${(1 - dockWidth) * 100}%` }} hidden={fullPane === 'dock'}>
-                <CardEditor />
-              </main>
-              {!fullPane && <div onPointerDown={startResize} className="w-1 flex-shrink-0 cursor-col-resize bg-slate-900 hover:bg-violet-500/50" title="Drag to resize" />}
-              <aside className="min-w-0 flex-1" hidden={fullPane === 'card'}>
-                <Dock />
-              </aside>
-            </>
-          ) : (
-            <Home loading={loading} />
-          )}
-        </div>
+        {chatMode ? (
+          <>
+            {!phone && sidebarOpen && <ChatCardList />}
+            <div className="flex min-w-0 flex-1">{project ? <ChatScreen phone={phone} /> : <ChatHome loading={loading} />}</div>
+          </>
+        ) : (
+          <>
+            {!phone && sidebarOpen && !(fullPane && project) && <ProjectSidebar />}
+            <div ref={workspace} className="flex min-w-0 flex-1">
+              {project && phone ? (
+                // Both stay mounted, so a generation or a reply carries on
+                // while the other screen is showing.
+                <>
+                  <main className="min-w-0 flex-1" hidden={phoneView !== 'card'}>
+                    <CardEditor />
+                  </main>
+                  <aside className="min-w-0 flex-1" hidden={phoneView !== 'dock'}>
+                    <Dock phone />
+                  </aside>
+                </>
+              ) : project ? (
+                <>
+                  {/* One side can fill the window; the other stays mounted
+                      (hidden), so it comes back as it was and a gen or a reply
+                      carries on. */}
+                  <main className={cx('min-w-0 border-slate-800', fullPane === 'card' ? 'flex-1' : 'border-r')} style={fullPane === 'card' ? undefined : { width: `${(1 - dockWidth) * 100}%` }} hidden={fullPane === 'dock'}>
+                    <CardEditor />
+                  </main>
+                  {!fullPane && <div onPointerDown={startResize} className="w-1 flex-shrink-0 cursor-col-resize bg-slate-900 hover:bg-violet-500/50" title="Drag to resize" />}
+                  <aside className="min-w-0 flex-1" hidden={fullPane === 'card'}>
+                    <Dock />
+                  </aside>
+                </>
+              ) : (
+                <Home loading={loading} />
+              )}
+            </div>
+          </>
+        )}
       </div>
-      {phone && project && !keyboard && <PhoneNav />}
+      {phone && project && !keyboard && !chatMode && <PhoneNav />}
       {phone && drawer && <PhoneDrawer onClose={() => setDrawer(false)} />}
       {dropping && (
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center border-4 border-dashed border-violet-500/60 bg-violet-950/30 text-lg text-violet-200">
-          Drop a card (PNG, JSON, CHARX) to import it as a new card
+          {chatMode ? 'Drop a card (PNG, JSON, CHARX) to import it for chatting' : 'Drop a card (PNG, JSON, CHARX) to import it as a new card'}
         </div>
       )}
       <SettingsDialog />
@@ -194,6 +208,8 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
   const imageSetUp = useSettingsStore((s) => s.imageConnections.length > 0);
   const needsNaiKey = useSettingsStore((s) => s.imageConnections.some((c) => c.kind === 'novelai')) && !apiKey;
   const [exportOpen, setExportOpen] = useState(false);
+  const appMode = useUiStore((s) => s.appMode);
+  const chatMode = appMode === 'chat';
 
   const overwrite = async () => {
     const [file] = await pickFiles('.json,.png,.charx');
@@ -219,6 +235,8 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
         </IconButton>
       )}
       {!(phone && project) && <span className="text-sm font-semibold tracking-tight text-violet-300">UCCB</span>}
+      {/* On a phone, it's at the top of the ☰ drawer instead. */}
+      {!phone && <ModeSwitch />}
       {project && (
         <>
           {!phone && <span className="text-slate-700">/</span>}
@@ -250,7 +268,7 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
         )}
         {project && (
           <>
-            {!phone && (
+            {!phone && !chatMode && (
               <>
                 <IconButton title={showAvatar ? 'Hide the avatar strip' : 'Show the avatar strip'} onClick={() => setShowAvatar(!showAvatar)}>
                   {showAvatar ? '▣' : '□'}
@@ -271,7 +289,7 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
                     { label: 'JSON (V3)', run: async () => exportJson(project) },
                     { label: 'CHARX', run: () => exportCharx(project, imageOpts) },
                     // The header has no room for it on a phone.
-                    ...(phone ? [{ label: 'Overwrite from a file…', run: overwrite }] : []),
+                    ...(phone && !chatMode ? [{ label: 'Overwrite from a file…', run: overwrite }] : []),
                   ].map((o) => (
                     <button
                       key={o.label}
@@ -304,8 +322,36 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
   );
 }
 
+/** Builder or Chat: the same cards, for writing them or for chatting. */
+function ModeSwitch({ className }: { className?: string }) {
+  const appMode = useUiStore((s) => s.appMode);
+  const modes = [
+    { mode: 'builder' as const, icon: '🛠', label: 'Builder', title: 'Builder: write, draw and test cards' },
+    { mode: 'chat' as const, icon: '💬', label: 'Chat', title: 'Chat: chat with your cards, the building tools out of the way' },
+  ];
+  return (
+    <div className={cx('flex flex-shrink-0 overflow-hidden rounded-md border border-slate-700 text-xs', className)} role="tablist" aria-label="Mode">
+      {modes.map((m) => (
+        <button
+          key={m.mode}
+          type="button"
+          role="tab"
+          aria-selected={appMode === m.mode}
+          title={m.title}
+          onClick={() => void switchAppMode(m.mode)}
+          className={cx('flex-1 px-2 py-0.5', appMode === m.mode ? 'bg-violet-600 text-white' : 'text-slate-300 hover:bg-slate-800')}
+        >
+          {m.icon} {m.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; className?: string }) {
-  const { summaries, project, open: openProject, create: createProject, remove, setAvatar } = useProjectStore();
+  const { summaries: all, project, open: openProject, create: createProject, remove, setAvatar } = useProjectStore();
+  // Cards imported in Chat mode stay there until they're added to Builder.
+  const summaries = all.filter((s) => !s.chatOnly);
   // In the phone's drawer, picking a card closes it.
   const open = async (id: string) => {
     await openProject(id);
@@ -330,7 +376,7 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
     }
   };
   return (
-    <nav className={cx('flex h-full w-60 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950 pt-[env(safe-area-inset-top)]', className)}>
+    <nav className={cx('flex h-full w-60 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950', className)}>
       {onPicked && project && (
         <button
           type="button"
@@ -413,7 +459,8 @@ function Home({ loading }: { loading: boolean }) {
 }
 
 function CardsHome() {
-  const { summaries, open, create, setAvatar } = useProjectStore();
+  const { summaries: all, open, create, setAvatar } = useProjectStore();
+  const summaries = all.filter((s) => !s.chatOnly);
   const setHomeTab = useUiStore((s) => s.setHomeTab);
   const importFile = async () => {
     const [file] = await pickFiles('.png,.json,.charx');
@@ -438,6 +485,9 @@ function CardsHome() {
           </Button>
           <Button onClick={() => void importFile()}>Import a card…</Button>
           <Button onClick={() => setHomeTab('library')}>📚 Browse the gen library</Button>
+          <Button variant="ghost" onClick={() => void switchAppMode('chat')} title="Chat with your cards, the building tools out of the way">
+            💬 Switch to Chat
+          </Button>
           <Button variant="ghost" onClick={() => openSettings()}>
             Settings
           </Button>
@@ -470,6 +520,7 @@ function CardsHome() {
 
 /** The card list on a phone: slides over from the left, and swipes back. */
 function PhoneDrawer({ onClose }: { onClose: () => void }) {
+  const chatMode = useUiStore((s) => s.appMode === 'chat');
   const [dx, setDx] = useState(0);
   const start = useRef<{ x: number; y: number; t: number; horizontal: boolean | null } | null>(null);
   const onTouchStart = (e: React.TouchEvent) => {
@@ -495,8 +546,9 @@ function PhoneDrawer({ onClose }: { onClose: () => void }) {
   };
   return (
     <div className="fixed inset-0 z-40 flex" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}>
-      <div className={cx('h-full w-72 max-w-[85vw] shadow-2xl', dx === 0 && 'transition-transform duration-150')} style={{ transform: `translateX(${dx}px)` }}>
-        <ProjectSidebar onPicked={onClose} className="w-full" />
+      <div className={cx('flex h-full w-72 max-w-[85vw] flex-col bg-slate-950 pt-[env(safe-area-inset-top)] shadow-2xl', dx === 0 && 'transition-transform duration-150')} style={{ transform: `translateX(${dx}px)` }}>
+        <ModeSwitch className="mx-2 mt-2 text-sm [&>button]:py-1.5" />
+        <div className="min-h-0 flex-1">{chatMode ? <ChatCardList onPicked={onClose} className="w-full" /> : <ProjectSidebar onPicked={onClose} className="w-full" />}</div>
       </div>
       <button type="button" aria-label="Close the card list" className="flex-1 bg-black/50" style={{ opacity: Math.max(0, 1 + dx / 288) }} onClick={onClose} />
     </div>

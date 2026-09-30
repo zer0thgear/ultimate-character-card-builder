@@ -77,9 +77,9 @@ export async function exportCharx(p: CardProject, opts: ExportImageOptions = {})
 }
 
 /** Reads a card file into a new project, avatar included. */
-export async function importAsProject(file: File, create: (init: Partial<CardProject>) => Promise<CardProject>, setAvatar: (b: Blob) => Promise<void>) {
+export async function importAsProject(file: File, create: (init: Partial<CardProject>) => Promise<CardProject>, setAvatar: (b: Blob) => Promise<void>, init: Partial<CardProject> = {}) {
   const imported = await importCardFile(file.name, new Uint8Array(await file.arrayBuffer()));
-  await create({ card: imported.card });
+  await create({ ...init, card: imported.card });
   if (imported.avatar) await setAvatar(new Blob([imported.avatar.bytes as BlobPart], { type: imported.avatar.type }));
   return imported;
 }

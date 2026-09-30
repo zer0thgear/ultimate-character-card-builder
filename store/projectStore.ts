@@ -6,6 +6,7 @@ import type { CardProject, KeptImage, ProjectSummary } from '@/types/project';
 import { api } from '@/lib/api';
 import { useSessionStore } from '@/store/sessionStore';
 import { PROJECT_GEN_KEYS, useSettingsStore, DEFAULT_NEGATIVE } from '@/store/settingsStore';
+import { useUiStore, type AppMode } from '@/store/uiStore';
 
 // The open card project: loading, editing with undo/redo, and saving it
 // back to disk a moment after each change. Only one project is open at a
@@ -32,6 +33,8 @@ interface ProjectState {
   create: (init?: Partial<CardProject>) => Promise<CardProject>;
   remove: (id: string) => Promise<void>;
   close: () => Promise<void>;
+  /** A Chat-mode card joins Builder (it then shows in both modes). */
+  addToBuilder: (id: string) => Promise<void>;
   /** Changes the card. `key` groups quick edits of one field into one undo
    *  step; leave it out for one-off actions (each is its own step). */
   updateCard: (change: (data: CardData) => CardData, key?: string) => void;
@@ -57,8 +60,11 @@ let lastEdit = { key: '', at: 0 };
 let applyingGen = false;
 
 function summaryOf(p: CardProject): ProjectSummary {
-  return { id: p.id, name: p.card.data.name, tags: p.card.data.tags, avatar: p.avatar, createdAt: p.createdAt, updatedAt: p.updatedAt };
+  return { id: p.id, name: p.card.data.name, tags: p.card.data.tags, avatar: p.avatar, ...(p.chatOnly ? { chatOnly: true } : {}), createdAt: p.createdAt, updatedAt: p.updatedAt };
 }
+
+/** Where each mode remembers the card it had open, to reopen next time. */
+export const lastCardKey = (mode: AppMode = useUiStore.getState().appMode) => (mode === 'chat' ? 'uccb-last-chat-card' : 'uccb-last-project');
 
 export const useProjectStore = create<ProjectState>((set, get) => {
   const schedule = () => {
@@ -105,7 +111,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
         loadGen(p);
         set({ project: p, past: [], future: [], status: 'saved', loading: false });
         try {
-          localStorage.setItem('uccb-last-project', id);
+          localStorage.setItem(lastCardKey(), id);
         } catch {
           /* private mode */
         }
@@ -140,9 +146,22 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       set({ project: null, past: [], future: [] });
       // Back home stays home on the next visit, too.
       try {
-        localStorage.removeItem('uccb-last-project');
+        localStorage.removeItem(lastCardKey());
       } catch {
         /* private mode */
+      }
+    },
+
+    addToBuilder: async (id) => {
+      const open = get().project;
+      if (open?.id === id) {
+        await get().flush();
+        const saved = await api.saveProject({ ...open, chatOnly: false });
+        set((s) => (s.project?.id === id ? { project: { ...s.project, chatOnly: false, updatedAt: saved.updatedAt } } : {}));
+        upsertSummary(saved);
+      } else {
+        const saved = await api.saveProject({ ...(await api.getProject(id)), chatOnly: false });
+        upsertSummary(saved);
       }
     },
 
