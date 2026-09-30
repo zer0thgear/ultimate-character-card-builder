@@ -7,13 +7,14 @@ import { useLlmStore } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
-import { DEFAULT_CHAT_SETTINGS, buildChatPrompt, displayText, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
+import { DEFAULT_CHAT_SETTINGS, buildChatPrompt, displayText, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
 import { buildPresetPrompt } from '@/lib/presetPrompt';
-import { presetParams } from '@/lib/stPreset';
+import { presetParams, type ChatPreset } from '@/lib/stPreset';
+import type { LlmConnection, SamplerParams } from '@/types/llm';
 import { describeEntry } from '@/lib/lorebookScan';
-import { AutoTextarea, Button, IconButton, Modal, NumberInput, TokenBadge, Toggle, confirmDialog, cx, downloadBlob, enterSends, inputClass } from '@/components/ui';
+import { AutoTextarea, Button, IconButton, Modal, NumberInput, TokenBadge, Toggle, confirmDialog, textDialog, cx, downloadBlob, enterSends, inputClass } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
-import { PresetPicker } from '@/components/llm/PresetManager';
+import { ChatPresetSelect, PresetPicker } from '@/components/llm/PresetManager';
 import { PersonaAvatar, PersonaPicker, avatarFrame } from '@/components/llm/Personas';
 import { openLightbox } from '@/components/Lightbox';
 import { addContinue, addReroll, branchCount, choose, onPath, pathDepth, pathText, rerollBase, startTree, undoContinue, type ContinueNode } from '@/lib/continueTree';
@@ -142,7 +143,8 @@ export function ChatPanel() {
   /** The prompt for `messages` (greeting added), through the preset if one is on. */
   const build = (messages: ChatMessage[], opts: BuildOptions = {}): BuiltPrompt => {
     const full = { model: connection?.model, kind: connection?.kind, maxTokens: overrides.max_tokens ?? connection?.params.max_tokens, maxContext: connection?.params.max_context, ...opts };
-    return preset ? buildPresetPrompt(card, history(messages), settings, preset, full) : buildChatPrompt(card, history(messages), settings, full);
+    const built = preset ? buildPresetPrompt(card, history(messages), settings, preset, full) : buildChatPrompt(card, history(messages), settings, full);
+    return connection ? { ...built, sentWith: sentWith(connection, overrides, preset) } : built;
   };
 
   /** Streams a completion for `built`, calling `onText` with the reply so far. */
@@ -276,9 +278,9 @@ export function ChatPanel() {
   );
 
   const preview = () => setInspect(build(chat?.messages ?? []));
-  const renameChat = () => {
+  const renameChat = async () => {
     if (!chat) return;
-    const name = prompt('Chat name', chat.name);
+    const name = await textDialog({ title: 'Rename chat', label: 'Chat name', initial: chat.name, confirmLabel: 'Rename' });
     if (name?.trim()) rename(name.trim());
   };
   const deleteThisChat = async () => {
@@ -305,7 +307,7 @@ export function ChatPanel() {
           {chat && (
             <div className="relative flex items-center">
               {!phone && (
-                <IconButton title="Rename" onClick={renameChat}>
+                <IconButton title="Rename" onClick={() => void renameChat()}>
                   ✎
                 </IconButton>
               )}
@@ -350,25 +352,18 @@ export function ChatPanel() {
             </div>
           )}
           {phone ? (
-            <IconButton title="Chat settings: model, persona, preset" onClick={() => setShowSettings(!showSettings)}>
-              ⚙
+            <IconButton title="Chat settings: connection, persona, preset" onClick={() => setShowSettings(!showSettings)}>
+              🔧
             </IconButton>
           ) : (
             <div className="flex items-center gap-1.5">
               <PersonaPicker onManage={() => openSettings('personas')} />
-              <button
-                type="button"
-                onClick={() => setShowSettings(true)}
-                title={preset ? `Every chat uses the "${preset.name}" preset. Click to change it.` : 'No preset: the built-in prompt. Click to import or pick a SillyTavern preset.'}
-                className={cx('max-w-28 truncate rounded px-1.5 py-0.5 text-[10px]', preset ? 'bg-violet-500/15 text-violet-300' : 'bg-slate-800 text-slate-500')}
-              >
-                {preset ? preset.name : 'Built-in prompt'}
-              </button>
+              <ChatPresetSelect />
               <IconButton title="Show the prompt the next reply would send" onClick={preview}>
                 🔍
               </IconButton>
-              <IconButton title="Chat settings: connection, persona, prompt" onClick={() => setShowSettings(!showSettings)}>
-                ⚙
+              <IconButton title="Chat settings: connection, persona, preset" onClick={() => setShowSettings(!showSettings)}>
+                🔧
               </IconButton>
               {full && (
                 <input
@@ -389,7 +384,7 @@ export function ChatPanel() {
       )}
 
       {showSettings && !(phone && keyboard) && <ChatSettings phone={phone} onClose={() => setShowSettings(false)} />}
-      {!showSettings && !phone && <ConnectionPicker value={chatConnectionId} onChange={setChatConnection} label="Model" className="flex-shrink-0 border-b border-slate-800 px-2 py-1.5" />}
+      {!showSettings && !phone && <ConnectionPicker value={chatConnectionId} onChange={setChatConnection} label="Connection" className="flex-shrink-0 border-b border-slate-800 px-2 py-1.5" />}
 
       <div className="relative min-h-0 flex-1">
         <div ref={scroller} onScroll={onScroll} className="relative h-full overflow-y-auto px-3 py-3">
@@ -870,7 +865,7 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
           ✕
         </IconButton>
       </div>
-      <ConnectionPicker value={chatConnectionId} onChange={setChatConnection} label="Model" />
+      <ConnectionPicker value={chatConnectionId} onChange={setChatConnection} label="Connection" />
       {phone && (
         <label className="flex items-center gap-2 text-xs text-slate-400">
           Persona <PersonaPicker onManage={() => openSettings('personas')} />
@@ -957,6 +952,35 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
   );
 }
 
+const PARAM_LABELS: Record<string, string> = {
+  max_tokens: 'max tokens',
+  temperature: 'temperature',
+  top_p: 'top P',
+  top_k: 'top K',
+  top_a: 'top A',
+  min_p: 'min P',
+  repetition_penalty: 'repetition penalty',
+  frequency_penalty: 'frequency penalty',
+  presence_penalty: 'presence penalty',
+  seed: 'seed',
+  reasoning_effort: 'reasoning effort',
+  effort: 'effort',
+  thinking: 'thinking',
+  enable_thinking: 'thinking',
+};
+
+/** The samplers a chat request goes with: the connection's, with the
+ *  preset's over them where it's used. */
+function sentWith(connection: LlmConnection, overrides: Partial<SamplerParams>, preset: ChatPreset | null): SentWith {
+  const merged: Record<string, unknown> = { ...connection.params, ...overrides };
+  const params = Object.keys(PARAM_LABELS)
+    .filter((k) => merged[k] !== undefined && merged[k] !== false && merged[k] !== '')
+    .map((k) => ({ key: PARAM_LABELS[k], value: String(merged[k] === true ? 'on' : merged[k]), fromPreset: k in overrides }));
+  const context = preset?.maxContext || connection.params.max_context;
+  if (context) params.push({ key: 'context size', value: String(context), fromPreset: !!preset?.maxContext });
+  return { connection: connection.name, model: connection.model, params, presetName: preset?.name };
+}
+
 function PromptInspector({ prompt, onClose }: { prompt: BuiltPrompt; onClose: () => void }) {
   const all = useMemo(() => prompt.parts.map((p) => p.content).join('\n\n'), [prompt]);
   const total = useTextTokens(all, 0);
@@ -967,6 +991,19 @@ function PromptInspector({ prompt, onClose }: { prompt: BuiltPrompt; onClose: ()
           <div className="text-xs text-amber-300">
             {prompt.droppedHistory > 0 && <div>{prompt.droppedHistory} oldest messages left out to fit the preset&apos;s context size.</div>}
             {prompt.prefill !== undefined && <div>The reply starts from a prefill: “{prompt.prefill.slice(0, 120)}{prompt.prefill.length > 120 ? '…' : ''}”</div>}
+          </div>
+        )}
+        {prompt.sentWith && (
+          <div className="text-xs text-slate-400">
+            Sent with <span className="text-slate-200">{prompt.sentWith.connection}</span> ({prompt.sentWith.model || 'no model'}):{' '}
+            {prompt.sentWith.params.map((p, i) => (
+              <span key={p.key}>
+                {i > 0 && ', '}
+                {p.key} <span className={p.fromPreset ? 'text-violet-300' : 'text-slate-200'} title={p.fromPreset ? `From the preset "${prompt.sentWith!.presetName}"` : "The connection's own"}>{p.value}</span>
+              </span>
+            ))}
+            {prompt.sentWith.params.some((p) => p.fromPreset) && <span className="text-slate-500"> (violet: from the preset &quot;{prompt.sentWith.presetName}&quot;)</span>}
+            . Anything not listed is left to the model&apos;s default.
           </div>
         )}
         <div className="text-xs text-slate-400">

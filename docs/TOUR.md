@@ -71,8 +71,8 @@ Open **💬 Test chat** and start a chat. It builds the prompt the way SillyTave
 - After a **Continue**, **↻** rerolls just the part it added and **↶** undoes it; **🌿** shows every continue you've tried as a tree, to go back down another path.
 - **🧭** steers the next reply, swipe, continue or impersonation with an instruction ("she finally admits it"), used once unless you pin it.
 - **🔍** shows exactly what the next reply would send, part by part with token counts, and which lorebook entries fired and why.
-- **Personas** (Settings → Personas) set who you are in the chat. Pick one from the chat's toolbar.
-- **SillyTavern presets**: import a chat-completion preset in Settings → Chat preset, and the chat uses its prompts, order and samplers.
+- **Personas** set who you are in the chat. Pick one, or make a new one, from the chat's toolbar; 📌 pins it to one chat.
+- **SillyTavern presets**: pick or import one from the preset dropdown in the chat's toolbar (or Settings → Chat preset), and the chat uses its prompts, order and samplers. 🔍 shows exactly what a reply is sent with.
 - **⤢** at the end of the dock's tabs fills the window with it (the chat, or whichever tab is open), to try the card without the definitions in view; the card editor's own ⤢ does the same for the card.
 
 ## 5. Share it

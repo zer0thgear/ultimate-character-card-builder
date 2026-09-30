@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useLlmStore } from '@/store/llmStore';
+import { openSettings } from '@/components/SettingsDialog';
 import { formatTokens, useTextTokens } from '@/lib/textTokens';
 import { toast } from '@/store/uiStore';
 import { duplicatePreset, newPreset, newPresetPrompt, parseStPreset, PRESET_EFFORTS, PresetImportError, toStPreset, type ChatPreset, type PresetPrompt, type PresetSamplers } from '@/lib/stPreset';
@@ -10,7 +11,7 @@ import { isOpenRouter } from '@/lib/modelPricing';
 import { useModelPrices } from '@/hooks/useModelPrices';
 import { MaxRequestCost } from '@/components/llm/MaxRequestCost';
 import { SortableList, arrayMove } from '@/components/SortableList';
-import { AutoTextarea, Button, IconButton, Modal, NumberInput, Tabs, TokenBadge, Toggle, confirmDialog, cx, downloadBlob, inputClass, pickFiles } from '@/components/ui';
+import { AutoTextarea, Button, IconButton, Modal, NumberInput, Tabs, TokenBadge, Toggle, confirmDialog, textDialog, cx, downloadBlob, inputClass, pickFiles } from '@/components/ui';
 
 // SillyTavern chat-completion presets for the test chat: import one or start
 // a new one, pick it, and edit it as in SillyTavern's AI Response
@@ -19,7 +20,7 @@ import { AutoTextarea, Button, IconButton, Modal, NumberInput, Tabs, TokenBadge,
 
 /** The chat's preset picker. With `onEdit`, editing is left to the caller
  *  (Settings → Chat preset, which opens the editor on a given tab). */
-export function PresetPicker({ onEdit }: { onEdit?: (tab: EditorTab) => void } = {}) {
+export function PresetPicker({ onEdit }: { onEdit?: (tab: EditorTab, presetId?: string) => void } = {}) {
   const { presets, chatSettings, setChatSettings, addPreset } = useLlmStore();
   const [ownEditing, setOwnEditing] = useState(false);
   const setEditing = (on: boolean) => (onEdit ? on && onEdit('samplers') : setOwnEditing(on));
@@ -38,19 +39,21 @@ export function PresetPicker({ onEdit }: { onEdit?: (tab: EditorTab) => void } =
       }
     }
   };
-  const create = () => {
-    const name = prompt('Name for the new preset', 'New preset');
+  const create = async () => {
+    const name = await textDialog({ title: 'New preset', label: "Name (it starts with SillyTavern's default prompts)", initial: 'New preset', confirmLabel: 'Create' });
     if (name === null) return;
-    addPreset(newPreset(name.trim() || 'New preset'));
-    setEditing(true);
+    const made = newPreset(name.trim() || 'New preset');
+    addPreset(made);
+    if (onEdit) onEdit('samplers', made.id);
+    else setOwnEditing(true);
   };
 
   return (
     <div className="flex flex-col gap-2 rounded-md border border-slate-800 p-2">
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-xs whitespace-nowrap text-slate-400" title="Applies to every chat on every card">Prompt preset (all chats)</span>
+        <span className="text-xs whitespace-nowrap text-slate-400" title="Applies to every chat on every card">Chat preset (all chats)</span>
         <select value={chatSettings.presetId ?? ''} onChange={(e) => setChatSettings({ presetId: e.target.value || null })} className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs')}>
-          <option value="">Built-in prompt (set in the chat&apos;s ⚙)</option>
+          <option value="">Built-in prompt (set in the chat&apos;s 🔧)</option>
           {presets.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
@@ -65,13 +68,36 @@ export function PresetPicker({ onEdit }: { onEdit?: (tab: EditorTab) => void } =
         <Button size="sm" onClick={() => void importPreset()} title="Import a SillyTavern chat-completion preset (.json)">
           Import…
         </Button>
-        <Button size="sm" variant="ghost" onClick={create} title="A new preset with SillyTavern's default prompts">
-          + New
+        <Button size="sm" variant="ghost" onClick={() => void create()} title="A new preset with SillyTavern's default prompts">
+          + New preset
         </Button>
       </div>
       {preset && <Toggle checked={chatSettings.presetSamplers} onChange={(presetSamplers) => setChatSettings({ presetSamplers })} label={<span className="text-xs">Use the preset&apos;s samplers ({samplerSummary(preset)})</span>} />}
       {preset && editing && <PresetEditor preset={preset} onClose={() => setEditing(false)} />}
     </div>
+  );
+}
+
+/** The chat toolbar's preset dropdown: every chat's preset, or the built-in
+ *  prompt, with a way to the full Chat preset settings. */
+export function ChatPresetSelect() {
+  const { presets, chatSettings, setChatSettings } = useLlmStore();
+  const preset = presets.find((p) => p.id === chatSettings.presetId) ?? null;
+  return (
+    <select
+      value={preset?.id ?? ''}
+      onChange={(e) => (e.target.value === '__manage' ? openSettings('chat') : setChatSettings({ presetId: e.target.value || null }))}
+      title={preset ? `Chat preset: every chat uses "${preset.name}"` : 'Chat preset: none, the built-in prompt'}
+      className={cx(inputClass, 'max-w-36 py-0.5 text-xs', preset && 'border-violet-500/40 text-violet-200')}
+    >
+      <option value="">Built-in prompt</option>
+      {presets.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.name}
+        </option>
+      ))}
+      <option value="__manage">Import, edit or add presets…</option>
+    </select>
   );
 }
 
@@ -83,14 +109,14 @@ export function ChatPresetTab() {
   const [editing, setEditing] = useState<{ id: string; tab: EditorTab } | null>(null);
   const preset = presets.find((p) => p.id === chatSettings.presetId) ?? null;
   const editingPreset = editing ? presets.find((p) => p.id === editing.id) : undefined;
-  const edit = (tab: EditorTab, p = preset) => p && setEditing({ id: p.id, tab });
+  const edit = (tab: EditorTab, id = preset?.id) => id && setEditing({ id, tab });
 
   return (
     <div className="flex flex-col gap-4">
       <p className="text-xs text-slate-500">
-        The SillyTavern chat-completion preset the test chat builds its prompt from. It applies to every chat on every card, and stays picked until you change it. The same picker is in the chat&apos;s ⚙ panel.
+        The SillyTavern chat-completion preset the test chat builds its prompt from. It applies to every chat on every card, and stays picked until you change it. The same picker is in the chat&apos;s toolbar and its 🔧 panel.
       </p>
-      <PresetPicker onEdit={(tab) => edit(tab)} />
+      <PresetPicker onEdit={(tab, id) => edit(tab, id)} />
       {preset ? (
         <div className="grid gap-3 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
           <OverviewBox title="Prompts, in order" action={<Button size="sm" variant="ghost" onClick={() => edit('prompts')}>Edit…</Button>}>
@@ -122,7 +148,7 @@ export function ChatPresetTab() {
           </label>
         </OverviewBox>
       )}
-      <PresetLibrary onEdit={(p) => edit('samplers', p)} />
+      <PresetLibrary onEdit={(p) => edit('samplers', p.id)} />
       {editingPreset && editing && <PresetEditor key={`${editing.id}.${editing.tab}`} preset={editingPreset} initialTab={editing.tab} onClose={() => setEditing(null)} />}
     </div>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { create } from 'zustand';
 import { sortPersonas, usePersonaStore } from '@/store/personaStore';
 import { toast, useUiStore, type PersonaSort } from '@/store/uiStore';
 import { useLlmStore } from '@/store/llmStore';
@@ -64,8 +65,22 @@ async function importFromFolder() {
 }
 
 // Personas for test chats: who {{user}} is, with a picture. Managed in
-// Settings → Personas; picked (and optionally locked to a chat) from the
+// Settings → Personas; picked (and optionally pinned to a chat) from the
 // chat itself.
+
+/** A persona just made, for Settings → Personas to bring into view with its
+ *  name ready to type over. */
+const useNewPersona = create<{ id: string | null }>(() => ({ id: null }));
+
+/** A new persona, in use at once: the active one, or this chat's if the
+ *  chat has one pinned. */
+function createPersona(pinned: boolean) {
+  const p = usePersonaStore.getState().add();
+  if (pinned) useChatStore.getState().setPersonaLock(p.id);
+  else useLlmStore.getState().setChatSettings({ personaId: p.id });
+  useNewPersona.setState({ id: p.id });
+  return p;
+}
 
 /** An avatar's frame: a circle, a rounded square, or a 2:3 portrait. */
 export function avatarFrame(shape: Exclude<AvatarShape, 'none'>, size: number): { className: string; style: React.CSSProperties } {
@@ -91,10 +106,13 @@ export function PersonaAvatar({ persona, size = 36, shape = 'circle' }: { person
 }
 
 export function PersonaManager() {
-  const { personas, loaded, load, add, update, remove, setAvatar, clearAvatar } = usePersonaStore();
+  const { personas, loaded, load, update, remove, setAvatar, clearAvatar } = usePersonaStore();
   const { chatSettings, setChatSettings } = useLlmStore();
   const { personaSort, setPersonaSort } = useUiStore();
   const [filter, setFilter] = useState('');
+  const newId = useNewPersona((s) => s.id);
+  const chat = useChatStore((s) => s.chat);
+  const pinned = chat?.personaId ? personas.find((p) => p.id === chat.personaId) : undefined;
   useEffect(() => {
     if (!loaded) void load();
   }, [loaded, load]);
@@ -114,8 +132,31 @@ export function PersonaManager() {
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-slate-500">
-        Who you are in test chats: the name {'{{user}}'} becomes, a description sent as your persona, and a picture for your messages. The active one is used by every chat unless a chat has one locked, and by the writing assistant.
+        Who you are in test chats: the name {'{{user}}'} becomes, a description sent as your persona, and a picture for your messages. The active one is used by every chat unless a chat has its own pinned (📌 in the chat toolbar), and by the writing assistant.
       </p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="primary"
+          onClick={() => {
+            setFilter('');
+            createPersona(false);
+          }}
+          title="A new persona, made the active one"
+        >
+          + New persona
+        </Button>
+        <Button onClick={() => void importFromFolder()} title="Browse to your SillyTavern folder: its personas and their pictures come across">
+          Import from SillyTavern folder…
+        </Button>
+        <Button onClick={() => void importFromFiles()} title="SillyTavern's settings.json or a persona backup, plus any avatar images (select them together)">
+          Import file…
+        </Button>
+      </div>
+      {pinned && (
+        <p className="rounded-md bg-sky-500/10 px-3 py-2 text-xs text-sky-200">
+          The chat that&apos;s open has &quot;{pinned.name || 'Unnamed'}&quot; pinned (📌 in its toolbar), so it keeps that one. <b>Use</b> here sets the persona for every other chat.
+        </p>
+      )}
       {personas.length > 1 && (
         <div className="flex items-center gap-2">
           {personas.length > 6 && <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search personas…" className={cx(inputClass, 'py-1 text-xs')} />}
@@ -139,7 +180,21 @@ export function PersonaManager() {
             </div>
             <div className="flex min-w-0 flex-1 flex-col gap-2">
               <div className="flex items-center gap-2">
-                <input value={p.name} onChange={(e) => update(p.id, { name: e.target.value })} placeholder="Name ({{user}})" className={cx(inputClass, 'font-medium')} />
+                <input
+                  value={p.name}
+                  onChange={(e) => update(p.id, { name: e.target.value })}
+                  placeholder="Name ({{user}})"
+                  className={cx(inputClass, 'font-medium')}
+                  ref={(el) => {
+                    // A persona just made: in view, its name selected to type over.
+                    if (el && p.id === newId) {
+                      el.scrollIntoView({ block: 'center' });
+                      el.focus();
+                      el.select();
+                      useNewPersona.setState({ id: null });
+                    }
+                  }}
+                />
                 <Button size="sm" variant={active ? 'primary' : 'secondary'} onClick={() => setChatSettings({ personaId: active ? null : p.id })} title={active ? 'Stop using it' : 'Use this persona in chats'}>
                   {active ? '✓ Active' : 'Use'}
                 </Button>
@@ -161,15 +216,6 @@ export function PersonaManager() {
           </div>
         );
       })}
-      <div className="flex flex-wrap gap-2">
-        <Button onClick={() => add()}>+ New persona</Button>
-        <Button onClick={() => void importFromFolder()} title="Browse to your SillyTavern folder: its personas and their pictures come across">
-          Import from SillyTavern folder…
-        </Button>
-        <Button onClick={() => void importFromFiles()} title="SillyTavern's settings.json or a persona backup, plus any avatar images (select them together)">
-          Import file…
-        </Button>
-      </div>
     </div>
   );
 }
@@ -215,23 +261,36 @@ export function PersonaPicker({ onManage }: { onManage: () => void }) {
   return (
     <div className="flex items-center gap-1">
       <PersonaAvatar persona={persona} size={22} />
-      <select value={current} onChange={(e) => (e.target.value === '__manage' ? onManage() : choose(e.target.value))} title={locked ? 'Locked to this chat' : 'Your persona in every chat'} className={cx(inputClass, 'max-w-32 py-0.5 text-xs')}>
+      <select
+        value={current}
+        onChange={(e) => {
+          if (e.target.value === '__manage') onManage();
+          else if (e.target.value === '__new') {
+            createPersona(locked);
+            onManage();
+          } else choose(e.target.value);
+        }}
+        title={locked ? 'Your persona in this chat only (pinned)' : 'Your persona in every chat'}
+        className={cx(inputClass, 'max-w-32 py-0.5 text-xs', locked && 'border-sky-500/50')}
+      >
         <option value="">{chatSettings.userName || 'User'} (no persona)</option>
         {sortPersonas(personas, personaSort).map((p) => (
           <option key={p.id} value={p.id}>
             {p.name || 'Unnamed'}
           </option>
         ))}
+        <option value="__new">+ New persona…</option>
         <option value="__manage">Manage personas…</option>
       </select>
       {chat && (
         <IconButton
-          title={locked ? 'Locked to this chat: click to follow the active persona again' : 'Lock this persona to this chat'}
+          title={locked ? 'Pinned to this chat: it keeps this persona whatever the active one is. Click to unpin.' : 'Pin this persona to this chat (it keeps it when you change the active one)'}
           tone={locked ? 'accent' : 'default'}
           disabled={!locked && !current}
           onClick={() => setPersonaLock(locked ? undefined : current || undefined)}
+          className={locked ? undefined : 'opacity-60'}
         >
-          {locked ? '🔒' : '🔓'}
+          📌
         </IconButton>
       )}
     </div>

@@ -280,7 +280,7 @@ function NewGreetingDialog({ onClose }: { onClose: () => void }) {
           )}
         </div>
         <ReferenceTray refs={refs.refs} onAdd={refs.add} onRemove={refs.remove} />
-        <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant model" />
+        <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant connection" />
         {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
         <CutOffNotice show={cutOff && !running} hasText={!!shown.trim()} reasoning={reasoning} onUseReasoning={() => setDraft(reasoning.trim())} onRetry={() => { setDraft(null); void retryWithMoreRoom().then((r) => setDraft(r ? r.text.trim() : null)); }} />
         <AssistReasoning runId={runId} />

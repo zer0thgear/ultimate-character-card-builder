@@ -130,6 +130,18 @@ export interface BuiltPrompt {
   prefill?: string;
   /** Oldest chat messages left out to fit the context size. */
   droppedHistory: number;
+  /** What it goes to the model with (the chat fills this in, for the
+   *  prompt inspector). */
+  sentWith?: SentWith;
+}
+
+/** The connection and samplers a prompt is sent with. */
+export interface SentWith {
+  connection: string;
+  model: string;
+  /** The samplers set, by name, and which came from the preset. */
+  params: { key: string; value: string; fromPreset: boolean }[];
+  presetName?: string;
 }
 
 /** A message's current text. */

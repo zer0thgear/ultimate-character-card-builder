@@ -69,7 +69,7 @@ export function CreatorPanel() {
         }
       >
         <ChipInput values={card.tags} onChange={(tags) => updateCard((d) => ({ ...d, tags }))} placeholder="Type a tag and press Enter" />
-        <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant model" />
+        <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant connection" />
       </Section>
       <CardTextField path="creator_notes" label="Creator's notes" hint="Shown to people, not the model" minRows={5} />
       <Section title="Source (V3)">
@@ -136,7 +136,7 @@ export function NotesPanel() {
           )
         }
       >
-        <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant model" />
+        <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant connection" />
         {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
         <AssistReasoning runId={runId} />
         {text && (

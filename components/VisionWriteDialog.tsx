@@ -226,7 +226,7 @@ function VisionWriteDialog({ blob, url }: { blob: Blob; url: string }) {
               </>
             )}
           </div>
-          <ConnectionPicker value={connectionId} onChange={setVisionConnection} label="Vision model" />
+          <ConnectionPicker value={connectionId} onChange={setVisionConnection} label="Vision connection" />
           {blind ? (
             <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
               NovelAI&apos;s text models can&apos;t see images. Pick a connection with a vision model: Claude, or an OpenAI-compatible one (OpenRouter and the like) with GPT-4o or later, Gemini, Qwen-VL, Llama 3.2 Vision…

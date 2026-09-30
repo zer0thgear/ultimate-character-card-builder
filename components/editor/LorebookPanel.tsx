@@ -106,11 +106,11 @@ export function LorebookPanel() {
           <input value={book.description ?? ''} onChange={(e) => setBook({ ...book, description: e.target.value }, 'book.description')} placeholder="Description" className={inputClass} />
         </div>
         <div className="flex flex-wrap items-end gap-4">
-          <label className="flex w-32 flex-col gap-0.5 text-xs text-slate-400" title={`How many recent messages are searched for keys. Blank: whatever the frontend defaults to (the test chat's is ${loreDepth}, set in its ⚙ Chat settings).`}>
+          <label className="flex w-32 flex-col gap-0.5 text-xs text-slate-400" title={`How many recent messages are searched for keys. Blank: whatever the frontend defaults to (the test chat's is ${loreDepth}, set in its 🔧 Chat settings).`}>
             Scan depth
             <NumberInput value={book.scan_depth} onChange={(v) => setBook({ ...book, scan_depth: v })} min={0} step={1} allowEmpty placeholder={`default (${loreDepth})`} />
           </label>
-          <label className="flex w-32 flex-col gap-0.5 text-xs text-slate-400" title={`Most tokens the lorebook may add per message. Blank: whatever the frontend defaults to (the test chat's is ${loreBudget ? loreBudget : 'no limit'}, set in its ⚙ Chat settings).`}>
+          <label className="flex w-32 flex-col gap-0.5 text-xs text-slate-400" title={`Most tokens the lorebook may add per message. Blank: whatever the frontend defaults to (the test chat's is ${loreBudget ? loreBudget : 'no limit'}, set in its 🔧 Chat settings).`}>
             Token budget
             <NumberInput value={book.token_budget} onChange={(v) => setBook({ ...book, token_budget: v })} min={0} step={50} allowEmpty placeholder={`default (${loreBudget ? loreBudget : 'none'})`} />
           </label>
@@ -363,7 +363,7 @@ function WriteEntryDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (e: 
           )}
         </div>
         <ReferenceTray refs={refs.refs} onAdd={refs.add} onRemove={refs.remove} />
-        <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant model" />
+        <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant connection" />
         {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
         <CutOffNotice show={cutOff && !running} hasText={!!text.trim()} reasoning={reasoning} onRetry={() => void retryWithMoreRoom()} />
         <AssistReasoning runId={runId} />

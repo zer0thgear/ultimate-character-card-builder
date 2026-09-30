@@ -422,6 +422,66 @@ export function confirmDialog(opts: Omit<ConfirmRequest, 'resolve'>): Promise<bo
   return new Promise((resolve) => useConfirmStore.getState().set({ ...opts, resolve }));
 }
 
+interface TextRequest {
+  title: string;
+  label?: string;
+  initial?: string;
+  placeholder?: string;
+  confirmLabel?: string;
+  resolve: (text: string | null) => void;
+}
+
+const useTextPromptStore = create<{ req: TextRequest | null; set: (r: TextRequest | null) => void }>((set) => ({ req: null, set: (req) => set({ req }) }));
+
+/** Asks for a line of text (a name, say), as the app's own dialog rather
+ *  than the browser's prompt(). Null if cancelled. */
+export function textDialog(opts: Omit<TextRequest, 'resolve'>): Promise<string | null> {
+  return new Promise((resolve) => useTextPromptStore.getState().set({ ...opts, resolve }));
+}
+
+function TextPromptHost() {
+  const { req, set } = useTextPromptStore();
+  const [text, setText] = useState('');
+  const [shownFor, setShownFor] = useState<TextRequest | null>(null);
+  if (req !== shownFor) {
+    setShownFor(req);
+    setText(req?.initial ?? '');
+  }
+  const close = (value: string | null) => {
+    req?.resolve(value);
+    set(null);
+  };
+  return (
+    <Modal
+      open={!!req}
+      onClose={() => close(null)}
+      title={req?.title}
+      size="sm"
+      footer={
+        <>
+          <Button onClick={() => close(null)}>Cancel</Button>
+          <Button variant="primary" onClick={() => close(text)}>
+            {req?.confirmLabel ?? 'OK'}
+          </Button>
+        </>
+      }
+    >
+      <label className="flex flex-col gap-1 text-xs text-slate-400">
+        {req?.label}
+        <input
+          autoFocus
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onFocus={(e) => e.target.select()}
+          onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && close(text)}
+          placeholder={req?.placeholder}
+          className={inputClass}
+        />
+      </label>
+    </Modal>
+  );
+}
+
 export function ConfirmHost() {
   const { req, set } = useConfirmStore();
   const close = (ok: boolean) => {
@@ -429,22 +489,25 @@ export function ConfirmHost() {
     set(null);
   };
   return (
-    <Modal
-      open={!!req}
-      onClose={() => close(false)}
-      title={req?.title}
-      size="sm"
-      footer={
-        <>
-          <Button onClick={() => close(false)}>Cancel</Button>
-          <Button variant={req?.danger ? 'danger' : 'primary'} onClick={() => close(true)} autoFocus>
-            {req?.confirmLabel ?? 'OK'}
-          </Button>
-        </>
-      }
-    >
-      <div className="text-sm text-slate-300">{req?.body}</div>
-    </Modal>
+    <>
+      <TextPromptHost />
+      <Modal
+        open={!!req}
+        onClose={() => close(false)}
+        title={req?.title}
+        size="sm"
+        footer={
+          <>
+            <Button onClick={() => close(false)}>Cancel</Button>
+            <Button variant={req?.danger ? 'danger' : 'primary'} onClick={() => close(true)} autoFocus>
+              {req?.confirmLabel ?? 'OK'}
+            </Button>
+          </>
+        }
+      >
+        <div className="text-sm text-slate-300">{req?.body}</div>
+      </Modal>
+    </>
   );
 }
 

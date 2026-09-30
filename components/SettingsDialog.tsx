@@ -9,6 +9,7 @@ import { REASONING_EFFORTS, type LlmConnection, type ProviderKind, type SamplerP
 import { api, streamLlm } from '@/lib/api';
 import { AutoTextarea, Button, IconButton, Modal, NumberInput, Select, Tabs, Toggle, confirmDialog, cx, inputClass } from '@/components/ui';
 import { AssistPresetPicker, ChatPresetTab } from '@/components/llm/PresetManager';
+import { presetParams } from '@/lib/stPreset';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { PersonaManager } from '@/components/llm/Personas';
 import { MessageList, inspectAssistRun } from '@/components/llm/AssistTrace';
@@ -26,8 +27,10 @@ import { ImageConnectionsTab } from '@/components/ImageConnectionsSettings';
 
 type SettingsTab = 'general' | 'folders' | 'image' | 'llm' | 'chat' | 'assist' | 'personas' | 'extensions';
 
-const useSettingsDialog = create<{ tab: SettingsTab | null; set: (t: SettingsTab | null) => void }>((set) => ({ tab: null, set: (tab) => set({ tab }) }));
-export const openSettings = (tab: SettingsTab = 'general') => useSettingsDialog.getState().set(tab);
+const useSettingsDialog = create<{ tab: SettingsTab | null; focus: string | null; set: (t: SettingsTab | null) => void }>((set) => ({ tab: null, focus: null, set: (tab) => set({ tab }) }));
+/** Opens Settings on a tab; `focus` opens one thing there (a connection's id
+ *  on the LLM tab). */
+export const openSettings = (tab: SettingsTab = 'general', focus: string | null = null) => useSettingsDialog.setState({ tab, focus });
 
 export function SettingsDialog() {
   const { tab, set } = useSettingsDialog();
@@ -270,7 +273,8 @@ const KIND_LABELS: Record<ProviderKind, string> = { novelai: 'NovelAI', openai: 
 
 function LlmTab() {
   const { connections, addConnection, chatConnectionId, assistConnectionId, visionConnectionId, setChatConnection, setAssistConnection, setVisionConnection, priceUnit, setPriceUnit } = useLlmStore();
-  const [openId, setOpenId] = useState<string | null>(connections[0]?.id ?? null);
+  const focus = useSettingsDialog((s) => s.focus);
+  const [openId, setOpenId] = useState<string | null>(focus && connections.some((c) => c.id === focus) ? focus : (connections[0]?.id ?? null));
   const anyOpenRouter = connections.some(isOpenRouter);
   const prices = useModelPrices(anyOpenRouter);
   return (
@@ -292,7 +296,7 @@ function LlmTab() {
         </div>
       )}
       {connections.map((c) => (
-        <div key={c.id} className="rounded-md border border-slate-800">
+        <div key={c.id} className="rounded-md border border-slate-800" ref={(el) => void (el && c.id === focus && el.scrollIntoView({ block: 'nearest' }))}>
           <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left" onClick={() => setOpenId(openId === c.id ? null : c.id)}>
             <span className="text-xs text-slate-500">{openId === c.id ? '▾' : '▸'}</span>
             <span className="font-medium text-slate-200">{c.name}</span>
@@ -347,6 +351,24 @@ function ConnectionEditor({ connection: c }: { connection: LlmConnection }) {
   const price = isOpenRouter(c) ? prices?.[c.model] : undefined;
   const listPrice = (m: string) => (isOpenRouter(c) && prices?.[m] ? ` · ${priceLabel(prices[m], priceUnit)}` : '');
 
+  // Where a preset's samplers are used instead of these: the chat's (on the
+  // chat's connection) and the assistant's (on the assistant's).
+  const { presets, chatSettings, assistSettings, chatConnectionId, assistConnectionId, setChatSettings, setAssistSettings } = useLlmStore();
+  const chatPreset = chatConnectionId === c.id ? presets.find((p) => p.id === chatSettings.presetId) : undefined;
+  const chatOver: Partial<SamplerParams> = chatPreset && chatSettings.presetSamplers ? presetParams(chatPreset, c.kind) : {};
+  const assistPreset = assistConnectionId === c.id && assistSettings.samplers ? presets.find((p) => p.id === assistSettings.presetId) : undefined;
+  const assistOver: Partial<SamplerParams> = assistPreset ? presetParams(assistPreset, c.kind) : {};
+  const overridden = (key: keyof SamplerParams) => {
+    const bits = [key in chatOver && `chat ${String(chatOver[key])}`, key in assistOver && `assistant ${String(assistOver[key])}`].filter(Boolean);
+    if (key === 'max_context' && chatPreset?.maxContext) bits.push(`chat ${chatPreset.maxContext}`);
+    return bits.length ? (
+      <span className="text-[10px] leading-tight text-amber-300/90" title="A preset's value is sent instead of this one">
+        preset: {bits.join(', ')}
+      </span>
+    ) : null;
+  };
+  const overriddenNames = (over: Partial<SamplerParams>) => Object.keys(over).map((k) => k.replace(/_/g, ' ')).join(', ');
+
   const fetchModels = async () => {
     try {
       const list = await api.llmModels(requestConnection(c));
@@ -373,6 +395,7 @@ function ConnectionEditor({ connection: c }: { connection: LlmConnection }) {
     <label className="flex flex-col gap-0.5 text-xs text-slate-400" title={hint}>
       {label}
       <NumberInput value={c.params[key] as number | undefined} onChange={(v) => setParam({ [key]: v })} step={step} allowEmpty placeholder="default" />
+      {overridden(key)}
     </label>
   );
 
@@ -436,14 +459,38 @@ function ConnectionEditor({ connection: c }: { connection: LlmConnection }) {
       </div>
 
       <div className="text-xs font-semibold tracking-wide text-slate-400 uppercase">Generation</div>
+      {(Object.keys(chatOver).length > 0 || Object.keys(assistOver).length > 0 || !!chatPreset?.maxContext) && (
+        <div className="flex flex-col gap-1 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+          {chatPreset && (Object.keys(chatOver).length > 0 || !!chatPreset.maxContext) && (
+            <span>
+              The test chat uses the preset &quot;{chatPreset.name}&quot; for {[overriddenNames(chatOver), chatPreset.maxContext && 'context size'].filter(Boolean).join(', ')}, instead of the values here (marked below).{' '}
+              {Object.keys(chatOver).length > 0 && (
+                <button type="button" className="underline hover:text-amber-100" onClick={() => setChatSettings({ presetSamplers: false })}>
+                  Use this connection&apos;s in the chat
+                </button>
+              )}
+            </span>
+          )}
+          {assistPreset && Object.keys(assistOver).length > 0 && (
+            <span>
+              The writing assistant uses the preset &quot;{assistPreset.name}&quot; for {overriddenNames(assistOver)}.{' '}
+              <button type="button" className="underline hover:text-amber-100" onClick={() => setAssistSettings({ samplers: false })}>
+                Use this connection&apos;s for the assistant
+              </button>
+            </span>
+          )}
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <label className="flex flex-col gap-0.5 text-xs text-slate-400">
           Max tokens
           <NumberInput value={c.params.max_tokens} onChange={(v) => setParam({ max_tokens: v ?? 600 })} min={1} step={50} />
+          {overridden('max_tokens')}
         </label>
         <label className="flex flex-col gap-0.5 text-xs text-slate-400" title="How many tokens the model can take in. The test chat trims its oldest messages to fit the prompt and the reply in this (a preset's own context size wins when it has one). Blank: no trimming. Never sent to the model.">
           Context size
           <NumberInput value={c.params.max_context} onChange={(v) => setParam({ max_context: v })} min={512} step={1024} allowEmpty placeholder="no limit" />
+          {overridden('max_context')}
         </label>
         {c.kind !== 'anthropic' ? (
           <>
@@ -464,6 +511,7 @@ function ConnectionEditor({ connection: c }: { connection: LlmConnection }) {
                     </option>
                   ))}
                 </select>
+                {overridden('reasoning_effort')}
               </label>
             )}
           </>
@@ -479,6 +527,7 @@ function ConnectionEditor({ connection: c }: { connection: LlmConnection }) {
                   </option>
                 ))}
               </select>
+              {overridden('effort')}
             </label>
             <div className="col-span-2 flex items-end pb-1">
               <Toggle checked={!!c.params.thinking} onChange={(thinking) => setParam({ thinking })} label="Adaptive thinking (shows a summary)" />
@@ -513,7 +562,14 @@ function ConnectionEditor({ connection: c }: { connection: LlmConnection }) {
         <Button size="sm" variant="primary" disabled={testing} onClick={() => void test()}>
           {testing ? 'Testing…' : 'Test connection'}
         </Button>
-        <Button size="sm" variant="ghost" className="ml-auto text-red-400" onClick={() => removeConnection(c.id)}>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="ml-auto text-red-400"
+          onClick={async () => {
+            if (await confirmDialog({ title: `Remove "${c.name}"?`, body: 'Its API key and settings go with it, and features using it will ask for another connection. This can’t be undone.', confirmLabel: 'Remove', danger: true })) removeConnection(c.id);
+          }}
+        >
           Remove
         </Button>
       </div>
@@ -558,7 +614,7 @@ function AssistTab() {
       <p className="text-xs text-slate-500">
         The writing assistant: ✨ on every field, new greetings, lorebook entries, tag suggestions, the card review, the art prompts and Brainstorm. It can use its own SillyTavern preset, separate from the chat&apos;s.
       </p>
-      <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant model" />
+      <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant connection" />
       <AssistPresetPicker />
       <RecentAssistRuns />
       <AssistPromptEditor />
