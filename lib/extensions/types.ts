@@ -46,9 +46,20 @@ export interface ClientExtension {
   Host?: ComponentType;
 }
 
+/** A card fetched from a link: its JSON (any card spec) and its picture. */
+export interface UrlCardImport {
+  card: unknown;
+  avatar?: { bytes: Uint8Array; type: string };
+  /** Where it came from, for the message ("Chub", say). */
+  source: string;
+}
+
 export interface ServerExtension {
   id: string;
   /** Answers /api/ext/<id>/<path…>. Its data can live in
    *  extensionDataDir(id) (lib/server/storage.ts), which is never committed. */
   handle: (req: Request, path: string[]) => Promise<Response>;
+  /** Import from URL: a card from a link this extension knows (null when
+   *  it isn't one of its links). Asked before the built-in sites. */
+  importUrl?: (url: URL) => Promise<UrlCardImport | null>;
 }

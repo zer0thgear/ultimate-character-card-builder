@@ -105,7 +105,8 @@ Features you'd rather not publish can live in a `local/` folder beside the app. 
 - actions on pictures (gens, kept gens, library images, the avatar), which a switch in Settings → Extensions hides, e.g. for screenshots;
 - a section in Settings → Extensions;
 - its own dialogs;
-- an API under `/api/ext/<id>/`, with private storage in `data/ext/<id>/`.
+- an API under `/api/ext/<id>/`, with private storage in `data/ext/<id>/`;
+- sites for **Import from a URL** (a server extension's `importUrl`).
 
 Without the folder, the app runs as usual. Restart after adding or removing it.
 

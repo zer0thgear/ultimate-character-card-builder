@@ -26,6 +26,7 @@ import { VisionWriteHost } from '@/components/VisionWriteDialog';
 import { ExtensionHosts } from '@/components/ExtensionSlots';
 import { ChatCardActions, ChatCardList, ChatHeaderAvatar, ChatHome, ChatScreen, importChatCard, switchAppMode } from '@/components/chatmode/ChatMode';
 import { CardListMeta } from '@/components/CardListMeta';
+import { importFromUrl } from '@/components/ImportUrl';
 
 export function Shell() {
   const project = useProjectStore((s) => s.project);
@@ -405,6 +406,9 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
         <Button size="sm" onClick={() => void importFile()} title="Import a PNG, JSON or CHARX card (or drop one anywhere)">
           Import
         </Button>
+        <Button size="sm" onClick={() => void importFromUrl().then(() => onPicked?.())} title="Import from a URL (a Chub character link)" aria-label="Import from a URL">
+          🔗
+        </Button>
       </div>
       {summaries.length > 6 && (
         <div className="px-2 pb-2">
@@ -494,6 +498,9 @@ function CardsHome() {
             + New card
           </Button>
           <Button onClick={() => void importFile()}>Import a card…</Button>
+          <Button onClick={() => void importFromUrl()} title="A Chub character link">
+            🔗 Import from a URL…
+          </Button>
           <Button onClick={() => setHomeTab('library')}>📚 Browse the gen library</Button>
           <Button variant="ghost" onClick={() => void switchAppMode('chat')} title="Chat with your cards, the building tools out of the way">
             💬 Switch to Chat

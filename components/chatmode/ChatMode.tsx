@@ -14,6 +14,7 @@ import { PromptsPanel } from '@/components/editor/OtherPanels';
 import { WritingToolsContext } from '@/components/editor/fieldTools';
 import { openLightbox } from '@/components/Lightbox';
 import { CardListMeta } from '@/components/CardListMeta';
+import { importFromUrl } from '@/components/ImportUrl';
 import type { ProjectSummary } from '@/types/project';
 
 // Chat mode: the app as a chat frontend. Your cards and the ones imported
@@ -77,6 +78,9 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
       <div className="flex gap-1.5 p-2">
         <Button size="sm" variant="primary" className="flex-1" onClick={() => void importChatCard().then(() => onPicked?.())} title="Import a PNG, JSON or CHARX card to chat with (or drop one anywhere)">
           Import a card
+        </Button>
+        <Button size="sm" onClick={() => void importFromUrl({ chatOnly: true }).then(() => onPicked?.())} title="Import from a URL (a Chub character link)" aria-label="Import from a URL">
+          🔗
         </Button>
       </div>
       {summaries.length > 6 && (
@@ -145,6 +149,9 @@ export function ChatHome({ loading }: { loading: boolean }) {
         <div className="flex flex-wrap gap-2">
           <Button variant="primary" onClick={() => void importChatCard()}>
             Import a card…
+          </Button>
+          <Button onClick={() => void importFromUrl({ chatOnly: true })} title="A Chub character link">
+            🔗 Import from a URL…
           </Button>
           <Button variant="ghost" onClick={() => void switchAppMode('builder')}>
             🛠 Switch to Builder
