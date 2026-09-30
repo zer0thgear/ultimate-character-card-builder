@@ -7,7 +7,7 @@ import { useLlmStore } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
-import { DEFAULT_CHAT_SETTINGS, buildChatPrompt, displayText, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
+import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, buildChatPrompt, displayText, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
 import { buildPresetPrompt } from '@/lib/presetPrompt';
 import { presetParams, type ChatPreset } from '@/lib/stPreset';
 import type { LlmConnection, SamplerParams } from '@/types/llm';
@@ -171,6 +171,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   // the plain name and description.
   const me = resolvePersona(personas, chatSettings, chat);
   const showIds = chatSettings.showMessageIds;
+  const showTimes = chatSettings.showTimestamps ?? true;
   const settings = { ...chatSettings, userName: me.name, persona: me.description };
   const preset = chatSettings.presetId ? (presets.find((p) => p.id === chatSettings.presetId) ?? null) : null;
   const overrides = preset && chatSettings.presetSamplers && connection ? presetParams(preset, connection.kind) : {};
@@ -205,7 +206,10 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
     let written = base;
     setStreamingId(id);
     if (!target) setMessages((m) => [...m, { ...newMessage('assistant', '', connection?.model), id }]);
-    else if (continueFrom === undefined) setMessages((m) => m.map((x) => (x.id === id ? { ...x, swipes: [...x.swipes, ''], swipe: x.swipes.length } : x)));
+    else if (continueFrom === undefined)
+      setMessages((m) =>
+        m.map((x) => (x.id === id ? { ...x, swipes: [...x.swipes, ''], swipe: x.swipes.length, swipeDates: [...x.swipes.map((_, i) => x.swipeDates?.[i] ?? x.createdAt), Date.now()] } : x)),
+      );
     const r = await complete(built, (full) => {
       written = base + (continueFrom && full && !/^\s/.test(full) && !/\s$/.test(base) ? ' ' : '') + full;
       setMessages((m) => m.map((x) => (x.id === id ? { ...x, swipes: x.swipes.map((s, i) => (i === x.swipe ? written : s)) } : x)));
@@ -432,7 +436,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
             </div>
           ) : (
             <div className={cx('flex flex-col gap-3', column.className)} style={column.style}>
-              <GreetingBubble card={card} index={chat.greeting} count={greetingCount} onSwipe={setGreeting} userName={me.name} showId={showIds} />
+              <GreetingBubble card={card} index={chat.greeting} count={greetingCount} onSwipe={setGreeting} userName={me.name} showId={showIds} date={showTimes ? chat.createdAt : undefined} />
               {picturesAfter(null)}
               {chat.messages.map((m, i) => (
                 <div key={m.id} data-msg={m.id} className="flex flex-col gap-3">
@@ -440,6 +444,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     card={card}
                     message={m}
                     messageId={showIds ? i + 1 : undefined}
+                    showTime={showTimes}
                     userName={me.name}
                     persona={me.persona}
                     streaming={streamingId === m.id}
@@ -674,11 +679,20 @@ function useSwipeGesture(onNext: (() => void) | null, onPrev: (() => void) | nul
 }
 
 /** A message's number, SillyTavern style. */
+/** When a message was written, in the viewer's time zone, under its name. */
+function MessageTime({ time, className }: { time: number; className?: string }) {
+  return (
+    <div className={cx('-mt-1 mb-1 text-[10px] text-slate-600 tabular-nums', className)} title={new Date(time).toLocaleString()}>
+      {formatMessageTime(time)}
+    </div>
+  );
+}
+
 function MessageId({ id, className }: { id: number; className?: string }) {
   return <span className={cx('text-[11px] text-slate-600 tabular-nums', className)} title={id === 0 ? 'Message #0: the greeting' : `Message #${id}`}>#{id}</span>;
 }
 
-function GreetingBubble({ card, index, count, onSwipe, userName, showId }: { card: CardData; index: number; count: number; onSwipe: (i: number) => void; userName: string; showId: boolean }) {
+function GreetingBubble({ card, index, count, onSwipe, userName, showId, date }: { card: CardData; index: number; count: number; onSwipe: (i: number) => void; userName: string; showId: boolean; date?: number }) {
   const text = greetingText(card, index);
   const shown = text.trim() ? displayText(card, text, userName) : '';
   // As the model gets it: {{char}} and {{user}} filled in.
@@ -711,6 +725,7 @@ function GreetingBubble({ card, index, count, onSwipe, userName, showId }: { car
             </span>
           )}
         </div>
+        {date !== undefined && <MessageTime time={date} />}
         {shown ? <Formatted text={shown} /> : <em className="text-sm text-slate-500">This greeting is empty.</em>}
       </div>
     </div>
@@ -721,6 +736,7 @@ function Bubble({
   card,
   message: m,
   messageId,
+  showTime,
   userName,
   persona,
   streaming,
@@ -739,6 +755,8 @@ function Bubble({
   message: ChatMessage;
   /** Its number in the chat (the greeting is #0), when they're shown. */
   messageId?: number;
+  /** Show when it (this version of it) was written. */
+  showTime: boolean;
   userName: string;
   persona: Persona | null;
   streaming: boolean;
@@ -791,6 +809,7 @@ function Bubble({
             </IconButton>
           </span>
         </div>
+        {showTime && <MessageTime time={swipeDate(m)} className={isUser ? 'text-right' : undefined} />}
         {reasoning && (
           <details className="mb-1 text-xs text-slate-500" open={streaming && !text}>
             <summary className="cursor-pointer">Reasoning</summary>
@@ -995,6 +1014,7 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
           </div>
         )}
         <Toggle checked={s.showMessageIds} onChange={(v) => setChatSettings({ showMessageIds: v })} label={<span className="text-xs">Show message numbers (#0 is the greeting)</span>} />
+        <Toggle checked={s.showTimestamps ?? true} onChange={(v) => setChatSettings({ showTimestamps: v })} label={<span className="text-xs" title="Each reply's versions have their own; the greeting shows when the chat began">Show when messages were sent</span>} />
         <label className="flex w-full flex-col gap-0.5 text-xs text-slate-400">
           🧭 Guide template <span className="text-slate-500">({'{{guide}}'} is where your guide goes; sent last, just before the reply)</span>
           <input value={s.guideTemplate ?? DEFAULT_GUIDE_TEMPLATE} onChange={(e) => setChatSettings({ guideTemplate: e.target.value })} className={cx(inputClass, 'text-xs')} />

@@ -1,6 +1,7 @@
 import type { CardData } from '@/types/card';
 import type { ChatSession } from '@/types/project';
 import { expandMacros } from '@/lib/macros';
+import { swipeDate } from '@/lib/chatPrompt';
 
 // Test chats out, as SillyTavern writes chats (which Chub imports too):
 // JSONL, a metadata line and then one line per message. The greeting is
@@ -64,7 +65,7 @@ export function chatToStJsonl(chat: ChatSession, card: CardData, userName: strin
   for (const m of chat.messages) {
     const isUser = m.role === 'user';
     const swipes = m.swipes.map(x);
-    const date = stSendDate(new Date(m.createdAt));
+    const dateOf = (i: number) => stSendDate(new Date(swipeDate(m, i)));
     const extra = (i: number) => ({
       ...(m.model && !isUser ? { api: 'openai', model: m.model } : {}),
       ...(m.reasoning?.[i] ? { reasoning: m.reasoning[i] } : {}),
@@ -73,12 +74,12 @@ export function chatToStJsonl(chat: ChatSession, card: CardData, userName: strin
       name: isUser ? names.user : m.role === 'system' ? 'System' : names.char,
       is_user: isUser,
       is_system: m.role === 'system',
-      send_date: date,
+      send_date: dateOf(m.swipe),
       mes: swipes[m.swipe] ?? '',
       extra: extra(m.swipe),
       // SillyTavern keeps swipes on the character's messages only.
       ...(!isUser && swipes.length > 1
-        ? { swipe_id: m.swipe, swipes, swipe_info: swipes.map((_, i) => ({ send_date: date, extra: extra(i) })) }
+        ? { swipe_id: m.swipe, swipes, swipe_info: swipes.map((_, i) => ({ send_date: dateOf(i), extra: extra(i) })) }
         : {}),
     });
   }

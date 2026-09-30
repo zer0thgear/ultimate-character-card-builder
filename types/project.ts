@@ -86,6 +86,9 @@ export interface ChatMessage {
   swipes: string[];
   swipe: number;
   createdAt: number;
+  /** When each version was written (SillyTavern's per-swipe send_date).
+   *  Chats from before this have none: createdAt stands in. */
+  swipeDates?: (number | undefined)[];
   /** The model or connection that wrote an assistant message, for comparing. */
   model?: string;
   /** Reasoning the model returned alongside its reply, per swipe. */

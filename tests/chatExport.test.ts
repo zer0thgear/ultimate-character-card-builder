@@ -43,6 +43,17 @@ describe('SillyTavern chat export', () => {
     expect(lines).toHaveLength(4);
   });
 
+  it("writes each version's own time, and the shown one's as the message's", () => {
+    const later = new Date(2026, 8, 26, 15, 30).getTime();
+    const c = chat();
+    c.messages[1] = { ...c.messages[1], swipeDates: [at, later] };
+    const lines = chatToStJsonl(c, card(), 'Kael').trim().split('\n').map((l) => JSON.parse(l));
+    expect(lines[3].send_date).toBe('September 26, 2026 3:30pm');
+    expect(lines[3].swipe_info.map((s: { send_date: string }) => s.send_date)).toEqual(['September 26, 2026 2:05pm', 'September 26, 2026 3:30pm']);
+    // A chat from before versions had times: the message's own for each.
+    expect(chatToStJsonl(chat(), card(), 'Kael').includes('3:30pm')).toBe(false);
+  });
+
   it('leaves the greeting out when the chat opened without one', () => {
     const lines = chatToStJsonl({ ...chat(), greeting: -1 }, card(), 'Kael').trim().split('\n');
     expect(lines).toHaveLength(3);

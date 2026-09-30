@@ -41,6 +41,9 @@ export interface ChatPromptSettings {
   presetSamplers: boolean;
   /** Number the messages as SillyTavern does: #0 is the greeting. */
   showMessageIds: boolean;
+  /** When each message (each version of a reply) was written, as
+   *  SillyTavern shows it. */
+  showTimestamps?: boolean;
   /** How the chat shows avatars, as SillyTavern's choice does. */
   avatarShape: AvatarShape;
   /** On a touch screen, swiping the last reply (or the greeting) sideways
@@ -86,6 +89,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatPromptSettings = {
   presetId: null,
   presetSamplers: true,
   showMessageIds: true,
+  showTimestamps: true,
   avatarShape: 'circle',
   swipeGesture: true,
   guideTemplate: DEFAULT_GUIDE_TEMPLATE,
@@ -346,8 +350,15 @@ export function greetingText(card: CardData, index: number): string {
 }
 
 export function newMessage(role: ChatMessage['role'], text: string, model?: string): ChatMessage {
-  return { id: uuid(), role, swipes: [text], swipe: 0, createdAt: Date.now(), model };
+  const now = Date.now();
+  return { id: uuid(), role, swipes: [text], swipe: 0, createdAt: now, swipeDates: [now], model };
 }
+
+/** When a version of a message was written (the one showing, by default). */
+export const swipeDate = (m: Pick<ChatMessage, 'createdAt' | 'swipeDates' | 'swipe'>, i = m.swipe): number => m.swipeDates?.[i] ?? m.createdAt;
+
+/** A message's time as the chat shows it, in the viewer's own time zone. */
+export const formatMessageTime = (t: number) => new Date(t).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 
 /** Expanded for display, as the model will see it. */
 export function displayText(card: CardData, text: string, userName: string): string {
