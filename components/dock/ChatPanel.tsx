@@ -264,12 +264,13 @@ export function ChatPanel() {
     else setInput(r.text.trim());
   };
 
+  // Beside the message box, at its foot (where it stays as the box grows).
   const sendButton = running ? (
-    <Button size="sm" variant="danger" onClick={stop} className={cx(phone && 'px-4')}>
+    <Button variant="danger" onClick={stop} className="h-10 flex-shrink-0 px-4">
       Stop
     </Button>
   ) : (
-    <Button size="sm" variant="primary" onClick={() => void send()} className={cx(phone && 'px-4')}>
+    <Button variant="primary" onClick={() => void send()} className="h-10 flex-shrink-0 px-4">
       Send
     </Button>
   );
@@ -474,23 +475,26 @@ export function ChatPanel() {
               </IconButton>
             </div>
           )}
-          <AutoTextarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (enterSends(e)) {
-                e.preventDefault();
-                void send();
-              }
-            }}
-            minRows={2}
-            maxRows={10}
-            placeholder={phone ? `Message as ${me.name}…` : `Message as ${me.name}… (Enter sends, Shift+Enter for a new line; empty Enter asks for a reply)`}
-          />
+          <div className="flex items-end gap-1.5">
+            <AutoTextarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (enterSends(e)) {
+                  e.preventDefault();
+                  void send();
+                }
+              }}
+              minRows={2}
+              maxRows={10}
+              className="min-w-0 flex-1"
+              placeholder={phone ? `Message as ${me.name}…` : `Message as ${me.name}… (Enter sends, Shift+Enter for a new line; empty Enter asks for a reply)`}
+            />
+            {sendButton}
+          </div>
           {/* One row on a phone too: the actions as icons (hold one for its
-              name), Send on the right. */}
+              name). */}
           <div className={cx('mt-1.5 flex items-center gap-1.5', phone ? 'flex-nowrap' : 'flex-wrap')}>
-            {!phone && sendButton}
             <Button size="sm" disabled={running} onClick={() => void regenerate()} title={phone ? 'Regenerate: another version of the last reply' : 'Another version of the last reply'}>
               {phone ? <span className="px-1 text-base leading-none">↻</span> : '↻ Regenerate'}
             </Button>
@@ -509,7 +513,6 @@ export function ChatPanel() {
               <span className={cx(phone && 'px-0.5 text-base leading-none')}>🧭</span>
               {guide.trim() ? (phone ? (guidePinned ? '📌' : '') : guidePinned ? ' Guided 📌' : ' Guided') : ''}
             </Button>
-            {phone && <span className="ml-auto">{sendButton}</span>}
             {lastPrompt && !phone && (
               <button type="button" className="ml-auto text-[11px] text-slate-500 hover:text-slate-300" onClick={() => setInspect(lastPrompt)}>
                 Last prompt · {lastPrompt.lore.active.length} lore
