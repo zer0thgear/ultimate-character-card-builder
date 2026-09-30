@@ -4,9 +4,13 @@ import type { UrlCardImport } from '@/lib/extensions/types';
 
 // Characters from Chub (chub.ai, characterhub.org), as SillyTavern's
 // "Import from URL" fetches them: the project's definition from Chub's API,
-// made into a V2 card, and its picture at full size.
+// made into a V2 card, and its picture at full size. Links to Chub mirrors
+// (Cardbox) name the same characters by the same paths, and are fetched
+// from Chub the same way.
 
 const CHUB_HOSTS = ['chub.ai', 'characterhub.org'];
+/** Sites that mirror Chub's character pages at Chub's paths. */
+const CHUB_MIRRORS: Record<string, string> = { 'cardbox.moe': 'Cardbox' };
 /** Where Chub keeps pictures; the only hosts a picture is fetched from. */
 const PICTURE_HOSTS = ['chub.ai', 'characterhub.org', 'charhub.io'];
 
@@ -14,16 +18,34 @@ const onHost = (host: string, domains: string[]) => domains.some((d) => host ===
 
 export const isChubHost = (host: string) => onHost(host.toLowerCase(), CHUB_HOSTS);
 
+/** The mirror a host belongs to ("Cardbox"), if it's one. */
+const mirrorOf = (host: string) => Object.entries(CHUB_MIRRORS).find(([domain]) => onHost(host.toLowerCase(), [domain]))?.[1];
+
+/** A Chub character link (or a mirror's) as its id and where it's from. */
+export function chubLink(link: string): { id: string; source: string } | null {
+  const id = chubCharacterId(link);
+  if (!id) return null;
+  let source = 'Chub';
+  try {
+    const mirror = mirrorOf(new URL(link.trim()).hostname);
+    if (mirror) source = mirror;
+  } catch {
+    /* a bare path */
+  }
+  return { id, source };
+}
+
 /**
- * A Chub character's id ("creator/name") from a link or a bare path, as
- * SillyTavern reads them: /characters/creator/name, or creator/name. Null
- * for anything else (lorebooks included, for now).
+ * A Chub character's id ("creator/name") from a link (Chub's or a
+ * mirror's) or a bare path, as SillyTavern reads them:
+ * /characters/creator/name, or creator/name. Null for anything else
+ * (lorebooks included, for now).
  */
 export function chubCharacterId(link: string): string | null {
   let path = link.trim();
   try {
     const url = new URL(path);
-    if (!isChubHost(url.hostname)) return null;
+    if (!isChubHost(url.hostname) && !mirrorOf(url.hostname)) return null;
     path = url.pathname;
   } catch {
     /* a bare path */

@@ -1,10 +1,11 @@
 import { serverExtensions } from '@/lib/extensions/server';
-import { chubCharacter, chubCharacterId } from '@/lib/server/chub';
+import { chubCharacter, chubLink } from '@/lib/server/chub';
 import { handle, jsonBody } from '@/lib/server/http';
 import { BadRequestError } from '@/lib/server/storage';
 
 // Import from URL: a character card from a link, as SillyTavern's does.
-// Only sites UCCB knows (Chub, and any a local extension adds) are fetched;
+// Only sites UCCB knows (Chub, its Cardbox mirror, and any a local
+// extension adds) are fetched;
 // the server doesn't follow arbitrary links.
 
 export async function POST(req: Request) {
@@ -26,9 +27,13 @@ export async function POST(req: Request) {
         if (found) return reply(found);
       }
     }
-    const id = chubCharacterId(text);
-    if (id) return reply(await chubCharacter(id));
-    throw new BadRequestError('UCCB can import Chub character links (chub.ai/characters/creator/name) for now; that isn’t one.');
+    // Chub, or a mirror of it (Cardbox): fetched from Chub either way.
+    const chub = chubLink(text);
+    if (chub) {
+      const found = await chubCharacter(chub.id);
+      return reply(chub.source === 'Chub' ? found : { ...found, source: `${chub.source} (from Chub)` });
+    }
+    throw new BadRequestError('UCCB can import Chub and Cardbox character links (…/characters/creator/name) for now; that isn’t one.');
   });
 }
 

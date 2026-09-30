@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { chubCharacter, chubCharacterId } from '@/lib/server/chub';
+import { chubCharacter, chubCharacterId, chubLink } from '@/lib/server/chub';
 
 describe('Chub links', () => {
   it('reads character links and bare paths, as SillyTavern does', () => {
@@ -8,6 +8,12 @@ describe('Chub links', () => {
     expect(chubCharacterId('https://characterhub.org/characters/someone/a-knight')).toBe('someone/a-knight');
     expect(chubCharacterId('https://venus.chub.ai/characters/someone/a-knight')).toBe('someone/a-knight');
     expect(chubCharacterId('someone/a-knight')).toBe('someone/a-knight');
+  });
+
+  it("reads Cardbox's links (Chub's mirror) as the same characters", () => {
+    expect(chubLink('https://cardbox.moe/characters/kenv/serene-white-mage-97239a087c03')).toEqual({ id: 'kenv/serene-white-mage-97239a087c03', source: 'Cardbox' });
+    expect(chubLink('https://chub.ai/characters/kenv/serene-white-mage-97239a087c03')).toEqual({ id: 'kenv/serene-white-mage-97239a087c03', source: 'Chub' });
+    expect(chubLink('https://notcardbox.moe/characters/a/b')).toBeNull();
   });
 
   it('turns down other links, lorebooks and odd paths', () => {

@@ -79,7 +79,7 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
         <Button size="sm" variant="primary" className="flex-1" onClick={() => void importChatCard().then(() => onPicked?.())} title="Import a PNG, JSON or CHARX card to chat with (or drop one anywhere)">
           Import a card
         </Button>
-        <Button size="sm" onClick={() => void importFromUrl({ chatOnly: true }).then(() => onPicked?.())} title="Import from a URL (a Chub character link)" aria-label="Import from a URL">
+        <Button size="sm" onClick={() => void importFromUrl({ chatOnly: true }).then(() => onPicked?.())} title="Import from a URL (a Chub or Cardbox character link)" aria-label="Import from a URL">
           🔗
         </Button>
       </div>
@@ -150,7 +150,7 @@ export function ChatHome({ loading }: { loading: boolean }) {
           <Button variant="primary" onClick={() => void importChatCard()}>
             Import a card…
           </Button>
-          <Button onClick={() => void importFromUrl({ chatOnly: true })} title="A Chub character link">
+          <Button onClick={() => void importFromUrl({ chatOnly: true })} title="A Chub or Cardbox character link">
             🔗 Import from a URL…
           </Button>
           <Button variant="ghost" onClick={() => void switchAppMode('builder')}>

@@ -406,7 +406,7 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
         <Button size="sm" onClick={() => void importFile()} title="Import a PNG, JSON or CHARX card (or drop one anywhere)">
           Import
         </Button>
-        <Button size="sm" onClick={() => void importFromUrl().then(() => onPicked?.())} title="Import from a URL (a Chub character link)" aria-label="Import from a URL">
+        <Button size="sm" onClick={() => void importFromUrl().then(() => onPicked?.())} title="Import from a URL (a Chub or Cardbox character link)" aria-label="Import from a URL">
           🔗
         </Button>
       </div>
@@ -498,7 +498,7 @@ function CardsHome() {
             + New card
           </Button>
           <Button onClick={() => void importFile()}>Import a card…</Button>
-          <Button onClick={() => void importFromUrl()} title="A Chub character link">
+          <Button onClick={() => void importFromUrl()} title="A Chub or Cardbox character link">
             🔗 Import from a URL…
           </Button>
           <Button onClick={() => setHomeTab('library')}>📚 Browse the gen library</Button>

@@ -8,7 +8,7 @@ import { fromBase64 } from '@/lib/requestImage';
 import { textDialog } from '@/components/ui';
 import type { CardProject } from '@/types/project';
 
-// Import from URL, as SillyTavern has it: paste a Chub character link and
+// Import from URL, as SillyTavern has it: paste a Chub (or Cardbox) link and
 // the card comes in with its picture. UCCB's server fetches it (a browser
 // can't reach Chub's API itself), from the sites it knows only.
 
@@ -17,7 +17,7 @@ import type { CardProject } from '@/types/project';
 export async function importFromUrl(init: Partial<CardProject> = {}) {
   const link = await textDialog({
     title: 'Import from a URL',
-    label: 'A Chub character link, e.g. https://chub.ai/characters/creator/name',
+    label: 'A Chub or Cardbox character link, e.g. https://chub.ai/characters/creator/name',
     placeholder: 'https://chub.ai/characters/…',
     confirmLabel: 'Import',
   });
