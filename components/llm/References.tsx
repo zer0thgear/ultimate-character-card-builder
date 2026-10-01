@@ -133,12 +133,14 @@ export function ReferenceTray({ refs, onAdd, onRemove, className, label = 'Refer
             : `With pictures attached, this goes to ${visionConnectionId && seer ? `your vision model (${seer.name})` : 'the assistant model, which needs to see images'}.`}
         </p>
       )}
-      {picking && <ReferencePicker refs={refs} onAdd={onAdd} onClose={() => setPicking(false)} />}
+      {picking && <ReferencePicker refs={refs} onAdd={onAdd} onRemove={onRemove} onClose={() => setPicking(false)} />}
     </div>
   );
 }
 
-function ReferencePicker({ refs, onAdd, onClose }: { refs: Reference[]; onAdd: (r: Reference[]) => void; onClose: () => void }) {
+/** Picking references: a click attaches one, a second click on it takes it
+ *  off again. */
+function ReferencePicker({ refs, onAdd, onRemove, onClose }: { refs: Reference[]; onAdd: (r: Reference[]) => void; onRemove: (id: string) => void; onClose: () => void }) {
   const project = useProjectStore((s) => s.project);
   const summaries = useProjectStore((s) => s.summaries);
   const gens = useSessionStore((s) => s.images);
@@ -158,7 +160,7 @@ function ReferencePicker({ refs, onAdd, onClose }: { refs: Reference[]; onAdd: (
   }, [project, gens]);
 
   const addCard = async (id: string, name: string) => {
-    if (has(`card:${id}`)) return;
+    if (has(`card:${id}`)) return onRemove(`card:${id}`);
     setBusy(id);
     try {
       const p = await api.getProject(id);
@@ -170,7 +172,7 @@ function ReferencePicker({ refs, onAdd, onClose }: { refs: Reference[]; onAdd: (
     }
   };
   const addPicture = async (p: { id: string; name: string; blob: () => Promise<Blob> }) => {
-    if (has(p.id)) return;
+    if (has(p.id)) return onRemove(p.id);
     setBusy(p.id);
     try {
       onAdd([await pictureReference(await p.blob(), p.name, p.id)]);
@@ -190,7 +192,8 @@ function ReferencePicker({ refs, onAdd, onClose }: { refs: Reference[]; onAdd: (
       key={id}
       type="button"
       onClick={onClick}
-      title={name}
+      title={has(id) ? `${name} (attached: click again to take it off)` : name}
+      aria-pressed={has(id)}
       className={cx('relative flex flex-col items-center gap-1 rounded-md p-1 text-[11px] text-slate-300 hover:bg-slate-800', has(id) && 'bg-violet-500/15 ring-1 ring-violet-500/50')}
     >
       {thumb ? <img src={thumb} alt="" loading="lazy" className="aspect-square w-full rounded object-cover" /> : <span className="flex aspect-square w-full items-center justify-center rounded bg-slate-800 text-2xl">{fallback}</span>}
