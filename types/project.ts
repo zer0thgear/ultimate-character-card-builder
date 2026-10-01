@@ -18,6 +18,9 @@ export interface ProjectGen {
   furMode?: boolean;
   basePrompts: BasePrompt[];
   characters: CharacterPromptEntry[];
+  /** From before the negative prompt was shared by every card
+   *  (FormSettings.negativePrompt): no longer used, except that the first
+   *  card opened since handed its own over. */
   negativePrompt: string;
   negativeTidbits: PromptTidbit[];
 }

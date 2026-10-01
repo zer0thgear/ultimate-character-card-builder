@@ -96,8 +96,11 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       furMode: p.gen.furMode ?? false,
       basePrompts: p.gen.basePrompts.length ? p.gen.basePrompts : [{ id: 'p-default', label: 'Prompt 1', text: '', selected: true }],
       characters: p.gen.characters,
-      negativePrompt: p.gen.negativePrompt || DEFAULT_NEGATIVE,
-      negativeTidbits: p.gen.negativeTidbits,
+      // The negative is shared by every card now; the first card opened
+      // since hands over the one it had.
+      ...(useSettingsStore.getState().negativeShared
+        ? {}
+        : { negativePrompt: p.gen.negativePrompt || DEFAULT_NEGATIVE, negativeTidbits: p.gen.negativeTidbits ?? [], negativeShared: true }),
     });
     applyingGen = false;
   };
@@ -311,7 +314,8 @@ if (typeof window !== 'undefined') {
     useProjectStore.setState({
       project: {
         ...project,
-        gen: { stylePrompt: s.stylePrompt, nsfwMode: s.nsfwMode, furMode: s.furMode, basePrompts: s.basePrompts, characters: s.characters, negativePrompt: s.negativePrompt, negativeTidbits: s.negativeTidbits },
+        // (Its negative, from before negatives were shared, is kept as it was.)
+        gen: { ...project.gen, stylePrompt: s.stylePrompt, nsfwMode: s.nsfwMode, furMode: s.furMode, basePrompts: s.basePrompts, characters: s.characters },
       },
       status: 'dirty',
     });

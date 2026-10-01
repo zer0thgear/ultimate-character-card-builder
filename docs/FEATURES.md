@@ -34,7 +34,7 @@ Everything UCCB does, in detail. New to it? Start with the [tour](TOUR.md). For 
 
 ## Art
 
-The dock on the right starts on **🎨 Image**. Model, size, sampler and the other settings are global; the **prompts belong to the card**, so switching cards switches what's being drawn.
+The dock on the right starts on **🎨 Image**. Model, size, sampler, the **negative prompt** and the other settings are global (the negative is the same for every card, as on novelai.net; a character's own negative is per character); the style, scene and character **prompts belong to the card**, so switching cards switches what's being drawn.
 
 Where gens are made (NovelAI, A1111 / Forge or ComfyUI) is set in Settings → Image; see [Image backends](#image-backends) below. What follows is the full generator, as NovelAI has it; A1111 and ComfyUI get the parts that apply to them.
 

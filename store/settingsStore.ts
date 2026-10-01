@@ -16,9 +16,10 @@ import type { ImageConnection } from '@/types/imageBackend';
 
 // The image generator's settings, in the shape the request builder
 // (lib/imageRequest.ts) reads. The prompt
-// fields (base prompts, characters, negative) belong to the open card and
-// are swapped in and out with it (see store/projectStore.ts); the rest are
-// global, kept on the server so every device shares them (lib/serverSettings.ts).
+// fields (style, base prompts, characters) belong to the open card and are
+// swapped in and out with it (see store/projectStore.ts); the rest, the
+// negative prompt included, are global, kept on the server so every device
+// shares them (lib/serverSettings.ts).
 
 export interface FormSettings {
   /** Style and artist tags, in front of the prompt on every gen (the card's;
@@ -32,8 +33,13 @@ export interface FormSettings {
   transparentBg: boolean;
   qualityPreset: QualityLevel;
   ucPreset: UcLevel;
+  /** The negative prompt, the same for every card (as on novelai.net); a
+   *  card's character can have its own (CharacterPromptEntry.uc). */
   negativePrompt: string;
   negativeTidbits: PromptTidbit[];
+  /** Set once the negative became shared: until then, the first card opened
+   *  hands over its own (cards each had one before). */
+  negativeShared: boolean;
   model: NovelAIModel;
   width: number;
   height: number;
@@ -65,7 +71,7 @@ export interface FormSettings {
 }
 
 /** The fields that belong to a card rather than to the generator. */
-export const PROJECT_GEN_KEYS = ['stylePrompt', 'nsfwMode', 'furMode', 'basePrompts', 'characters', 'negativePrompt', 'negativeTidbits'] as const;
+export const PROJECT_GEN_KEYS = ['stylePrompt', 'nsfwMode', 'furMode', 'basePrompts', 'characters'] as const;
 
 interface SettingsState extends FormSettings {
   set: <K extends keyof FormSettings>(key: K, value: FormSettings[K]) => void;
@@ -86,6 +92,7 @@ export const GEN_DEFAULTS: FormSettings = {
   ucPreset: 'none',
   negativePrompt: DEFAULT_NEGATIVE,
   negativeTidbits: [],
+  negativeShared: false,
   model: 'nai-diffusion-4-5-full',
   width: 832,
   height: 1216,
