@@ -25,6 +25,8 @@ npm run dev
 
 Then open <http://localhost:3210>. On Windows you can double-click **run.bat** instead, which installs what's needed the first time and opens the browser.
 
+**UpdateAndRun.bat** does the same after updating to the latest version (`git pull`), and installs anything new the update needs. It only fast-forwards, so if you've changed files it says so and starts the copy you have; your cards and settings in `data/` are never touched. It needs a copy cloned with git (`git clone https://github.com/zer0thgear/ultimate-character-card-builder`), not a zip download.
+
 For a faster server: `npm run build` once, then `npm start`. Either way the app runs through `server.mjs`, which decides who may connect (see below). Set `PORT` to use another port.
 
 ## First run
