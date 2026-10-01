@@ -11,6 +11,30 @@ import { uuid } from '@/lib/uuid';
 
 const SAVE_DELAY_MS = 600;
 
+/**
+ * A branch of `chat` at its message `until` (an index): the messages up to
+ * and including it, each with every version (and their reasoning,
+ * continues and times), the pictures among them (still to be given files of
+ * their own), its greeting and pinned persona. A new id and name.
+ */
+export function branchOf(chat: ChatSession, until: number, id: string, now: number): ChatSession {
+  const messages = structuredClone(chat.messages.slice(0, until + 1));
+  const ids = new Set(messages.map((m) => m.id));
+  const images = (chat.images ?? []).filter((i) => i.after === null || ids.has(i.after)).map((i) => ({ ...i }));
+  // A branch of a branch is named after the chat they came from.
+  const base = chat.name.replace(/ \(branch at #\d+\)$/, '');
+  return {
+    id,
+    name: `${base} (branch at #${until + 1})`,
+    greeting: chat.greeting,
+    messages,
+    ...(chat.personaId ? { personaId: chat.personaId } : {}),
+    ...(images.length ? { images } : {}),
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 interface ChatState {
   projectId: string | null;
   list: ChatSummary[];
@@ -27,6 +51,9 @@ interface ChatState {
   /** Adds a picture to the chat, or replaces one with the same id. */
   putImage: (image: ChatImage) => void;
   removeImage: (id: string) => void;
+  /** A new chat from the open one, up to and including this message (with
+   *  every version, its pictures and its pinned persona), opened. */
+  branchFrom: (messageId: string) => Promise<void>;
   flush: () => Promise<void>;
 }
 
@@ -106,6 +133,29 @@ export const useChatStore = create<ChatState>((set, get) => {
         return { ...c, messages, ...(gone.length ? { images: c.images!.filter((i) => !gone.includes(i)) } : {}) };
       }),
     putImage: (image) => updateChat((c) => ({ ...c, images: (c.images ?? []).some((i) => i.id === image.id) ? c.images!.map((i) => (i.id === image.id ? image : i)) : [...(c.images ?? []), image] })),
+    branchFrom: async (messageId) => {
+      const { projectId, chat } = get();
+      if (!projectId || !chat) return;
+      await get().flush();
+      const until = chat.messages.findIndex((m) => m.id === messageId);
+      if (until < 0) return;
+      const branch = branchOf(chat, until, uuid(), Date.now());
+      // Pictures are filed under their chat's id (they go when it's deleted),
+      // so the branch gets copies of its own.
+      const images: ChatImage[] = [];
+      for (const img of branch.images ?? []) {
+        try {
+          const blob = await (await fetch(api.chatImageUrl(projectId, img.file))).blob();
+          const file = `${branch.id}-${uuid()}.png`;
+          await api.putChatImage(projectId, file, blob);
+          images.push({ ...img, file });
+        } catch {
+          /* a picture that can't be copied is left out */
+        }
+      }
+      const saved = await api.saveChat(projectId, { ...branch, images });
+      set((s) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: saved.messages.length }, ...s.list] }));
+    },
     removeImage: (id) =>
       updateChat((c) => {
         const image = c.images?.find((i) => i.id === id);

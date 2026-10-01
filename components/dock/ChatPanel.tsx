@@ -41,7 +41,7 @@ import { formatChat, type FormatNode } from '@/lib/chatFormat';
  *  centred column as it does with the dock filling the window. */
 export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const project = useProjectStore((s) => s.project);
-  const { chat, list, loadFor, newChat, openChat, deleteChat, rename, setGreeting, setMessages } = useChatStore();
+  const { chat, list, loadFor, newChat, openChat, deleteChat, rename, setGreeting, setMessages, branchFrom } = useChatStore();
   const { connections, chatConnectionId, setChatConnection, chatSettings, presets } = useLlmStore();
   const personas = usePersonaStore((s) => s.personas);
   const phone = useMediaQuery(PHONE_QUERY);
@@ -472,7 +472,22 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     busy={running}
                     onChange={(patch) => setMessages((ms) => ms.map((x) => (x.id === m.id ? { ...x, ...patch } : x)))}
                     onDelete={() => void deleteMessage(m)}
-                    onDeleteAfter={() => setMessages((ms) => ms.slice(0, i + 1))}
+                    onDeleteAfter={async () => {
+                      const after = chat.messages.length - (i + 1);
+                      const ok = await confirmDialog({
+                        title: `Delete the ${after === 1 ? 'message' : `${after} messages`} after this?`,
+                        body: `Everything below #${i + 1} goes, with any pictures among it. 🔀 Branch first if you'd like to keep a copy.`,
+                        confirmLabel: 'Delete',
+                        danger: true,
+                      });
+                      if (ok) setMessages((ms) => ms.slice(0, i + 1));
+                    }}
+                    onBranch={() =>
+                      void branchFrom(m.id).then(
+                        () => toast(`Branched at #${i + 1}: this is the new chat (the old one is in the chat list).`, 'success'),
+                        (err: Error) => toast(`Couldn't branch: ${err.message}`, 'error'),
+                      )
+                    }
                     onSwipeNew={() => void reply(chat.messages, m)}
                     onRerollContinue={() => void rerollContinue(m)}
                     onUndoContinue={() => undoLastContinue(m)}
@@ -765,6 +780,7 @@ function Bubble({
   onChange,
   onDelete,
   onDeleteAfter,
+  onBranch,
   onSwipeNew,
   onRerollContinue,
   onUndoContinue,
@@ -785,6 +801,8 @@ function Bubble({
   onChange: (patch: Partial<ChatMessage>) => void;
   onDelete: () => void;
   onDeleteAfter: () => void;
+  /** A new chat from here (this message and those before it). */
+  onBranch: () => void;
   onSwipeNew: () => void;
   onRerollContinue: () => void;
   onUndoContinue: () => void;
@@ -817,6 +835,9 @@ function Bubble({
             </IconButton>
             <IconButton title="Copy" onClick={() => void copyText(text)}>
               ⧉
+            </IconButton>
+            <IconButton title="Branch: a new chat from here (this message and everything before it, every version kept); this chat stays as it is" disabled={busy} onClick={onBranch}>
+              🔀
             </IconButton>
             {!isLast && (
               <IconButton title="Delete everything after this" tone="danger" disabled={busy} onClick={onDeleteAfter}>
