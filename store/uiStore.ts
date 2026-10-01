@@ -40,7 +40,8 @@ interface UiState {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
   /** One side fills the window: the card editor, or the dock (whichever
-   *  tab is open); the other side and the card list make way. Not on a
+   *  tab is open); the other side makes way (the card list stays as ☰
+   *  has it). Not on a
    *  phone, where each is a screen of its own already. */
   fullPane: 'card' | 'dock' | null;
   setFullPane: (pane: 'card' | 'dock' | null) => void;

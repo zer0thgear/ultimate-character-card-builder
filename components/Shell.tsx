@@ -131,7 +131,8 @@ export function Shell() {
           </>
         ) : (
           <>
-            {!phone && sidebarOpen && !(fullPane && project) && <ProjectSidebar />}
+            {/* ☰ shows or hides it, whether or not one side fills the window. */}
+            {!phone && sidebarOpen && <ProjectSidebar />}
             <div ref={workspace} className="flex min-w-0 flex-1">
               {project && phone ? (
                 // Both stay mounted, so a generation or a reply carries on
