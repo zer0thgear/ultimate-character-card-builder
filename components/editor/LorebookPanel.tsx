@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import type { Lorebook, LorebookEntry } from '@/types/card';
 import { useProjectStore } from '@/store/projectStore';
 import { useLlmStore } from '@/store/llmStore';
+import { useBridgeStore } from '@/store/bridgeStore';
 import { toast } from '@/store/uiStore';
 import { backfillEntryNames, entryName, hasMismatchedEntryNames, lorebookFile, newEntry, newLorebook } from '@/lib/cardSpec';
 import { importLorebookFile, cardFileName } from '@/lib/cardFile';
@@ -218,6 +219,9 @@ function Entries({ book, setBook }: { book: Lorebook; setBook: (b: Lorebook, key
 
 function EntryEditor({ index, entry: e, setEntry }: { index: number; entry: LorebookEntry; setEntry: (patch: Partial<LorebookEntry>, key?: string) => void }) {
   const [content, setContent] = useCardField(`character_book.entries.${index}.content`);
+  // Art is Builder's: Chat mode's card drawer leaves it out.
+  const writingTools = useWritingTools();
+  const requestEntryPrompt = useBridgeStore((s) => s.requestEntryPrompt);
   return (
     <div className="flex flex-col gap-3 border-t border-slate-800 p-3">
       <div className="grid gap-3 sm:grid-cols-2">
@@ -259,6 +263,15 @@ function EntryEditor({ index, entry: e, setEntry }: { index: number; entry: Lore
           <span className="text-xs text-slate-400">Content</span>
           <div className="flex items-center gap-1">
             <TokenBadge text={content} />
+            {writingTools && (
+              <IconButton
+                title="Image prompt: write a character prompt for whoever this entry describes, in the Image tab (their own slot, or a new one)"
+                disabled={!content.trim()}
+                onClick={() => requestEntryPrompt({ name: entryName(e), content })}
+              >
+                🎨
+              </IconButton>
+            )}
             <FieldActions path={`character_book.entries.${index}.content`} />
           </div>
         </div>

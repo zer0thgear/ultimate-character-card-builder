@@ -23,7 +23,7 @@ import { calculateAnlasCost, opusStatus, MAX_GENERATION_PIXELS } from '@/lib/anl
 import { hasVariety } from '@/lib/variety';
 import { blobToBase64, getImageDimensions } from '@/lib/imageUtils';
 import { eraseStealthMarks } from '@/lib/requestImage';
-import { appearanceTagsMessages, artReferenceNote, castSceneMessages, cleanTags, sceneTagsMessages, takeDatasetTags } from '@/lib/assist';
+import { appearanceTagsMessages, entryAppearanceMessages, artReferenceNote, castSceneMessages, cleanTags, sceneTagsMessages, takeDatasetTags } from '@/lib/assist';
 import { withReferences, type Reference } from '@/lib/references';
 import { ReferenceTray, referenceConnectionId } from '@/components/llm/References';
 import { create } from 'zustand';
@@ -728,6 +728,45 @@ function CharactersSection({ counts, nai }: { counts: Record<string, { prompt: n
     set('characters', m.characters);
     toast(`${members.length === 1 ? 'Character prompt' : 'Character prompts'} written from the card's description${hasArtRefs() ? ' and your references' : ''}.${castSummary(m)}${switchedOn(cast.nsfw, cast.fur)}`, 'success');
   };
+
+  /** A lorebook entry's character (🎨 on the entry): into the slot of their
+   *  name, or a new one. */
+  const entryPrompt = useBridgeStore((s) => s.entryPrompt);
+  const clearEntryPrompt = useBridgeStore((s) => s.clearEntryPrompt);
+  const fromEntry = async (entry: { name: string; content: string }) => {
+    if (!card) return;
+    const now = useSettingsStore.getState();
+    const live = now.characters.filter((c) => !c.archived);
+    const [messages, opts] = artRequest(entryAppearanceMessages(card, entry, artNote(), live.map((c) => c.label ?? '')));
+    const r = await runAssist(messages, undefined, `🎨 Character prompt (${entry.name || 'lorebook entry'})`, opts);
+    if (r.error) return toast(r.error, 'error');
+    const cast = parseCast(r.text);
+    // A reply without a CHARACTER line is the tags alone: the entry's name.
+    const member = cast.characters[0] ?? (cast.scene ? { name: entry.name || 'Character', tags: cast.scene } : null);
+    if (!member) return toast("The assistant's reply had no prompt in it (🔍 shows what it said).", 'error');
+    // Their own slot, by name (or first name); otherwise a new one. Never the
+    // card's main character's slot just because it's the only one there.
+    const after = useSettingsStore.getState();
+    const norm = (s: string | undefined) => (s ?? '').trim().toLowerCase();
+    const first = (s: string | undefined) => norm(s).split(/\s+/)[0] ?? '';
+    const slot = after.characters.find((c) => !c.archived && norm(c.label) === norm(member.name)) ?? after.characters.find((c) => !c.archived && first(c.label) && first(c.label) === first(member.name));
+    if (slot) {
+      set('characters', after.characters.map((c) => (c.id === slot.id ? { ...c, prompt: member.tags, enabled: true } : c)));
+      toast(`${slot.label || member.name}'s prompt written from the lorebook entry "${entry.name || 'unnamed'}".${switchedOn(cast.nsfw, cast.fur)}`, 'success');
+    } else if (after.characters.filter((c) => !c.archived).length >= maxCharacters(after.model)) {
+      toast(`No room for another character (this model takes ${maxCharacters(after.model)}). Remove one, then try again.`, 'error');
+    } else {
+      set('characters', [...after.characters, { id: uuid(), label: member.name, prompt: member.tags, uc: '', center: { x: 0.5, y: 0.5 }, enabled: true }]);
+      toast(`Added ${member.name}, written from the lorebook entry "${entry.name || 'unnamed'}". Switch characters on or off for each picture.${switchedOn(cast.nsfw, cast.fur)}`, 'success');
+    }
+  };
+  useEffect(() => {
+    if (entryPrompt) {
+      clearEntryPrompt();
+      void fromEntry(entryPrompt);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entryPrompt]);
 
 
   return (

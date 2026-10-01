@@ -84,3 +84,17 @@ describe('the lorebook in the card context', () => {
     expect(out).not.toContain('second');
   });
 });
+
+describe('character prompt from a lorebook entry', () => {
+  it("sends the entry's text and name, with the art system prompt", async () => {
+    const { entryAppearanceMessages } = await import('@/lib/assist');
+    const card = newCard().data;
+    card.name = 'New Eridu';
+    const [system, user] = entryAppearanceMessages(card, { name: 'Belle', content: 'Short silver hair, green eyes.' }, '', ['Wise']);
+    expect(system.role).toBe('system');
+    expect(system.content).toContain('image-generation prompts');
+    expect(user.content).toContain('<lorebook_entry name="Belle">\nShort silver hair, green eyes.');
+    expect(user.content).toContain('named: Wise');
+    expect(user.content).toContain('CHARACTER <name>: <tags>');
+  });
+});

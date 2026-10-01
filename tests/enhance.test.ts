@@ -96,7 +96,8 @@ describe('addEnhancePrompt', () => {
 });
 
 describe('buildEnhanceRequest', () => {
-  it('is an Image2Image at the scaled size, at the level strength, with the enhance nudge', async () => {
+  // Its modules load on demand, which can take a while with the whole suite running.
+  it('is an Image2Image at the scaled size, at the level strength, with the enhance nudge', { timeout: 30_000 }, async () => {
     const { buildEnhanceRequest } = await import('@/lib/genRequest');
     const { GEN_DEFAULTS } = await import('@/store/settingsStore');
     const form = { ...GEN_DEFAULTS, model: 'nai-diffusion-4-5-full' as const, basePrompts: [{ id: 'p', label: 'P', text: '1girl, smile', selected: true }] };

@@ -196,6 +196,29 @@ Also: {{instruction}}
 Reply with one line per character, in exactly this form and nothing else:
 CHARACTER <name>: <tags>`,
   },
+  {
+    key: 'entryAppearance.user',
+    group: '✨ Character prompt (art)',
+    label: 'Request (from a lorebook entry)',
+    vars: ['card', 'entry', 'name', 'names', 'instruction'],
+    note: 'For 🎨 on a lorebook entry: {{entry}} is its text, {{name}} its name. Keep the CHARACTER <name>: reply format; the line goes to the character slot of that name.',
+    text: `<card>
+{{card}}
+</card>
+
+<lorebook_entry name="{{name}}">
+{{entry}}
+</lorebook_entry>
+
+Write the character prompt for the character this lorebook entry describes, for their default look: "girl", "boy" or "other" first, then body, face, hair, eyes, notable features, then default outfit. Go by the entry; use the card only for what the entry leaves out about them. Leave out pose, expression, background and setting.
+
+The character prompts so far are named: {{names}}. If the entry is about one of them, use that name; otherwise use the character's name from the entry.
+
+Also: {{instruction}}
+
+Reply with one line, in exactly this form and nothing else:
+CHARACTER <name>: <tags>`,
+  },
   { key: 'scene.system', group: '✨ Scene prompt (art)', label: 'System prompt', vars: ['emphasis', 'datasets'], note: '{{emphasis}} and {{datasets}} are filled in for where gens are made (NovelAI, or A1111 / ComfyUI).', text: `You turn roleplay scenes into image-generation prompts. ${TAG_RULES}` },
   {
     key: 'cast.user',
@@ -490,6 +513,16 @@ export function appearanceTagsMessages(card: CardData, instruction: string, name
   return job('appearance', { ...artVars(), card: cardContext(card, undefined, 8000), names: names.filter(Boolean).join(', '), instruction: instruction.trim() });
 }
 
+/** A lorebook entry's character (a sister, a rival, a companion), as tags
+ *  for their character prompt. */
+export function entryAppearanceMessages(card: CardData, entry: { name: string; content: string }, instruction: string, names: string[] = []): LlmMessage[] {
+  return job(
+    'entryAppearance',
+    { ...artVars(), card: cardContext(card, undefined, 4000), entry: clip(entry.content.trim(), 6000), name: entry.name || 'unnamed', names: names.filter(Boolean).join(', '), instruction: instruction.trim() },
+    'appearance',
+  );
+}
+
 /** Where the cast writer puts characters, when asked to (NovelAI's grid). */
 const POSITION_RULE =
   'Also place each character on NovelAI\'s 5×5 grid, columns A to E from left to right and rows 1 to 5 from top to bottom (C3 is the centre), with a line POSITION <name>: <cell> after their CHARACTER line.';
@@ -551,6 +584,13 @@ export const ASSIST_JOBS: { label: string; build: (card: CardData) => LlmMessage
   { label: '✨ Card tags', build: (card) => cardTagsMessages(card) },
   { label: '✨ Card review', build: (card) => critiqueMessages(card) },
   { label: '✨ Character prompt (art)', build: (card) => appearanceTagsMessages(card, '') },
+  {
+    label: '🎨 Character prompt (art, from the first lorebook entry)',
+    build: (card) => {
+      const e = card.character_book?.entries[0];
+      return entryAppearanceMessages(card, { name: e?.name || e?.comment || '', content: e?.content ?? '(a lorebook entry)' }, '');
+    },
+  },
   { label: '✨ Scene prompt (art, V4+, from the first message)', build: (card) => castSceneMessages(card, card.first_mes, '', [], false) },
   { label: '✨ Scene prompt (art, V4+, placing characters)', build: (card) => castSceneMessages(card, card.first_mes, '', [], true) },
   { label: '✨ Scene prompt (art, V3, from the first message)', build: (card) => sceneTagsMessages(card, card.first_mes, '') },
