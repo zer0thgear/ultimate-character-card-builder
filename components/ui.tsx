@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { formatTokens, useTextTokens } from '@/lib/textTokens';
+import { PHONE_QUERY, useMediaQuery } from '@/hooks/useMediaQuery';
 
 // Small shared building blocks, in UCCB's slate/violet look.
 
@@ -163,8 +164,13 @@ export function NumberInput({
 }
 
 /** A textarea that grows with its content, up to `maxRows`. */
-export const AutoTextarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement> & { minRows?: number; maxRows?: number }>(
-  function AutoTextarea({ minRows = 2, maxRows = 30, className, value, ...props }, outer) {
+export const AutoTextarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement> & { minRows?: number; maxRows?: number; fullOnPhone?: boolean }>(
+  /** `fullOnPhone`: on a phone, it grows to all its text (no maxRows), so
+   *  the dialog around it is the one thing that scrolls: a text box that
+   *  scrolls inside a scrolling dialog swallows the finger's scroll there. */
+  function AutoTextarea({ minRows = 2, maxRows: maxRowsWanted = 30, fullOnPhone = false, className, value, ...props }, outer) {
+    const phone = useMediaQuery(PHONE_QUERY);
+    const maxRows = fullOnPhone && phone ? 100_000 : maxRowsWanted;
     const inner = useRef<HTMLTextAreaElement | null>(null);
     const lastWidth = useRef(0);
     const fit = useCallback(() => {

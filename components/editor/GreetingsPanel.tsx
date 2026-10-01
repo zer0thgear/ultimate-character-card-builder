@@ -287,7 +287,7 @@ function NewGreetingDialog({ onClose }: { onClose: () => void }) {
         {error && <div className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
         <CutOffNotice show={cutOff && !running} hasText={!!shown.trim()} reasoning={reasoning} onUseReasoning={() => setDraft(reasoning.trim())} onRetry={() => { setDraft(null); void retryWithMoreRoom().then((r) => setDraft(r ? r.text.trim() : null)); }} />
         <AssistReasoning runId={runId} />
-        <AutoTextarea value={shown} onChange={(e) => setDraft(e.target.value)} minRows={10} maxRows={28} placeholder="The new greeting appears here. You can edit it before adding." />
+        <AutoTextarea value={shown} onChange={(e) => setDraft(e.target.value)} minRows={10} maxRows={28} fullOnPhone placeholder="The new greeting appears here. You can edit it before adding." />
       </div>
     </Modal>
   );

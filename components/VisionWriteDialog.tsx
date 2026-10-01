@@ -241,7 +241,7 @@ function VisionWriteDialog({ blob, url }: { blob: Blob; url: string }) {
             <span>{running ? <span className="animate-pulse text-violet-300">writing…</span> : 'Result'}</span>
             {shown && <TokenBadge text={shown} />}
           </div>
-          <AutoTextarea value={shown} onChange={(e) => setDraft(e.target.value)} minRows={8} maxRows={24} placeholder="What it writes appears here. You can edit it before using it." />
+          <AutoTextarea value={shown} onChange={(e) => setDraft(e.target.value)} minRows={8} maxRows={24} fullOnPhone placeholder="What it writes appears here. You can edit it before using it." />
         </div>
       </div>
     </Modal>

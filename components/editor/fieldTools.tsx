@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { useState, createContext, useContext } from 'react';
 import { useProjectStore } from '@/store/projectStore';
+import { PHONE_QUERY, useMediaQuery } from '@/hooks/useMediaQuery';
 import { useLlmStore } from '@/store/llmStore';
 import { getPath, setPath, fieldLabel } from '@/lib/cardPath';
 import { FIELD_ACTIONS, fieldActionMessages, type FieldAction } from '@/lib/assist';
@@ -97,6 +98,7 @@ function AssistDialog({ path, onClose }: { path: string; onClose: () => void }) 
   const { runAssist, continueAssist, retryWithMoreRoom, cutOff, runId, stop, text, reasoning, running, error } = useLlmStream();
   const refs = useReferences();
   const draft = running ? text : edited;
+  const phone = useMediaQuery(PHONE_QUERY);
 
   if (!card) return null;
   const label = fieldLabel(card, path);
@@ -193,7 +195,10 @@ function AssistDialog({ path, onClose }: { path: string; onClose: () => void }) 
         <div className="grid gap-3 md:grid-cols-2">
           <div className="flex flex-col gap-1">
             <span className="text-xs text-slate-500">Current</span>
-            <div className="max-h-[50vh] min-h-24 overflow-y-auto rounded-md border border-slate-800 bg-slate-950 px-2.5 py-1.5 text-sm whitespace-pre-wrap text-slate-400">
+            {/* Its own scroll on a wide screen; full length on a phone, where
+                the dialog scrolls instead (a scroll inside a scroll eats the
+                finger's). */}
+            <div className={cx('min-h-24 rounded-md border border-slate-800 bg-slate-950 px-2.5 py-1.5 text-sm whitespace-pre-wrap text-slate-400', !phone && 'max-h-[50vh] overflow-y-auto')}>
               {current || <em>empty</em>}
             </div>
           </div>
@@ -202,7 +207,7 @@ function AssistDialog({ path, onClose }: { path: string; onClose: () => void }) 
               Suggested {running && <span className="animate-pulse text-violet-300">writing…</span>}
               {draft && <TokenBadge text={draft} />}
             </span>
-            <AutoTextarea value={draft} onChange={(e) => setDraft(e.target.value)} minRows={5} maxRows={22} placeholder="Run to get a suggestion. You can edit it before applying." />
+            <AutoTextarea value={draft} onChange={(e) => setDraft(e.target.value)} minRows={5} maxRows={22} fullOnPhone placeholder="Run to get a suggestion. You can edit it before applying." />
           </div>
         </div>
       </div>
