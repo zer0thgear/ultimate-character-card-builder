@@ -187,7 +187,7 @@ Each connection has its own max tokens, **context size**, sampler settings and s
 
 ## Layout
 
-The card editor is on the left and the dock (Image, Gallery, Library, Test chat, Brainstorm) on the right; drag the bar between them to share the width. **⤢** at the end of either side's tab bar makes that side fill the window: the other side makes way (the card list stays, and ☰ still hides or shows it), and the dock keeps whichever tab you switch to. **⤡** puts them back side by side. The other side stays loaded while it's hidden, so a gen or a reply carries on, and the choice is remembered on this device. On a phone each side is already a screen of its own.
+The card editor is on the left and the dock (Image, Gallery, Library, Test chat, Brainstorm) on the right; drag the bar between them to share the width. **⤢** at the end of either side's tab bar makes that side fill the window: the other side makes way (the card list stays, and ☰ still hides or shows it), and the dock keeps whichever tab you switch to. **⤡** puts them back side by side. So does anything that takes you to the hidden side: 🎨 Generate art, a greeting's 💬 or 🎨, or a lorebook entry's 🎨 from the editor; starting a card from a picture from the dock. The other side stays loaded while it's hidden, so a gen or a reply carries on, and the choice is remembered on this device. On a phone each side is already a screen of its own.
 
 ## On a phone
 

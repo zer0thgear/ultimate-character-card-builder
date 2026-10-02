@@ -84,9 +84,13 @@ export const useUiStore = create<UiState>()(
         set({ theme });
       },
       editorTab: 'basics',
-      setEditorTab: (editorTab) => set({ editorTab }),
+      // Going to one side while the other fills the window (🎨 Generate art
+      // or a greeting's 💬 from the editor, Set as avatar from the dock)
+      // puts the two back side by side, so it's in view. A side's own tabs
+      // keep it filling the window.
+      setEditorTab: (editorTab) => set((s) => ({ editorTab, ...(s.fullPane === 'dock' ? { fullPane: null } : {}) })),
       dockTab: 'image',
-      setDockTab: (dockTab) => set({ dockTab, phoneView: 'dock' }),
+      setDockTab: (dockTab) => set((s) => ({ dockTab, phoneView: 'dock', ...(s.fullPane === 'card' ? { fullPane: null } : {}) })),
       phoneView: 'card',
       setPhoneView: (phoneView) => set({ phoneView }),
       homeTab: 'cards',

@@ -109,7 +109,8 @@ export async function newCardFromImage(blob: Blob) {
     const { parsed } = await readNaiMetadata(blob);
     if (parsed) {
       const form = useSettingsStore.getState();
-      useSettingsStore.getState().patch(reuseFromMetadata(parsed, form, { prompt: true, characters: true, negative: true, settings: false, seed: false }));
+      // The negative is shared by every card: starting one doesn't change it.
+      useSettingsStore.getState().patch(reuseFromMetadata(parsed, form, { prompt: true, characters: true, negative: false, settings: false, seed: false }));
     }
     useUiStore.getState().setEditorTab('basics');
     useUiStore.getState().setPhoneView('card');
