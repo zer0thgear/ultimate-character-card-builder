@@ -9,7 +9,8 @@ import { ChatPanel } from '@/components/dock/ChatPanel';
 import { BasicsPanel } from '@/components/editor/BasicsPanel';
 import { GreetingsPanel } from '@/components/editor/GreetingsPanel';
 import { LorebookPanel } from '@/components/editor/LorebookPanel';
-import { PromptsPanel } from '@/components/editor/OtherPanels';
+import { CreatorPanel, PromptsPanel } from '@/components/editor/OtherPanels';
+import { SourceButton } from '@/components/CardSource';
 import { WritingToolsContext } from '@/components/editor/fieldTools';
 import { openLightbox } from '@/components/Lightbox';
 import { CardListMeta } from '@/components/CardListMeta';
@@ -220,6 +221,7 @@ export function ChatCardActions({ phone }: { phone: boolean }) {
             🛠 Open in Builder
           </Button>
         ))}
+      <SourceButton source={project.card.data.source} compact={phone} className="h-7 text-sm" />
       <Button size="sm" variant={chatCardOpen ? 'primary' : 'secondary'} onClick={() => setChatCardOpen(!chatCardOpen)} title="The card's definitions and lorebook, to read or change">
         📝{!phone && ' Card'}
       </Button>
@@ -252,7 +254,7 @@ export function ChatScreen({ phone }: { phone: boolean }) {
   );
 }
 
-type DrawerTab = 'basics' | 'greetings' | 'lorebook' | 'prompts';
+type DrawerTab = 'basics' | 'greetings' | 'lorebook' | 'prompts' | 'creator';
 
 /** The card's definitions and lorebook, editable, without the writing
  *  tools (Builder has those). Edits save to the card, with undo. */
@@ -281,6 +283,7 @@ function CardDrawer({ onClose }: { onClose: () => void }) {
             { value: 'greetings', label: 'Greetings', badge: 1 + card.alternate_greetings.length },
             { value: 'lorebook', label: 'Lorebook', badge: card.character_book?.entries.length },
             { value: 'prompts', label: 'Prompts' },
+            { value: 'creator', label: 'Creator' },
           ]}
         />
         <IconButton title="Close" onClick={onClose}>
@@ -292,6 +295,7 @@ function CardDrawer({ onClose }: { onClose: () => void }) {
         {tab === 'greetings' && <GreetingsPanel />}
         {tab === 'lorebook' && <LorebookPanel />}
         {tab === 'prompts' && <PromptsPanel />}
+        {tab === 'creator' && <CreatorPanel />}
       </div>
     </WritingToolsContext.Provider>
   );

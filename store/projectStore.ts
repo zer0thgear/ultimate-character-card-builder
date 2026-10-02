@@ -170,9 +170,15 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     addToBuilder: async (id) => {
       const open = get().project;
       if (open?.id === id) {
+        // In Builder at once (a switch to Builder straight after keeps it
+        // open), then saved as it is now.
+        set({ project: { ...open, chatOnly: false } });
+        upsertSummary({ ...open, chatOnly: false });
         await get().flush();
-        const saved = await api.saveProject({ ...open, chatOnly: false });
-        set((s) => (s.project?.id === id ? { project: { ...s.project, chatOnly: false, updatedAt: saved.updatedAt } } : {}));
+        const current = get().project;
+        if (current?.id !== id) return;
+        const saved = await api.saveProject(current);
+        set((s) => (s.project?.id === id ? { project: { ...s.project, updatedAt: saved.updatedAt } } : {}));
         upsertSummary(saved);
       } else {
         const saved = await api.saveProject({ ...(await api.getProject(id)), chatOnly: false });

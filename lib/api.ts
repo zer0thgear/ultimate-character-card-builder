@@ -53,7 +53,7 @@ export const api = {
   deleteRecentGens: (ids: string[]) => call<{ ok: true }>('/api/recent-gens', json('DELETE', { ids })),
 
   /** A character card from a link (Chub, or a site a local extension adds). */
-  importUrl: (url: string) => call<{ card: unknown; source: string; avatar?: string; avatarType?: string }>('/api/import-url', json('POST', { url })),
+  importUrl: (url: string) => call<{ card: unknown; source: string; sourceUrl?: string; avatar?: string; avatarType?: string }>('/api/import-url', json('POST', { url })),
   listChats: (id: string) => call<ChatSummary[]>(`/api/projects/${id}/chats`),
   getChat: (id: string, chatId: string) => call<ChatSession>(`/api/projects/${id}/chats/${chatId}`),
   saveChat: (id: string, chat: ChatSession) => call<ChatSession>(`/api/projects/${id}/chats/${chat.id}`, json('PUT', chat)),

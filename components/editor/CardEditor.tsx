@@ -12,6 +12,7 @@ import { CreatorPanel, NotesPanel, PromptsPanel, ToolsPanel } from '@/components
 import { openVisionWrite } from '@/components/VisionWriteDialog';
 import { ExtensionImageActions } from '@/components/ExtensionSlots';
 import { FullPaneButton } from '@/components/FullPaneButton';
+import { SourceButton } from '@/components/CardSource';
 
 export function CardEditor() {
   const { editorTab, setEditorTab, showAvatar } = useUiStore();
@@ -129,6 +130,7 @@ function AvatarStrip() {
             </button>
           )}
           {url && <ExtensionImageActions variant="chip" image={{ name: `${project.card.data.name || 'avatar'}.png`, source: 'avatar', blob: async () => (await fetch(url)).blob(), projectId: project.id }} />}
+          <SourceButton source={project.card.data.source} />
           {project.avatar && (
             <span className="self-center text-slate-500">
               {project.avatar.width}×{project.avatar.height}

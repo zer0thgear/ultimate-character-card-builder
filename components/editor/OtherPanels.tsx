@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react';
 import { useProjectStore } from '@/store/projectStore';
 import { useLlmStore } from '@/store/llmStore';
 import { toast } from '@/store/uiStore';
-import { CardTextField, useCardField } from '@/components/editor/fieldTools';
+import { CardTextField, useCardField, useWritingTools } from '@/components/editor/fieldTools';
+import { SourceList } from '@/components/CardSource';
 import { AutoTextarea, Button, ChipInput, Section, TokenBadge, Toggle, confirmDialog, cx, inputClass } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { useLlmStream } from '@/hooks/useLlmStream';
@@ -38,6 +39,8 @@ export function CreatorPanel() {
   const [version, setVersion] = useCardField('character_version');
   const { assistConnectionId, setAssistConnection } = useLlmStore();
   const { runAssist, runId, running } = useLlmStream();
+  // The ✨ tag writer is Builder's (Chat mode's card drawer shows this too).
+  const writing = useWritingTools();
   if (!card) return null;
   const suggestTags = async () => {
     const r = await runAssist(cardTagsMessages(card), undefined, '✨ Card tags');
@@ -60,20 +63,24 @@ export function CreatorPanel() {
       <Section
         title="Tags"
         actions={
-          <>
-            <AssistTraceButton runId={runId} />
-            <Button size="sm" disabled={running} onClick={() => void suggestTags()} title="Ask the assistant for tags">
-              {running ? 'Thinking…' : '✨ Suggest'}
-            </Button>
-          </>
+          writing && (
+            <>
+              <AssistTraceButton runId={runId} />
+              <Button size="sm" disabled={running} onClick={() => void suggestTags()} title="Ask the assistant for tags">
+                {running ? 'Thinking…' : '✨ Suggest'}
+              </Button>
+            </>
+          )
         }
       >
         <ChipInput values={card.tags} onChange={(tags) => updateCard((d) => ({ ...d, tags }))} placeholder="Type a tag and press Enter" />
-        <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant connection" />
+        {writing && <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant connection" />}
       </Section>
       <CardTextField path="creator_notes" label="Creator's notes" hint="Shown to people, not the model" minRows={5} />
-      <Section title="Source (V3)">
-        <ChipInput values={card.source ?? []} onChange={(source) => updateCard((d) => ({ ...d, source }))} placeholder="Where the card came from (URLs, ids)" />
+      {/* Read-only: the V3 spec leaves recording it to the app (Import from
+          URL adds the link it came from). */}
+      <Section title="Source (V3)" actions={<span className="text-[11px] text-slate-500 normal-case">recorded on import, not edited</span>}>
+        <SourceList source={card.source} />
       </Section>
       <Stats />
     </div>

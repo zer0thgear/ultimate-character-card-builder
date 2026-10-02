@@ -27,6 +27,8 @@ export async function importFromUrl(init: Partial<CardProject> = {}) {
     const found = await api.importUrl(link.trim());
     // Read like any imported card file, so it's normalised the same way.
     const { card } = await importCardFile('import.json', new TextEncoder().encode(JSON.stringify(found.card)));
+    // Where it came from goes in its source (V3), unless it's there already.
+    if (found.sourceUrl && !(card.data.source ?? []).includes(found.sourceUrl)) card.data.source = [...(card.data.source ?? []), found.sourceUrl];
     const { create, setAvatar } = useProjectStore.getState();
     await create({ ...init, card });
     if (found.avatar) await setAvatar(new Blob([fromBase64(found.avatar) as BlobPart], { type: found.avatarType ?? 'image/png' }));
