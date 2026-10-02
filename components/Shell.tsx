@@ -8,8 +8,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { usePersonaStore } from '@/store/personaStore';
 import { api } from '@/lib/api';
 import { exportCharx, exportJson, exportPng} from '@/lib/cardExport';
-import { importCardFile } from '@/lib/cardFile';
-import { Button, ConfirmHost, IconButton, confirmDialog, cx, inputClass, pickFiles } from '@/components/ui';
+import { Button, ConfirmHost, IconButton, confirmDialog, cx, inputClass } from '@/components/ui';
 import { SettingsDialog, openSettings } from '@/components/SettingsDialog';
 import { FieldToolsHost } from '@/components/editor/fieldTools';
 import { CardEditor } from '@/components/editor/CardEditor';
@@ -26,7 +25,7 @@ import { VisionWriteHost } from '@/components/VisionWriteDialog';
 import { ExtensionHosts } from '@/components/ExtensionSlots';
 import { ChatCardActions, ChatCardList, ChatHeaderAvatar, ChatHome, ChatScreen, switchAppMode } from '@/components/chatmode/ChatMode';
 import { CardListMeta } from '@/components/CardListMeta';
-import { importFromUrl } from '@/components/ImportUrl';
+import { importFromUrl, overwriteCard } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
 
 export function Shell() {
@@ -198,7 +197,7 @@ function SaveStatus() {
 
 function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
   const project = useProjectStore((s) => s.project);
-  const { past, future, undo, redo, replaceCard } = useProjectStore();
+  const { past, future, undo, redo } = useProjectStore();
   const { sidebarOpen, theme, setTheme, showAvatar, setShowAvatar, exportKeepsMetadata, exportMaxSize, exportCompression } = useUiStore();
   const imageOpts = { keepMetadata: exportKeepsMetadata, maxSize: exportMaxSize, compression: exportCompression };
   const apiKey = useSessionStore((s) => s.apiKey);
@@ -208,18 +207,8 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
   const appMode = useUiStore((s) => s.appMode);
   const chatMode = appMode === 'chat';
 
-  const overwrite = async () => {
-    const [file] = await pickFiles('.json,.png,.charx');
-    if (!file || !project) return;
-    try {
-      const { card } = await importCardFile(file.name, new Uint8Array(await file.arrayBuffer()));
-      if (!(await confirmDialog({ title: `Overwrite "${project.card.data.name || 'this card'}" with ${file.name}?`, body: 'The text is replaced; the picture, gens and chats stay. Undo brings the old text back.', confirmLabel: 'Overwrite' }))) return;
-      replaceCard(card);
-      toast('Card text replaced.', 'success');
-    } catch (err) {
-      toast((err as Error).message, 'error');
-    }
-  };
+  // From a file or a link (components/ImportUrl.tsx).
+  const overwrite = () => overwriteCard();
 
   return (
     <header className="flex h-11 flex-shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-950 px-2">
@@ -277,7 +266,7 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
                 <IconButton title={showAvatar ? 'Hide the avatar strip' : 'Show the avatar strip'} onClick={() => setShowAvatar(!showAvatar)}>
                   {showAvatar ? '▣' : '□'}
                 </IconButton>
-                <Button size="sm" variant="ghost" onClick={() => void overwrite()} title="Replace this card's text with a card or JSON file, keeping the picture">
+                <Button size="sm" variant="ghost" onClick={() => void overwrite()} title="Replace this card's text with another card's, from a file or a link (Chub, Cardbox); its picture too if you choose">
                   Overwrite…
                 </Button>
               </>
@@ -294,7 +283,7 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
                     { label: 'JSON (V3)', run: async () => exportJson(project) },
                     { label: 'CHARX', run: () => exportCharx(project, imageOpts) },
                     // The header has no room for it on a phone.
-                    ...(phone && !chatMode ? [{ label: 'Overwrite from a file…', run: overwrite }] : []),
+                    ...(phone && !chatMode ? [{ label: 'Overwrite (from a file or URL)…', run: overwrite }] : []),
                   ].map((o) => (
                     <button
                       key={o.label}

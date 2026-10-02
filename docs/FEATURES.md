@@ -8,7 +8,7 @@ Everything UCCB does, in detail. New to it? Start with the [tour](TOUR.md). For 
 - **One project per card.** The left sidebar lists them with their pictures; **+ New card**, **Import**, or drop a PNG, JSON or CHARX card anywhere to import it as a new one. Deleting moves the project to `data/trash`.
 - **Autosave.** Every change is saved to disk a moment later (Ctrl+S saves at once). The header shows Saved / Unsaved / Saving….
 - **Undo and redo** for the whole card (↶ ↷ in the header, or Ctrl+Z / Ctrl+Y when you're not typing in a box; text boxes keep their own undo). Quick typing in one field is one step; every button action (delete, promote, macro, overwrite) is its own step.
-- **Overwrite…** replaces the card's text with a card or JSON file and keeps the picture, gens and chats.
+- **Overwrite…** replaces the card's text with another card's, from a **file** (PNG, JSON, CHARX) or a **URL** (Chub or Cardbox, as Import from a URL takes them, with the link recorded in its source). Gens and chats stay, and undo brings the old text back. When the new card has a picture, you choose **Text only** (keeping this card's picture) or **Text and picture**.
 - **Export**: PNG card (V3 in `ccv3` and V2 in `chara`, so V2-only frontends like Chub still read it), JSON (V3) or CHARX. A card with no picture gets a plain placeholder. The avatar's NovelAI generation metadata is stripped unless you ask to keep it (Settings → General), including the copy NovelAI hides in the picture's alpha channel.
 - **Smaller card pictures** (Settings → General): exported cards can resize the picture to a longest edge and recompress it, losslessly or to a 256-colour palette (often a third of the size). The avatar kept in UCCB stays full quality. The export message says how big the card came out.
 - **Import** takes any number of PNG, JSON or CHARX cards at once (pick several, or drop several anywhere), each a new card, with one message for the lot and one for any that couldn't be read; the last stays open.
@@ -194,7 +194,7 @@ The card editor is on the left and the dock (Image, Gallery, Library, Test chat,
 On a narrow screen (or a phone on its side) UCCB becomes one screen at a time: a bar along the bottom switches between the **Card** and the dock's **Image**, **Gallery**, **Library**, **Chat** and **Ideas** (Brainstorm). Both stay loaded, so a generation or a reply carries on while you look at the other. Anything that opens a dock tab (🎨 or 💬 on a greeting, Img2Img, Inpaint) switches to it.
 
 - ☰ opens the card list as a drawer; picking a card or swiping it left closes it, and **⌂ Home** at its top closes the open card.
-- The header keeps what fits: undo/redo, Export (which gains **Overwrite from a file…**) and Settings; the theme switch is in Settings → General.
+- The header keeps what fits: undo/redo, Export (which gains **Overwrite (from a file or URL)…**) and Settings; the theme switch is in Settings → General.
 - Controls that otherwise show on hover (deleting a card, message actions, thumbnail actions) are always shown on a touch screen. Drag handles don't scroll the page.
 - **Hold a button to see what it does**: the help text a mouse shows on hover appears in a bubble after about half a second, and letting go doesn't press the button. Text fields keep the phone's own long press (selecting text), and in Gallery a long press still starts selecting pictures.
 - Dialogs, the Edit/Inpaint canvas included, fill the screen; text fields are 16px so iPhone Safari doesn't zoom in.
