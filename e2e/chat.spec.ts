@@ -55,3 +55,34 @@ test('text completion, hiding a message and searching the chat', async ({ page, 
   await page.getByRole('textbox', { name: 'Search this chat' }).press('Escape');
   await expect(page.getByRole('textbox', { name: 'Search this chat' })).toBeHidden();
 });
+
+test('compare a reply from two connections and keep both as swipes', async ({ page, request }) => {
+  const conn = (id: string, model: string) => ({ id, name: model, kind: 'openai', baseUrl: 'http://127.0.0.1:9/v1', apiKey: '', model, params: { max_tokens: 50 } });
+  await request.put('/api/settings/llm', { data: { state: { connections: [conn('a', 'alpha'), conn('b', 'beta')], chatConnectionId: 'a', assistConnectionId: 'a' }, version: 0 } });
+  await page.route('**/api/llm/chat', async (route) => {
+    const model = route.request().postDataJSON().connection.model;
+    await route.fulfill({ contentType: 'application/x-ndjson', body: `${JSON.stringify({ type: 'text', text: `Written by ${model}.` })}\n${JSON.stringify({ type: 'done', stopReason: 'stop' })}\n` });
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: '+ New card' }).first().click();
+  await page.getByPlaceholder('Character name').fill('Twin');
+  await page.getByRole('tab', { name: '💬 Test chat' }).click();
+  await page.getByRole('button', { name: 'Start a chat' }).click();
+  const box = page.locator('[data-chat-input]');
+  await box.fill('Hello');
+  await box.press('Enter');
+  await expect(page.getByText('Written by alpha.')).toBeVisible();
+
+  await page.getByRole('button', { name: '⚖ Compare' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByLabel('Connection B')).toHaveValue('b');
+  await dialog.getByRole('button', { name: 'Write both' }).click();
+  await expect(dialog.getByTestId('compare-A')).toHaveText('Written by alpha.');
+  await expect(dialog.getByTestId('compare-B')).toHaveText('Written by beta.');
+  await dialog.getByRole('button', { name: 'Keep both' }).click();
+  await expect(dialog).toBeHidden();
+  // The last reply now has three versions, showing the last kept.
+  await expect(page.getByText('3/3')).toBeVisible();
+  await expect(page.locator('[data-msg]').last()).toContainText('Written by beta.');
+});
