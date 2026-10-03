@@ -49,7 +49,8 @@ async function errorText(res: Response): Promise<string> {
 async function* openAiStream(req: LlmRequest, signal: AbortSignal): AsyncGenerator<LlmEvent> {
   const kind = req.connection.kind === 'novelai' ? 'novelai' : 'openai';
   const base = baseUrlFor(req);
-  const res = await fetch(`${base}/chat/completions`, {
+  const text = typeof req.prompt === 'string';
+  const res = await fetch(`${base}/${text ? 'completions' : 'chat/completions'}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -57,7 +58,7 @@ async function* openAiStream(req: LlmRequest, signal: AbortSignal): AsyncGenerat
     },
     body: JSON.stringify({
       model: req.connection.model,
-      messages: req.messages.map(toOpenAiMessage),
+      ...(text ? { prompt: req.prompt } : { messages: req.messages.map(toOpenAiMessage) }),
       stream: true,
       ...openAiParams(kind, req.connection.params, base),
     }),
@@ -111,7 +112,7 @@ async function* openAiStream(req: LlmRequest, signal: AbortSignal): AsyncGenerat
       const data = sseData(line);
       if (!data || data === '[DONE]') continue;
       let json: {
-        choices?: { delta?: { content?: string; reasoning_content?: string; reasoning?: string }; finish_reason?: string }[];
+        choices?: { delta?: { content?: string; reasoning_content?: string; reasoning?: string }; text?: string; finish_reason?: string }[];
         usage?: { prompt_tokens?: number; completion_tokens?: number };
         error?: { message?: string } | string;
       };
@@ -128,6 +129,8 @@ async function* openAiStream(req: LlmRequest, signal: AbortSignal): AsyncGenerat
       const reasoning = choice?.delta?.reasoning_content ?? choice?.delta?.reasoning;
       if (reasoning) yield { type: 'reasoning', text: reasoning };
       if (choice?.delta?.content) yield* splitThink(choice.delta.content);
+      // Text completions stream { text } instead of a delta.
+      else if (typeof choice?.text === 'string' && choice.text) yield* splitThink(choice.text);
       if (choice?.finish_reason) stopReason = choice.finish_reason;
       if (json.usage) usage = { input: json.usage.prompt_tokens, output: json.usage.completion_tokens };
     }
@@ -193,6 +196,11 @@ export function streamChat(req: LlmRequest, signal: AbortSignal): AsyncGenerator
   if (req.connection.kind === 'novelai' && hasImages(req)) {
     return (async function* (): AsyncGenerator<LlmEvent> {
       yield { type: 'error', message: "NovelAI's text models can't see images, so this wasn't sent. Pick a vision model (an OpenAI-compatible or Claude connection) for it." };
+    })();
+  }
+  if (req.connection.kind === 'anthropic' && typeof req.prompt === 'string') {
+    return (async function* (): AsyncGenerator<LlmEvent> {
+      yield { type: 'error', message: "Claude has no text completion; turn it off for this connection, or use an OpenAI-compatible one." };
     })();
   }
   return req.connection.kind === 'anthropic' ? anthropicStream(req, signal) : openAiStream(req, signal);

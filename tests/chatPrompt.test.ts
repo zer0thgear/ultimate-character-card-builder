@@ -111,3 +111,15 @@ describe('chatGreeting', () => {
     expect(chatGreeting(card, { greeting: -1, greetingEdits: { [-1]: 'x' } })).toBe('');
   });
 });
+
+describe('hidden messages', () => {
+  const settings = { ...DEFAULT_CHAT_SETTINGS, userName: 'Bob', persona: '' };
+  it('are left out of the prompt and the lorebook scan', () => {
+    const history = [newMessage('user', 'Nice sword.'), newMessage('assistant', 'Thanks.'), newMessage('user', 'Bye.')];
+    history[0].hidden = true;
+    const { parts, lore } = buildChatPrompt(card(), history, settings);
+    expect(parts.map((p) => p.content)).not.toContain('Nice sword.');
+    expect(parts.map((p) => p.content)).toContain('Bye.');
+    expect(lore.active).toHaveLength(0);
+  });
+});

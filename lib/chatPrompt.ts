@@ -172,6 +172,10 @@ export interface BuiltPrompt {
   prefill?: string;
   /** Oldest chat messages left out to fit the context size. */
   droppedHistory: number;
+  /** Text completion: the whole prompt as one string, and the strings
+   *  that end the reply (lib/textCompletion.ts). */
+  text?: string;
+  stop?: string[];
   /** What it goes to the model with (the chat fills this in, for the
    *  prompt inspector). */
   sentWith?: SentWith;
@@ -185,6 +189,10 @@ export interface SentWith {
   params: { key: string; value: string; fromPreset: boolean }[];
   presetName?: string;
 }
+
+/** The chat as the prompt sees it: hidden messages left out, and the last
+ *  one too when it's being continued (it's the prefill, not history). */
+export const promptHistory = (history: ChatMessage[], dropLast = false) => (dropLast ? history.slice(0, -1) : history).filter((m) => !m.hidden);
 
 /** A message's current text. */
 export const messageText = (m: ChatMessage) => m.swipes[m.swipe] ?? '';
@@ -362,7 +370,7 @@ export function fitHistory(chat: ChatMessage[], toParts: (kept: ChatMessage[]) =
 export function buildChatPrompt(card: CardData, history: ChatMessage[], settings: ChatPromptSettings, opts: BuildOptions = {}): BuiltPrompt {
   const mode = opts.mode ?? 'reply';
   // Continuing: the reply being continued is the prefill, not history.
-  const chat = mode === 'continue' ? history.slice(0, -1) : history;
+  const chat = promptHistory(history, mode === 'continue');
   const { x, lx, rx, char, user, texts, setFields } = macroExpander(card, chat, settings, opts);
 
   const parts: PromptPart[] = [];

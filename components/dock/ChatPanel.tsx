@@ -1,14 +1,16 @@
 'use client';
 
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { chatMatches, splitMatches } from '@/lib/chatSearch';
 import { useProjectStore } from '@/store/projectStore';
 import { useChatStore } from '@/store/chatStore';
-import { useLlmStore } from '@/store/llmStore';
+import { textTemplates, useLlmStore } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
 import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, withoutSwipe, buildChatPrompt, displayText, shownText, chatGreeting, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
 import { buildPresetPrompt } from '@/lib/presetPrompt';
+import { buildTextPrompt } from '@/lib/textCompletion';
 import { presetParams, type ChatPreset } from '@/lib/stPreset';
 import type { LlmConnection, SamplerParams } from '@/types/llm';
 import { describeEntry } from '@/lib/lorebookScan';
@@ -78,6 +80,9 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   // 📜 The chat's summary.
   const summarizer = useChatSummary();
   const [showSummary, setShowSummary] = useState(false);
+  // Search in this chat: the words (null: closed), and which match is shown.
+  const [search, setSearch] = useState<string | null>(null);
+  const [hit, setHit] = useState(0);
   const scroller = useRef<HTMLDivElement>(null);
   // Following the chat's end: true while you're at the bottom. Scrolling up
   // stops it, and so does a reply growing past the top of the view.
@@ -141,6 +146,26 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const card = project.card.data;
   const greetingCount = 1 + card.alternate_greetings.length;
 
+  const matches = search && chat ? chatMatches([{ id: 'greeting', text: chatGreeting(card, chat) }, ...chat.messages.map((m) => ({ id: m.id, text: messageText(m) }))], search) : [];
+  const current = matches.length ? matches[Math.min(hit, matches.length - 1)] : null;
+  /** Shows match `i` (wrapping around), scrolled to the middle. */
+  const showMatch = (i: number, list = matches) => {
+    if (!list.length) return;
+    const n = (i + list.length) % list.length;
+    setHit(n);
+    follow.current = false;
+    setFollowing(false);
+    requestAnimationFrame(() => scroller.current?.querySelector(`[data-msg="${list[n]}"]`)?.scrollIntoView({ block: 'center' }));
+  };
+  const searchFor = (q: string) => {
+    setSearch(q);
+    // The newest match first: you're usually looking for something recent.
+    const list = chat ? chatMatches([{ id: 'greeting', text: chatGreeting(card, chat) }, ...chat.messages.map((m) => ({ id: m.id, text: messageText(m) }))], q) : [];
+    if (list.length) showMatch(list.length - 1, list);
+    else setHit(0);
+  };
+  const ring = (id: string) => (current === id ? 'rounded-lg ring-2 ring-amber-400/80' : '');
+
   /** The pictures drawn after a message (null: after the greeting), and one
    *  on its way there. */
   const picturesAfter = (after: string | null) => {
@@ -188,7 +213,10 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const build = (messages: ChatMessage[], opts: BuildOptions = {}): BuiltPrompt => {
     const summary = summaryInjection(useChatStore.getState().chat?.summary, summarySettings(chatSettings.summary));
     const full = { model: connection?.model, kind: connection?.kind, maxTokens: overrides.max_tokens ?? connection?.params.max_tokens, maxContext: connection?.params.max_context, summary, authorsNote: chat?.authorsNote, ...opts };
-    const built = preset ? buildPresetPrompt(card, history(messages), settings, preset, full) : buildChatPrompt(card, history(messages), settings, full);
+    // A text-completion connection lays the prompt out in its instruct
+    // template; a chat-completion preset's prompts don't apply to it.
+    const text = textTemplates(connection);
+    const built = text ? buildTextPrompt(card, history(messages), settings, text.instruct, text.context, full) : preset ? buildPresetPrompt(card, history(messages), settings, preset, full) : buildChatPrompt(card, history(messages), settings, full);
     return connection ? { ...built, sentWith: sentWith(connection, overrides, preset) } : built;
   };
 
@@ -198,7 +226,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const complete = (built: BuiltPrompt, onText: (full: string) => void) => {
     setLastPrompt(built);
     const messages = built.prefill !== undefined ? [...built.messages, { role: 'assistant' as const, content: built.prefill }] : built.messages;
-    return run(connection, messages, onText, { prefill: built.prefill !== undefined, params: overrides });
+    return run(connection, messages, onText, { prefill: built.prefill !== undefined, params: overrides, text: built.text !== undefined ? { prompt: built.text, stop: built.stop ?? [] } : undefined });
   };
 
   /**
@@ -370,7 +398,16 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div
+      className="flex h-full min-h-0 flex-col"
+      onKeyDown={(e) => {
+        // Ctrl+F inside the chat searches it rather than the page.
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && chat) {
+          e.preventDefault();
+          setSearch((q) => q ?? '');
+        }
+      }}
+    >
       {/* On a phone: one row (the chats, ⋯ for the rest, ⚙ for who and how),
           gone while you type. */}
       {!(phone && keyboard) && (
@@ -405,6 +442,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     { label: '⬆ Import a chat…', hint: 'A chat saved by SillyTavern or exported from Chub (.jsonl), as a new chat with this card', run: () => void importChatFile() },
                     ...(phone
                       ? [
+                          { label: '🔎 Search this chat', hint: '', run: () => setSearch('') },
                           { label: '📜 Summary', hint: "The chat's summary, sent with every prompt", run: () => setShowSummary(!showSummary) },
                           { label: '🔍 The next prompt', hint: 'What the next reply would send', run: preview },
                           ...(lastPrompt ? [{ label: `🔍 The last prompt · ${lastPrompt.lore.active.length} lore`, hint: 'What the last reply sent', run: () => setInspect(lastPrompt) }] : []),
@@ -427,6 +465,11 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     </button>
                   ))}
                 </div>
+              )}
+              {!phone && (
+                <IconButton title="Search this chat (Ctrl+F)" onClick={() => setSearch(search === null ? '' : null)}>
+                  🔎
+                </IconButton>
               )}
               {!phone && (
                 <IconButton title="Delete this chat" tone="danger" onClick={deleteThisChat}>
@@ -476,7 +519,40 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
       {showSummary && chat && !(phone && keyboard) && <ChatSummaryPanel summarizer={summarizer} request={summaryRequest} onClose={() => setShowSummary(false)} />}
       {!showSettings && !phone && <ConnectionPicker value={chatConnectionId} onChange={setChatConnection} label="Connection" className="flex-shrink-0 border-b border-slate-800 px-2 py-1.5" />}
 
+      {search !== null && chat && (
+        <div className="flex flex-shrink-0 items-center gap-1.5 border-b border-slate-800 px-2 py-1.5">
+          <input
+            autoFocus
+            value={search}
+            onChange={(e) => searchFor(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                showMatch(hit + (e.shiftKey ? 1 : -1));
+              } else if (e.key === 'Escape') {
+                e.stopPropagation();
+                setSearch(null);
+              }
+            }}
+            placeholder="Search this chat…"
+            aria-label="Search this chat"
+            className={cx(inputClass, 'min-w-0 flex-1 py-1 text-sm')}
+          />
+          <span className="flex-shrink-0 text-xs text-slate-400 tabular-nums">{search.trim() ? (matches.length ? `${Math.min(hit, matches.length - 1) + 1} of ${matches.length}` : 'none') : ''}</span>
+          <IconButton title="Earlier match (Enter)" disabled={!matches.length} onClick={() => showMatch(hit - 1)}>
+            ‹
+          </IconButton>
+          <IconButton title="Later match (Shift+Enter)" disabled={!matches.length} onClick={() => showMatch(hit + 1)}>
+            ›
+          </IconButton>
+          <IconButton title="Close (Esc)" onClick={() => setSearch(null)}>
+            ✕
+          </IconButton>
+        </div>
+      )}
+
       <div className="relative min-h-0 flex-1">
+        <SearchQuery.Provider value={search ?? ''}>
         <div ref={scroller} onScroll={onScroll} className="relative h-full overflow-y-auto px-3 py-3">
           {!chat ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-slate-500">
@@ -492,6 +568,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
             </div>
           ) : (
             <div className={cx('flex flex-col gap-3', column.className)} style={column.style}>
+              <div data-msg="greeting" className={ring('greeting')}>
               <GreetingBubble
                 card={card}
                 index={chat.greeting}
@@ -507,9 +584,11 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                 depth={chat.messages.length}
                 regex={chatSettings.useCardRegex !== false}
               />
+              </div>
               {picturesAfter(null)}
               {chat.messages.map((m, i) => (
                 <div key={m.id} data-msg={m.id} className="flex flex-col gap-3">
+                  <div className={ring(m.id)}>
                   <Bubble
                     card={card}
                     message={m}
@@ -546,6 +625,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     onUndoContinue={() => undoLastContinue(m)}
                     onShowTree={() => setTreeFor(m.id)}
                   />
+                  </div>
                   {picturesAfter(m.id)}
                 </div>
               ))}
@@ -553,6 +633,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
             </div>
           )}
         </div>
+        </SearchQuery.Provider>
         {chat && !following && (
           <button
             type="button"
@@ -689,10 +770,31 @@ function Formatted({ text }: { text: string }) {
   return <div className="chat-text text-sm leading-relaxed whitespace-pre-wrap text-slate-200">{renderNodes(nodes)}</div>;
 }
 
+/** The chat's search words, to mark in the messages. */
+const SearchQuery = createContext('');
+
+function Marked({ text }: { text: string }) {
+  const q = useContext(SearchQuery);
+  if (!q.trim()) return <>{text}</>;
+  return (
+    <>
+      {splitMatches(text, q).map((p, i) =>
+        p.hit ? (
+          <mark key={i} className="rounded-sm bg-amber-400/40 text-inherit">
+            {p.text}
+          </mark>
+        ) : (
+          <Fragment key={i}>{p.text}</Fragment>
+        ),
+      )}
+    </>
+  );
+}
+
 function renderNodes(nodes: FormatNode[]): React.ReactNode {
   return nodes.map((n, i) =>
     typeof n === 'string' ? (
-      <Fragment key={i}>{n}</Fragment>
+      <Marked key={i} text={n} />
     ) : n.kind === 'em' ? (
       <em key={i}>{renderNodes(n.children)}</em>
     ) : n.kind === 'strong' ? (
@@ -1014,9 +1116,14 @@ function Bubble({
   return (
     <div ref={box} className={cx('group flex gap-2', isUser && 'flex-row-reverse')}>
       <Avatar role={m.role} persona={persona} />
-      <div className={cx('min-w-0 flex-1 rounded-lg px-3 py-2', isUser ? 'bg-sky-500/10' : 'bg-slate-900')} {...swipe.props} style={swipe.style}>
+      <div className={cx('min-w-0 flex-1 rounded-lg px-3 py-2', isUser ? 'bg-sky-500/10' : 'bg-slate-900', m.hidden && 'border border-dashed border-slate-700 opacity-60')} {...swipe.props} style={swipe.style}>
         <div className={cx('mb-1 flex items-center gap-2 text-xs', isUser && 'flex-row-reverse')}>
           <span className="font-semibold text-slate-200">{isUser ? userName || 'User' : card.nickname || card.name || 'Character'}</span>
+          {m.hidden && (
+            <button type="button" className="rounded bg-slate-700/60 px-1.5 text-[10px] text-slate-300 hover:bg-slate-600" title="Left out of the prompt: the model doesn't see it. Click to put it back." onClick={() => onChange({ hidden: undefined })}>
+              🙈 hidden
+            </button>
+          )}
           {m.model && !isUser && <span className="truncate text-slate-600">{m.model}</span>}
           <span className={cx('flex items-center gap-0.5 opacity-0 group-hover:opacity-100 touch:opacity-100', isUser ? 'mr-auto' : 'ml-auto')}>
             <span className="mr-1 text-[10px] text-slate-600">{formatTokens(tokens)} tok</span>
@@ -1025,6 +1132,9 @@ function Bubble({
             </IconButton>
             <IconButton title="Copy" onClick={() => void copyText(text)}>
               ⧉
+            </IconButton>
+            <IconButton title={m.hidden ? 'Show it to the model again' : "Hide from the prompt: it stays in the chat, but the model doesn't see it"} disabled={busy} onClick={() => onChange({ hidden: m.hidden ? undefined : true })}>
+              {m.hidden ? '👁' : '🙈'}
             </IconButton>
             <IconButton title="Branch: a new chat from here (this message and everything before it, every version kept); this chat stays as it is" disabled={busy} onClick={onBranch}>
               🔀
@@ -1295,11 +1405,26 @@ function sentWith(connection: LlmConnection, overrides: Partial<SamplerParams>, 
 }
 
 function PromptInspector({ prompt, onClose }: { prompt: BuiltPrompt; onClose: () => void }) {
-  const all = useMemo(() => prompt.parts.map((p) => p.content).join('\n\n'), [prompt]);
+  const all = useMemo(() => prompt.text ?? prompt.parts.map((p) => p.content).join('\n\n'), [prompt]);
   const total = useTextTokens(all, 0);
+  const [asText, setAsText] = useState(false);
   return (
-    <Modal open onClose={onClose} title={`Prompt · ~${formatTokens(total)} tokens`} size="lg" footer={<Button onClick={() => void copyText(JSON.stringify(prompt.messages, null, 2))}>Copy as JSON</Button>}>
+    <Modal
+      open
+      onClose={onClose}
+      title={`Prompt · ~${formatTokens(total)} tokens`}
+      size="lg"
+      footer={prompt.text !== undefined ? <Button onClick={() => void copyText(prompt.text ?? '')}>Copy the text</Button> : <Button onClick={() => void copyText(JSON.stringify(prompt.messages, null, 2))}>Copy as JSON</Button>}
+    >
       <div className="flex flex-col gap-3">
+        {prompt.text !== undefined && (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+            Sent as one text prompt in the connection&apos;s instruct template.
+            <Toggle checked={asText} onChange={setAsText} label="Show it as sent" />
+            {!!prompt.stop?.length && <span className="text-slate-500">Stops at: {prompt.stop.map((s) => JSON.stringify(s)).join(', ')}</span>}
+          </div>
+        )}
+        {asText && prompt.text !== undefined && <pre className="max-h-[60vh] overflow-y-auto rounded-md border border-slate-800 p-2.5 font-mono text-[11px] whitespace-pre-wrap text-slate-300">{prompt.text}</pre>}
         {(prompt.prefill !== undefined || prompt.droppedHistory > 0) && (
           <div className="text-xs text-amber-300">
             {prompt.droppedHistory > 0 && <div>{prompt.droppedHistory} oldest messages left out to fit the preset&apos;s context size.</div>}
@@ -1324,7 +1449,7 @@ function PromptInspector({ prompt, onClose }: { prompt: BuiltPrompt; onClose: ()
           {prompt.lore.dropped.length > 0 && <span className="text-amber-300"> · over budget: {prompt.lore.dropped.map(describeEntry).join(', ')}</span>}
           {!!prompt.lore.skipped?.length && <span className="text-slate-500"> · left out: {prompt.lore.skipped.map((a) => `${describeEntry(a)} (${a.reason})`).join(', ')}</span>}
         </div>
-        {prompt.parts.map((p, i) => (
+        {!asText && prompt.parts.map((p, i) => (
           <div key={i} className="rounded-md border border-slate-800">
             <div className="flex items-center gap-2 border-b border-slate-800 px-2.5 py-1 text-xs">
               <span className={cx('rounded px-1.5 text-[10px] uppercase', p.role === 'system' ? 'bg-violet-500/15 text-violet-300' : p.role === 'user' ? 'bg-sky-500/15 text-sky-300' : 'bg-emerald-500/15 text-emerald-300')}>{p.role}</span>

@@ -22,7 +22,7 @@ export interface MacroContext {
   /** What {{original}} stands for in the field being expanded. */
   original?: string;
   /** Card and persona fields for {{description}} and friends. */
-  fields?: Partial<Record<'description' | 'personality' | 'scenario' | 'persona' | 'mesExamples' | 'wiBefore' | 'wiAfter', string>>;
+  fields?: Partial<Record<'description' | 'personality' | 'scenario' | 'persona' | 'mesExamples' | 'wiBefore' | 'wiAfter' | 'system', string>>;
   /** The chat so far, for {{lastUserMessage}} and friends. */
   chat?: { last?: string; lastUser?: string; lastChar?: string };
   model?: string;
@@ -80,6 +80,7 @@ export function expandMacros(text: string, ctx: MacroContext): string {
       case 'personality':
       case 'scenario':
       case 'persona':
+      case 'system':
         return ctx.fields?.[n] ?? '';
       case 'mesexamples':
       case 'mesexamplesraw':

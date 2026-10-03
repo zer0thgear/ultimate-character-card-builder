@@ -11,6 +11,7 @@ import { serverStorage } from '@/lib/serverSettings';
 import { uuid } from '@/lib/uuid';
 import { setTemplateOverrides } from '@/lib/assist';
 import type { PriceUnit } from '@/lib/modelPricing';
+import { BUILTIN_CONTEXT, BUILTIN_INSTRUCT, type ContextTemplate, type InstructTemplate } from '@/lib/textCompletion';
 
 // LLM connections (keys included, on the server like the NovelAI key),
 // which one the test chat and the writing assistant each use, and the
@@ -64,6 +65,12 @@ interface LlmState {
   addPreset: (p: ChatPreset) => void;
   updatePreset: (id: string, patch: Partial<ChatPreset>) => void;
   removePreset: (id: string) => void;
+  /** Imported SillyTavern instruct and context templates (text completion). */
+  instructTemplates: InstructTemplate[];
+  contextTemplates: ContextTemplate[];
+  /** Adds what a file held. */
+  addTemplates: (t: { instruct?: InstructTemplate; context?: ContextTemplate }) => void;
+  removeTemplate: (kind: 'instruct' | 'context', id: string) => void;
   addConnection: (kind: ProviderKind) => LlmConnection;
   updateConnection: (id: string, patch: Partial<LlmConnection>) => void;
   removeConnection: (id: string) => void;
@@ -90,6 +97,22 @@ export const useLlmStore = create<LlmState>()(
           chatSettings: s.chatSettings.presetId === id ? { ...s.chatSettings, presetId: null } : s.chatSettings,
           assistSettings: s.assistSettings.presetId === id ? { ...s.assistSettings, presetId: null } : s.assistSettings,
         })),
+      instructTemplates: [],
+      contextTemplates: [],
+      addTemplates: (t) =>
+        set((s) => ({
+          instructTemplates: t.instruct ? [...s.instructTemplates, t.instruct] : s.instructTemplates,
+          contextTemplates: t.context ? [...s.contextTemplates, t.context] : s.contextTemplates,
+        })),
+      removeTemplate: (kind, id) =>
+        set((s) => {
+          const key = kind === 'instruct' ? 'instructId' : 'contextId';
+          return {
+            instructTemplates: kind === 'instruct' ? s.instructTemplates.filter((x) => x.id !== id) : s.instructTemplates,
+            contextTemplates: kind === 'context' ? s.contextTemplates.filter((x) => x.id !== id) : s.contextTemplates,
+            connections: s.connections.map((c) => (c[key] === id ? { ...c, [key]: undefined } : c)),
+          };
+        }),
       addConnection: (kind) => {
         const c = newConnection(kind);
         set((s) => ({
@@ -153,3 +176,17 @@ export function requestConnection(c: LlmConnection) {
 }
 
 export const connectionById = (id: string | null) => useLlmStore.getState().connections.find((c) => c.id === id) ?? null;
+
+/** Every instruct / context template there is: the built-in ones, then yours. */
+export const allInstruct = (s: Pick<LlmState, 'instructTemplates'> = useLlmStore.getState()) => [...BUILTIN_INSTRUCT, ...s.instructTemplates];
+export const allContext = (s: Pick<LlmState, 'contextTemplates'> = useLlmStore.getState()) => [...BUILTIN_CONTEXT, ...s.contextTemplates];
+
+/** The templates a text-completion connection lays its prompt out with
+ *  (ChatML and Default when it hasn't picked, or its pick was deleted);
+ *  null when it sends chat messages. */
+export function textTemplates(c: LlmConnection | null, s: Pick<LlmState, 'instructTemplates' | 'contextTemplates'> = useLlmStore.getState()): { instruct: InstructTemplate; context: ContextTemplate } | null {
+  if (!c?.textCompletion || c.kind === 'anthropic') return null;
+  const instruct = allInstruct(s).find((t) => t.id === c.instructId) ?? BUILTIN_INSTRUCT[0];
+  const context = allContext(s).find((t) => t.id === c.contextId) ?? BUILTIN_CONTEXT[0];
+  return { instruct, context };
+}
