@@ -111,7 +111,7 @@ export interface ComfySlots {
 }
 
 const SAMPLER_TYPES = ['KSampler', 'KSamplerAdvanced', 'SamplerCustom', 'SamplerCustomAdvanced'];
-const PLACEHOLDER = /^%(prompt|negative|seed|steps|cfg|width|height|sampler|scheduler|checkpoint)%$/;
+const PLACEHOLDER = /^%(prompt|negative|seed|steps|cfg|width|height|sampler|scheduler|checkpoint|image|denoise)%$/;
 const isLink = (v: unknown): v is [string, number] => Array.isArray(v) && v.length === 2 && typeof v[0] === 'string';
 
 /** The text nodes feeding a conditioning input, through any combiners. */
@@ -167,9 +167,48 @@ export function describeSlots(slots: ComfySlots): string[] {
   return found;
 }
 
-/** A copy of the workflow with this gen's settings put in. */
-export function fillComfyWorkflow(wf: ComfyWorkflow, r: BackendGenRequest): ComfyWorkflow {
+/**
+ * Img2Img in a workflow: the base (`image`, already uploaded to ComfyUI's
+ * input folder) goes into its Load Image node, or, for a txt2img workflow
+ * (the built-in one included), into nodes added to load it, scale it to the
+ * gen's size and encode it as the sampler's latent; the sampler's denoise
+ * is how much to change it. A workflow with %image% is left to fill.
+ */
+function withBaseImage(out: ComfyWorkflow, image: string, strength: number, width: number, height: number) {
+  const slots = findComfySlots(out);
+  const setDenoise = () => {
+    const s = slots.sampler ? out[slots.sampler] : undefined;
+    if (s && 'denoise' in s.inputs && !isLink(s.inputs.denoise)) s.inputs.denoise = strength;
+    // SamplerCustom(Advanced): the scheduler node holds it.
+    for (const n of Object.values(out)) if (/Scheduler$/.test(n.class_type) && 'denoise' in n.inputs && !isLink(n.inputs.denoise)) n.inputs.denoise = strength;
+  };
+  if (slots.placeholders.some((p) => p.name === 'image')) return;
+  const loader = Object.keys(out).find((id) => out[id].class_type === 'LoadImage');
+  if (loader) {
+    out[loader].inputs.image = image;
+    setDenoise();
+    return;
+  }
+  const sampler = slots.sampler ? out[slots.sampler] : undefined;
+  if (!sampler || !('latent_image' in sampler.inputs)) throw new Error('This workflow has no sampler with a latent to start from, so it can’t take a base image. Add a Load Image node to it, or use %image%.');
+  // The VAE: the one the decoder uses, else the checkpoint's.
+  const decoder = Object.values(out).find((n) => n.class_type === 'VAEDecode' && isLink(n.inputs.vae));
+  const vae = decoder ? decoder.inputs.vae : slots.checkpoint ? [slots.checkpoint, 2] : null;
+  if (!vae) throw new Error('This workflow has no VAE to encode the base image with. Add a Load Image node to it, or use %image%.');
+  out.uccb_base = { class_type: 'LoadImage', inputs: { image }, _meta: { title: 'Base image (UCCB)' } };
+  out.uccb_scale = { class_type: 'ImageScale', inputs: { image: ['uccb_base', 0], upscale_method: 'lanczos', width, height, crop: 'center' } };
+  out.uccb_encode = { class_type: 'VAEEncode', inputs: { pixels: ['uccb_scale', 0], vae } };
+  sampler.inputs.latent_image = ['uccb_encode', 0];
+  // The empty latent it started from feeds nothing now.
+  if (slots.latent && !Object.values(out).some((n) => Object.values(n.inputs).some((v) => isLink(v) && v[0] === slots.latent))) delete out[slots.latent];
+  setDenoise();
+}
+
+/** A copy of the workflow with this gen's settings put in; `image` is the
+ *  Img2Img base's name in ComfyUI's input folder, once uploaded. */
+export function fillComfyWorkflow(wf: ComfyWorkflow, r: BackendGenRequest, image?: string): ComfyWorkflow {
   const out: ComfyWorkflow = JSON.parse(JSON.stringify(wf));
+  if (r.init && image) withBaseImage(out, image, r.init.strength, r.width, r.height);
   const slots = findComfySlots(out);
   const set = (id: string | undefined, input: string, value: unknown) => {
     if (id && out[id] && input in out[id].inputs && !isLink(out[id].inputs[input])) out[id].inputs[input] = value;
@@ -191,7 +230,7 @@ export function fillComfyWorkflow(wf: ComfyWorkflow, r: BackendGenRequest): Comf
     set(slots.latent, 'batch_size', 1);
   }
   if (r.checkpoint) set(slots.checkpoint, 'ckpt_name', r.checkpoint);
-  const values: Record<string, unknown> = { prompt: r.prompt, negative: r.negative, seed: r.seed, steps: r.steps, cfg: r.cfg, width: r.width, height: r.height, sampler: r.sampler, scheduler: r.scheduler, checkpoint: r.checkpoint };
+  const values: Record<string, unknown> = { prompt: r.prompt, negative: r.negative, seed: r.seed, steps: r.steps, cfg: r.cfg, width: r.width, height: r.height, sampler: r.sampler, scheduler: r.scheduler, checkpoint: r.checkpoint, image: r.init ? image : undefined, denoise: r.init ? r.init.strength : 1 };
   // Blank ones (no sampler picked, say) stay, for unfilledPlaceholders.
   for (const p of slots.placeholders) if (values[p.name] !== '' && values[p.name] !== undefined) out[p.node].inputs[p.input] = values[p.name];
   return out;

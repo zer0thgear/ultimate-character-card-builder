@@ -104,3 +104,48 @@ describe('ComfyUI placeholders with nothing to fill', () => {
     expect(unfilledPlaceholders(out)).toEqual(['sampler']);
   });
 });
+
+describe('ComfyUI Img2Img', () => {
+  const init = { image: 'AAAA', strength: 0.55 };
+
+  it('loads, scales and encodes the base in the built-in workflow', () => {
+    const wf = fillComfyWorkflow(builtInWorkflow(), { ...req, checkpoint: 'm.safetensors', init }, 'base.png');
+    expect(wf.uccb_base.inputs.image).toBe('base.png');
+    expect(wf.uccb_scale.inputs).toMatchObject({ image: ['uccb_base', 0], width: 896, height: 1152 });
+    expect(wf.uccb_encode.inputs).toMatchObject({ pixels: ['uccb_scale', 0], vae: ['4', 2] });
+    expect(wf['3'].inputs).toMatchObject({ latent_image: ['uccb_encode', 0], denoise: 0.55, seed: 42 });
+    expect(wf['5']).toBeUndefined();
+  });
+
+  it("uses a workflow's own Load Image node", () => {
+    const own: ComfyWorkflow = {
+      ...builtInWorkflow(),
+      '10': { class_type: 'LoadImage', inputs: { image: 'example.png' } },
+      '11': { class_type: 'VAEEncode', inputs: { pixels: ['10', 0], vae: ['4', 2] } },
+    };
+    own['3'].inputs.latent_image = ['11', 0];
+    const wf = fillComfyWorkflow(own, { ...req, init }, 'base.png');
+    expect(wf['10'].inputs.image).toBe('base.png');
+    expect(wf['3'].inputs.denoise).toBe(0.55);
+    expect(wf.uccb_base).toBeUndefined();
+  });
+
+  it('fills %image% and %denoise%, and leaves txt2img alone', () => {
+    const own: ComfyWorkflow = {
+      ...builtInWorkflow(),
+      '10': { class_type: 'LoadImage', inputs: { image: '%image%' } },
+      '12': { class_type: 'Custom', inputs: { strength: '%denoise%' } },
+    };
+    const wf = fillComfyWorkflow(own, { ...req, init }, 'base.png');
+    expect(wf['10'].inputs.image).toBe('base.png');
+    expect(wf['12'].inputs.strength).toBe(0.55);
+    const t2i = fillComfyWorkflow(builtInWorkflow(), req);
+    expect(t2i.uccb_base).toBeUndefined();
+    expect(t2i['3'].inputs.denoise).toBe(1);
+  });
+
+  it("says when a workflow can't take a base", () => {
+    const bare: ComfyWorkflow = { '1': { class_type: 'CLIPTextEncode', inputs: { text: '', clip: ['9', 1] }, _meta: { title: 'Positive' } } };
+    expect(() => fillComfyWorkflow(bare, { ...req, init }, 'base.png')).toThrow(/latent/);
+  });
+});

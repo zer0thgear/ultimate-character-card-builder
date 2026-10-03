@@ -11,6 +11,7 @@ import { useLlmStream } from '@/hooks/useLlmStream';
 import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, withoutSwipe, buildChatPrompt, displayText, shownText, chatGreeting, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
 import { buildPresetPrompt } from '@/lib/presetPrompt';
 import { buildTextPrompt } from '@/lib/textCompletion';
+import { CompareDialog, type KeptReply } from '@/components/dock/CompareReplies';
 import { presetParams, type ChatPreset } from '@/lib/stPreset';
 import type { LlmConnection, SamplerParams } from '@/types/llm';
 import { describeEntry } from '@/lib/lorebookScan';
@@ -82,6 +83,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const [showSummary, setShowSummary] = useState(false);
   // Search in this chat: the words (null: closed), and which match is shown.
   const [search, setSearch] = useState<string | null>(null);
+  const [comparing, setComparing] = useState(false);
   const [hit, setHit] = useState(0);
   const scroller = useRef<HTMLDivElement>(null);
   // Following the chat's end: true while you're at the bottom. Scrolling up
@@ -207,17 +209,22 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const showTimes = chatSettings.showTimestamps ?? true;
   const settings = { ...chatSettings, userName: me.name, persona: me.description };
   const preset = chatSettings.presetId ? (presets.find((p) => p.id === chatSettings.presetId) ?? null) : null;
-  const overrides = preset && chatSettings.presetSamplers && connection ? presetParams(preset, connection.kind) : {};
+  /** The preset's samplers over a connection's, when the chat uses them. */
+  const overridesFor = (c: LlmConnection | null, p: ChatPreset | null): Partial<SamplerParams> => (p && chatSettings.presetSamplers && c ? presetParams(p, c.kind) : {});
+  const overrides = overridesFor(connection, preset);
 
-  /** The prompt for `messages` (greeting added), through the preset if one is on. */
-  const build = (messages: ChatMessage[], opts: BuildOptions = {}): BuiltPrompt => {
+  /** The prompt for `messages` (greeting added), through the preset if one
+   *  is on; `use` builds it for another connection and preset (⚖ Compare). */
+  const build = (messages: ChatMessage[], opts: BuildOptions = {}, use: { connection: LlmConnection | null; preset: ChatPreset | null } = { connection, preset }): BuiltPrompt => {
+    const { connection: c, preset: p } = use;
+    const over = overridesFor(c, p);
     const summary = summaryInjection(useChatStore.getState().chat?.summary, summarySettings(chatSettings.summary));
-    const full = { model: connection?.model, kind: connection?.kind, maxTokens: overrides.max_tokens ?? connection?.params.max_tokens, maxContext: connection?.params.max_context, summary, authorsNote: chat?.authorsNote, ...opts };
+    const full = { model: c?.model, kind: c?.kind, maxTokens: over.max_tokens ?? c?.params.max_tokens, maxContext: c?.params.max_context, summary, authorsNote: chat?.authorsNote, ...opts };
     // A text-completion connection lays the prompt out in its instruct
     // template; a chat-completion preset's prompts don't apply to it.
-    const text = textTemplates(connection);
-    const built = text ? buildTextPrompt(card, history(messages), settings, text.instruct, text.context, full) : preset ? buildPresetPrompt(card, history(messages), settings, preset, full) : buildChatPrompt(card, history(messages), settings, full);
-    return connection ? { ...built, sentWith: sentWith(connection, overrides, preset) } : built;
+    const text = textTemplates(c);
+    const built = text ? buildTextPrompt(card, history(messages), settings, text.instruct, text.context, full) : p ? buildPresetPrompt(card, history(messages), settings, p, full) : buildChatPrompt(card, history(messages), settings, full);
+    return c ? { ...built, sentWith: sentWith(c, over, p) } : built;
   };
 
   const summaryRequest = () => ({ build, connection, params: overrides });
@@ -324,6 +331,33 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
     const last = chat.messages[chat.messages.length - 1];
     if (last?.role === 'assistant') await reply(chat.messages, last);
     else await reply(chat.messages);
+  };
+
+  /** ⚖ Compare redoes the last reply when it's the character's, or writes
+   *  the next one. */
+  const compareTarget = chat?.messages.at(-1)?.role === 'assistant' ? chat.messages.at(-1) : undefined;
+  const keepCompared = (kept: KeptReply[]) => {
+    const now = Date.now();
+    if (compareTarget) {
+      setMessages((ms) =>
+        ms.map((x) => {
+          if (x.id !== compareTarget.id) return x;
+          const swipes = [...x.swipes, ...kept.map((k) => k.text)];
+          return {
+            ...x,
+            swipes,
+            swipe: x.swipes.length + kept.length - 1,
+            swipeDates: [...x.swipes.map((_, i) => x.swipeDates?.[i] ?? x.createdAt), ...kept.map(() => now)],
+            reasoning: [...x.swipes.map((_, i) => x.reasoning?.[i]), ...kept.map((k) => k.reasoning)],
+            continues: x.continues ? [...x.continues, ...kept.map(() => undefined)] : undefined,
+            model: kept.at(-1)?.model ?? x.model,
+          };
+        }),
+      );
+    } else {
+      const m = newMessage('assistant', kept[0].text, kept[kept.length - 1].model);
+      setMessages((ms) => [...ms, { ...m, swipes: kept.map((k) => k.text), swipe: kept.length - 1, swipeDates: kept.map(() => now), reasoning: kept.map((k) => k.reasoning) }]);
+    }
   };
 
   const continueLast = async () => {
@@ -728,6 +762,11 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
               <span className={cx(phone && 'px-0.5 text-base leading-none')}>📝</span>
               {chat.authorsNote?.prompt.trim() && !phone ? " Author's note" : ''}
             </Button>
+            {!phone && connections.length > 0 && (
+              <Button size="sm" disabled={running} onClick={() => setComparing(true)} title={compareTarget ? 'Compare: the last reply written by two connections or presets at once, side by side, to keep either or both' : 'Compare: the next reply written by two connections or presets at once, side by side, to keep either or both'}>
+                ⚖ Compare
+              </Button>
+            )}
             {wide && (
               <DrawButton
                 phone={phone}
@@ -747,6 +786,17 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
       )}
       {inspect && <PromptInspector prompt={inspect} onClose={() => setInspect(null)} />}
       {noteOpen && <AuthorsNoteDialog onClose={() => setNoteOpen(false)} />}
+      {comparing && chat && (
+        <CompareDialog
+          regenerating={!!compareTarget}
+          prepare={(side) => ({
+            built: build(compareTarget ? chat.messages.filter((m) => m.id !== compareTarget.id) : chat.messages, { guide: guide.trim() || undefined }, side),
+            params: overridesFor(side.connection, side.preset),
+          })}
+          onKeep={keepCompared}
+          onClose={() => setComparing(false)}
+        />
+      )}
       {describing && chat && (
         <DescribeDialog
           initial={describing.spec}

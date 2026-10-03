@@ -137,11 +137,9 @@ function PromptForm() {
   /** Why this connection can't make the gen asked for, if it can't. */
   const unsupported = !connection
     ? 'no connection'
-    : connection.kind === 'comfyui' && source
-      ? "Img2Img isn't available with ComfyUI yet: remove the base, or switch to NovelAI or an A1111 connection."
-      : connection.kind === 'a1111' && source?.mask
-        ? "Inpainting is NovelAI-only for now: clear the mask to use the picture as an Img2Img base, or switch to NovelAI."
-        : null;
+    : connection.kind !== 'novelai' && source?.mask
+      ? "Inpainting is NovelAI-only for now: clear the mask to use the picture as an Img2Img base, or switch to NovelAI."
+      : null;
 
   /** The base as sent: stealth marks erased as NovelAI's canvas does, and
    *  the mask when inpainting. */
