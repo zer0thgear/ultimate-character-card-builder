@@ -463,6 +463,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                 onSwipe={setGreeting}
                 onEdit={(text) => setGreetingEdit(chat.greeting, text)}
                 busy={!!streamingId}
+                isLast={chat.messages.length === 0}
                 userName={me.name}
                 showId={showIds}
                 date={showTimes ? chat.createdAt : undefined}
@@ -559,6 +560,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
           )}
           <div className="flex items-start gap-1.5">
             <AutoTextarea
+              data-chat-input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
@@ -684,6 +686,36 @@ function Avatar({ role, persona }: { role: 'user' | 'assistant' | 'system'; pers
  * the bubble follows the finger a little while it's a swipe. Off with
  * Chat settings → Swipe gesture, or when there's nothing to swipe.
  */
+/**
+ * ← and → on the keyboard, as SillyTavern has them: the version before, and
+ * the next one (a new one at the end), of the last reply (or the greeting,
+ * alone in the chat). Not while typing somewhere (the message box counts
+ * only while it's empty), in a dialog, or while this chat is out of view.
+ */
+function useArrowSwipe(box: React.RefObject<HTMLElement | null>, onNext: (() => void) | null, onPrev: (() => void) | null) {
+  const handlers = useRef({ onNext, onPrev });
+  useEffect(() => {
+    handlers.current = { onNext, onPrev };
+  });
+  const active = !!(onNext || onPrev);
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.repeat || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.defaultPrevented) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest('input, select, [contenteditable=""], [contenteditable="true"], [role="dialog"]')) return;
+      if (t instanceof HTMLTextAreaElement && !(t.hasAttribute('data-chat-input') && t.value === '')) return;
+      if (document.querySelector('[role="dialog"]') || !box.current?.offsetParent) return;
+      const go = e.key === 'ArrowRight' ? handlers.current.onNext : handlers.current.onPrev;
+      if (!go) return;
+      e.preventDefault();
+      go();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active, box]);
+}
+
 function useSwipeGesture(onNext: (() => void) | null, onPrev: (() => void) | null) {
   const enabled = useLlmStore((s) => s.chatSettings.swipeGesture ?? true) && !!(onNext || onPrev);
   const start = useRef<{ x: number; y: number; id: number; sideways: boolean | null } | null>(null);
@@ -746,6 +778,7 @@ function GreetingBubble({
   onSwipe,
   onEdit,
   busy,
+  isLast,
   userName,
   showId,
   date,
@@ -759,6 +792,8 @@ function GreetingBubble({
   /** Sets this chat's wording (undefined: back to the card's). */
   onEdit: (text: string | undefined) => void;
   busy: boolean;
+  /** Nothing after it yet: ← → swipe it. */
+  isLast: boolean;
   userName: string;
   showId: boolean;
   date?: number;
@@ -769,7 +804,11 @@ function GreetingBubble({
   // As the model gets it: {{char}} and {{user}} filled in.
   const tokens = useTextTokens(shown, 400);
   const [editing, setEditing] = useState<string | null>(null);
-  const swipe = useSwipeGesture(count > 1 && editing === null ? () => onSwipe(index >= count - 1 ? 0 : index + 1) : null, count > 1 && editing === null ? () => onSwipe(index <= 0 ? count - 1 : index - 1) : null);
+  const next = count > 1 && editing === null ? () => onSwipe(index >= count - 1 ? 0 : index + 1) : null;
+  const prev = count > 1 && editing === null ? () => onSwipe(index <= 0 ? count - 1 : index - 1) : null;
+  const swipe = useSwipeGesture(next, prev);
+  const box = useRef<HTMLDivElement>(null);
+  useArrowSwipe(box, isLast && !busy ? next : null, isLast && !busy ? prev : null);
   const saveToChat = (next: string) => {
     onEdit(next === own ? undefined : next);
     setEditing(null);
@@ -785,7 +824,7 @@ function GreetingBubble({
     if (await confirmDialog({ title: "Use the card's greeting again?", body: "This chat's wording of the greeting is let go, and the card's (as it is now) shows in its place.", confirmLabel: "Use the card's" })) onEdit(undefined);
   };
   return (
-    <div className="group flex gap-2">
+    <div ref={box} className="group flex gap-2">
       <Avatar role="assistant" />
       <div className="min-w-0 flex-1 rounded-lg bg-slate-900 px-3 py-2" {...swipe.props} style={swipe.style}>
         <div className="mb-1 flex items-center gap-2 text-xs">
@@ -904,12 +943,13 @@ function Bubble({
   const tree = !isUser && m.continues?.[m.swipe] && pathText(m.continues[m.swipe]!) === text ? m.continues[m.swipe] : undefined;
   // Only the last reply has versions to swipe through, as its buttons do.
   const swipeable = !isUser && isLast && !busy && editing === null;
-  const swipe = useSwipeGesture(
-    swipeable ? () => (m.swipe < m.swipes.length - 1 ? onChange({ swipe: m.swipe + 1 }) : onSwipeNew()) : null,
-    swipeable && m.swipe > 0 ? () => onChange({ swipe: m.swipe - 1 }) : null,
-  );
+  const next = swipeable ? () => (m.swipe < m.swipes.length - 1 ? onChange({ swipe: m.swipe + 1 }) : onSwipeNew()) : null;
+  const prev = swipeable && m.swipe > 0 ? () => onChange({ swipe: m.swipe - 1 }) : null;
+  const swipe = useSwipeGesture(next, prev);
+  const box = useRef<HTMLDivElement>(null);
+  useArrowSwipe(box, next, prev);
   return (
-    <div className={cx('group flex gap-2', isUser && 'flex-row-reverse')}>
+    <div ref={box} className={cx('group flex gap-2', isUser && 'flex-row-reverse')}>
       <Avatar role={m.role} persona={persona} />
       <div className={cx('min-w-0 flex-1 rounded-lg px-3 py-2', isUser ? 'bg-sky-500/10' : 'bg-slate-900')} {...swipe.props} style={swipe.style}>
         <div className={cx('mb-1 flex items-center gap-2 text-xs', isUser && 'flex-row-reverse')}>
