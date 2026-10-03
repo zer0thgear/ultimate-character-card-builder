@@ -11,7 +11,7 @@ import type { LlmConnection, SamplerParams } from '@/types/llm';
 import type { ChatMessage } from '@/types/project';
 import { AutoTextarea, Button, IconButton, NumberInput, Select, TokenBadge, cx, inputClass } from '@/components/ui';
 
-// 📝 The chat's summary: written by the model on request, or on its own
+// 📜 The chat's summary: written by the model on request, or on its own
 // every so many messages, and sent with every prompt after.
 
 export interface SummaryRequest {
@@ -110,7 +110,7 @@ export function ChatSummaryPanel({ summarizer, request, onClose }: { summarizer:
           </Button>
         ) : (
           <Button size="sm" variant="primary" onClick={() => void summarizer.summarize(request())} disabled={!chat.messages.length} title="Ask the model to sum up the chat so far, building on this summary">
-            📝 Summarize now
+            📜 Summarize now
           </Button>
         )}
         {summary && !summarizer.running && (

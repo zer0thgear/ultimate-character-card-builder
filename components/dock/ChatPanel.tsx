@@ -72,7 +72,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const [describing, setDescribing] = useState<{ spec: DrawSpec; replacing?: ChatImage } | null>(null);
   const [treeFor, setTreeFor] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
-  // 📝 The chat's summary.
+  // 📜 The chat's summary.
   const summarizer = useChatSummary();
   const [showSummary, setShowSummary] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
@@ -390,7 +390,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     { label: '⬇ Plain text (.txt)', hint: 'For reading or sharing', run: () => downloadBlob(chatToText(chat, card, me.name), `${chatFileName(chat, card)}.txt`, 'text/plain') },
                     ...(phone
                       ? [
-                          { label: '📝 Summary', hint: "The chat's summary, sent with every prompt", run: () => setShowSummary(!showSummary) },
+                          { label: '📜 Summary', hint: "The chat's summary, sent with every prompt", run: () => setShowSummary(!showSummary) },
                           { label: '🔍 The next prompt', hint: 'What the next reply would send', run: preview },
                           ...(lastPrompt ? [{ label: `🔍 The last prompt · ${lastPrompt.lore.active.length} lore`, hint: 'What the last reply sent', run: () => setInspect(lastPrompt) }] : []),
                           { label: '🗑 Delete this chat', hint: '', run: deleteThisChat },
@@ -430,7 +430,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
               <ChatPresetSelect />
               {chat && (
                 <IconButton title={summarizer.running ? 'Summarizing the chat…' : "The chat's summary, sent with every prompt"} onClick={() => setShowSummary(!showSummary)}>
-                  <span className={cx(summarizer.running && 'animate-pulse')}>📝</span>
+                  <span className={cx(summarizer.running && 'animate-pulse')}>📜</span>
                 </IconButton>
               )}
               <IconButton title="Show the prompt the next reply would send" onClick={preview}>
