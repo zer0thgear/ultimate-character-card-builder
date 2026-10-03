@@ -13,6 +13,7 @@ import {
   replyPoints,
   lorePlace,
   macroExpander,
+  promptHistory,
   summaryDepthInjections,
   summaryPart,
   toMessages,
@@ -46,7 +47,7 @@ export function buildPresetPrompt(card: CardData, history: ChatMessage[], settin
   const continuing = mode === 'continue';
   // Continuing with a prefill: the reply being continued isn't history.
   const prefillContinue = continuing && preset.continuePrefill;
-  let chat = prefillContinue ? history.slice(0, -1) : history;
+  let chat = promptHistory(history, prefillContinue);
   const { x, lx, rx, char, user, texts, setFields } = macroExpander(card, chat, settings, opts);
 
   const lore = settings.useLorebook ? scanLorebook(card.character_book, texts, { defaults: loreDefaults(settings), random: opts.random, generatedAt: replyPoints(chat) }) : { active: [], dropped: [] };

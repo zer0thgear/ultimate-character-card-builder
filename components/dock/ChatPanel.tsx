@@ -1018,9 +1018,14 @@ function Bubble({
   return (
     <div ref={box} className={cx('group flex gap-2', isUser && 'flex-row-reverse')}>
       <Avatar role={m.role} persona={persona} />
-      <div className={cx('min-w-0 flex-1 rounded-lg px-3 py-2', isUser ? 'bg-sky-500/10' : 'bg-slate-900')} {...swipe.props} style={swipe.style}>
+      <div className={cx('min-w-0 flex-1 rounded-lg px-3 py-2', isUser ? 'bg-sky-500/10' : 'bg-slate-900', m.hidden && 'border border-dashed border-slate-700 opacity-60')} {...swipe.props} style={swipe.style}>
         <div className={cx('mb-1 flex items-center gap-2 text-xs', isUser && 'flex-row-reverse')}>
           <span className="font-semibold text-slate-200">{isUser ? userName || 'User' : card.nickname || card.name || 'Character'}</span>
+          {m.hidden && (
+            <button type="button" className="rounded bg-slate-700/60 px-1.5 text-[10px] text-slate-300 hover:bg-slate-600" title="Left out of the prompt: the model doesn't see it. Click to put it back." onClick={() => onChange({ hidden: undefined })}>
+              🙈 hidden
+            </button>
+          )}
           {m.model && !isUser && <span className="truncate text-slate-600">{m.model}</span>}
           <span className={cx('flex items-center gap-0.5 opacity-0 group-hover:opacity-100 touch:opacity-100', isUser ? 'mr-auto' : 'ml-auto')}>
             <span className="mr-1 text-[10px] text-slate-600">{formatTokens(tokens)} tok</span>
@@ -1029,6 +1034,9 @@ function Bubble({
             </IconButton>
             <IconButton title="Copy" onClick={() => void copyText(text)}>
               ⧉
+            </IconButton>
+            <IconButton title={m.hidden ? 'Show it to the model again' : "Hide from the prompt: it stays in the chat, but the model doesn't see it"} disabled={busy} onClick={() => onChange({ hidden: m.hidden ? undefined : true })}>
+              {m.hidden ? '👁' : '🙈'}
             </IconButton>
             <IconButton title="Branch: a new chat from here (this message and everything before it, every version kept); this chat stays as it is" disabled={busy} onClick={onBranch}>
               🔀

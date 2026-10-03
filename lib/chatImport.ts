@@ -110,6 +110,8 @@ function messageOf(l: Line, role: Role): ChatMessage {
     swipeDates: dates,
     ...(reasoning.some(Boolean) ? { reasoning } : {}),
     ...(model && role === 'assistant' ? { model } : {}),
+    // SillyTavern leaves its system messages out of the prompt.
+    ...(l.is_system === true ? { hidden: true } : {}),
   };
 }
 

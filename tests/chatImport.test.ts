@@ -47,11 +47,16 @@ describe('parseChatFile', () => {
       JSON.stringify({ name: 'Ann', is_user: false, mes: 'A different hello.', send_date: 'September 26, 2026 2:51pm' }),
       JSON.stringify({ name: 'Bo', is_user: true, mes: 'hi', send_date: 'September 26, 2026 2:52pm' }),
       JSON.stringify({ name: 'System', is_user: false, is_system: true, mes: 'A notice' }),
+      JSON.stringify({ name: 'Ann', is_user: false, is_system: true, mes: 'A hidden reply' }),
     ].join('\n');
     const chat = parseChatFile(file, card(), 'Bo');
     expect(chat.greeting).toBe(0);
     expect(chat.greetingEdits).toEqual({ 0: 'A different hello.' });
-    expect(chat.messages.map((m) => m.role)).toEqual(['user', 'system']);
+    expect(chat.messages.map((m) => [m.role, !!m.hidden])).toEqual([
+      ['user', false],
+      ['system', true],
+      ['assistant', true],
+    ]);
     expect(new Date(chat.createdAt).getHours()).toBe(14);
   });
 

@@ -89,7 +89,8 @@ export function chatToStJsonl(chat: ChatSession, card: CardData, userName: strin
     lines.push({
       name: isUser ? names.user : m.role === 'system' ? 'System' : names.char,
       is_user: isUser,
-      is_system: m.role === 'system',
+      // SillyTavern's hidden messages are its system ones.
+      is_system: m.role === 'system' || !!m.hidden,
       send_date: dateOf(m.swipe),
       mes: swipes[m.swipe] ?? '',
       extra: extra(m.swipe),

@@ -12,6 +12,7 @@ import {
   loreDefaults,
   lorePlace,
   macroExpander,
+  promptHistory,
   replyPoints,
   summaryDepthInjections,
   summaryPart,
@@ -312,7 +313,7 @@ export function messagesToText(messages: LlmMessage[], t: InstructTemplate, opts
  */
 export function buildTextPrompt(card: CardData, history: ChatMessage[], settings: ChatPromptSettings, t: InstructTemplate, c: ContextTemplate, opts: BuildOptions = {}): BuiltPrompt {
   const mode = opts.mode ?? 'reply';
-  const chat = mode === 'continue' ? history.slice(0, -1) : history;
+  const chat = promptHistory(history, mode === 'continue');
   const { x, lx, rx, char, user, texts, setFields } = macroExpander(card, chat, settings, opts);
   // Sequences keep their own spacing, so only the names are filled in them.
   const names_ = (s: string) => s.replace(/\{\{(char|user)\}\}/gi, (_, n: string) => (n.toLowerCase() === 'char' ? char : user));
