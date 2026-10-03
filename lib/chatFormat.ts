@@ -41,6 +41,20 @@ const RULES: { kind: 'em' | 'strong' | 'quote'; re: RegExp; open: number; close:
   { kind: 'quote', re: /“[^”\n]*”/y, open: 0, close: 0 },
 ];
 
+/** `text` without its HTML comments (<!-- … -->), which creators use for
+ *  notes to the model: the model still gets them, the chat doesn't show
+ *  them. One still being written (no --> yet) is hidden to the end. Lines
+ *  left empty by one go with it. */
+export function hideComments(text: string): string {
+  if (!text.includes('<!--')) return text;
+  return text
+    .replace(/<!--[\s\S]*?(?:-->|$)/g, '\u0000')
+    .replace(/^[ \t]*\u0000[ \t\u0000]*(?:\r?\n|$)/gm, '')
+    .replace(/\u0000/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 /** Splits `text` into plain runs and styled spans. A quote keeps its quote
  *  marks (they're part of the speech); italics and bold drop their markers. */
 export function formatChat(text: string, inside: ReadonlySet<string> = new Set()): FormatNode[] {

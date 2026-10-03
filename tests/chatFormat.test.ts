@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { formatChat } from '@/lib/chatFormat';
+import { formatChat, hideComments } from '@/lib/chatFormat';
+
+describe('hideComments', () => {
+  it('leaves out <!-- comments -->, and the lines they leave empty', () => {
+    expect(hideComments('Hello <!-- be terse --> there.')).toBe('Hello  there.');
+    expect(hideComments('*waves*\n<!-- Notes for the model:\nkeep it slow -->\n"Hi."')).toBe('*waves*\n"Hi."');
+    expect(hideComments('<!-- a -->\n\nText\n\n<!-- b -->\n\nMore')).toBe('Text\n\nMore');
+    expect(hideComments('No comments here.')).toBe('No comments here.');
+  });
+
+  it('hides one still being written to the end', () => {
+    expect(hideComments('Hi. <!-- still wri')).toBe('Hi.');
+  });
+});
 
 describe('formatChat', () => {
   it('styles actions, bold and speech', () => {

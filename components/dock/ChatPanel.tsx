@@ -31,7 +31,7 @@ import type { CardData } from '@/types/card';
 import type { ChatImage, ChatMessage } from '@/types/project';
 import { uuid } from '@/lib/uuid';
 import { copyText } from '@/lib/clipboard';
-import { formatChat, type FormatNode } from '@/lib/chatFormat';
+import { formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
 
 // Test-chatting the card, built the way SillyTavern builds its prompt (see
 // lib/chatPrompt.ts), with swipes, edits, the greeting read live from the
@@ -629,9 +629,10 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
 // ─── Messages ────────────────────────────────────────────────────────────────
 
 /** *actions* in italics, **bold**, and "speech" highlighted, nested either
- *  way, as frontends show them (lib/chatFormat.ts). */
+ *  way, as frontends show them (lib/chatFormat.ts); <!-- comments --> are
+ *  left out (they're for the model). */
 function Formatted({ text }: { text: string }) {
-  const nodes = useMemo(() => formatChat(text), [text]);
+  const nodes = useMemo(() => formatChat(hideComments(text)), [text]);
   return <div className="chat-text text-sm leading-relaxed whitespace-pre-wrap text-slate-200">{renderNodes(nodes)}</div>;
 }
 
