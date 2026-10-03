@@ -4,7 +4,7 @@ import { getConfig } from '@/lib/server/storage';
 import { BadRequestError } from '@/lib/server/storage';
 import { handle } from '@/lib/server/http';
 
-const safe = (s: string) => s.replace(/[\/:*?"<>|\x00-\x1f]/g, '_').replace(/^\.+/, '').trim().slice(0, 120);
+const safe = (s: string) => s.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/^\.+/, '').trim().slice(0, 120);
 
 /**
  * POST /api/gens/save — writes a gen (the body, a PNG) to the output
