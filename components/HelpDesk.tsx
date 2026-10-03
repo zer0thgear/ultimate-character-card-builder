@@ -87,10 +87,10 @@ export function HelpDesk() {
             <select value={personality} onChange={(e) => setPersonality(e.target.value)} className={cx(inputClass, 'w-auto py-1 text-xs')}>
               {HELPER_PERSONALITIES.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.emoji} {p.label}
+                  {p.label}
                 </option>
               ))}
-              <option value={CUSTOM_PERSONALITY}>✏️ Your own…</option>
+              <option value={CUSTOM_PERSONALITY}>Your own…</option>
             </select>
           </label>
           <ConnectionPicker value={usedId} onChange={(id) => setConnectionId(id)} label="Connection" className="min-w-48 flex-1" />
@@ -116,7 +116,6 @@ export function HelpDesk() {
         <div className="mx-auto flex max-w-3xl flex-col gap-3 p-3">
           {greeting && (
             <div className="mr-8 rounded-lg bg-slate-900 px-3 py-2 text-sm whitespace-pre-wrap text-slate-300">
-              <span className="mr-1.5">{isCustom ? '✏️' : preset?.emoji}</span>
               {greeting}
             </div>
           )}
