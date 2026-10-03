@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import JSZip from 'jszip';
 import { useProjectStore } from '@/store/projectStore';
 import { imageBlob, useSessionStore, type SessionImage } from '@/store/sessionStore';
-import { useUiStore, toast } from '@/store/uiStore';
+import { useConfigStore, useUiStore, toast } from '@/store/uiStore';
+import { EXPIRY_WARNING_MS, expiresIn, shortTimeLeft } from '@/lib/recentGens';
 import { api } from '@/lib/api';
 import { setAsAvatar, keepImage, saveSessionImage, saveToFolder, reusePrompt, genFileName, withImage } from '@/lib/imageActions';
 import { Button, Empty, IconButton, Modal, Section, confirmDialog, cx, downloadBlob, inputClass } from '@/components/ui';
@@ -51,6 +52,13 @@ export function GalleryPanel() {
   const [showAll, setShowAll] = useState(false);
   const [selecting, setSelecting] = useState<Selecting>(null);
   const [busy, setBusy] = useState(false);
+  // For the ⏳ on gens about to be deleted: the time, once a minute.
+  const keepDays = useConfigStore((s) => s.config.recentGensDays);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     if (!selecting) return;
@@ -62,6 +70,8 @@ export function GalleryPanel() {
   if (!project) return null;
   const session = images.filter((i) => showAll || i.projectId === project.id);
   const unsaved = images.filter((i) => !i.keptFile && !i.savedPath && !i.pinned).length;
+  const leftOf = (img: SessionImage) => expiresIn(img, keepDays, now);
+  const goingSoon = session.filter((img) => (leftOf(img) ?? Infinity) < EXPIRY_WARNING_MS).length;
   const kept = [...project.kept].reverse();
 
   const start = (kind: 'kept' | 'session', id?: string) => setSelecting({ kind, ids: new Set(id ? [id] : []) });
@@ -188,7 +198,16 @@ export function GalleryPanel() {
         </Section>
 
         <Section
-          title={`Recent gens (${session.length})`}
+          title={
+            <>
+              Recent gens ({session.length})
+              {goingSoon > 0 && (
+                <span className="ml-1.5 text-[11px] font-normal text-amber-300 normal-case" title={`Recent gens are deleted after ${keepDays} day${keepDays === 1 ? '' : 's'} (Settings → Folders). Keep one with the card (☆) or save it (💾) to hold on to it.`}>
+                  ⏳ {goingSoon} going within a day
+                </span>
+              )}
+            </>
+          }
           actions={
             <>
               {selectButtons('session', session.map((i) => i.id))}
@@ -222,6 +241,7 @@ export function GalleryPanel() {
                 <SessionThumb
                   key={img.id}
                   img={img}
+                  left={leftOf(img)}
                   selecting={selecting?.kind === 'session'}
                   picked={selecting?.kind === 'session' && selecting.ids.has(img.id)}
                   onOpen={() => {
@@ -337,7 +357,7 @@ function Pressable({ onTap, onLongPress, className, style, children }: { onTap: 
   );
 }
 
-function SessionThumb({ img, selecting, picked, onOpen, onToggle, onLongPress }: { img: SessionImage; selecting: boolean; picked: boolean; onOpen: () => void; onToggle: () => void; onLongPress: () => void }) {
+function SessionThumb({ img, left, selecting, picked, onOpen, onToggle, onLongPress }: { img: SessionImage; /** Until it's deleted (null: never). */ left: number | null; selecting: boolean; picked: boolean; onOpen: () => void; onToggle: () => void; onLongPress: () => void }) {
   return (
     <div className={cx('group relative overflow-hidden rounded-md border', picked ? 'border-violet-500 ring-2 ring-violet-500' : 'border-slate-800')} style={{ aspectRatio: `${img.parameters.width} / ${img.parameters.height}` }}>
       <Pressable onTap={selecting ? onToggle : onOpen} onLongPress={onLongPress} className="h-full w-full">
@@ -358,6 +378,11 @@ function SessionThumb({ img, selecting, picked, onOpen, onToggle, onLongPress }:
             💾
           </IconButton>
         </div>
+      )}
+      {left !== null && left < EXPIRY_WARNING_MS && (
+        <span className="absolute top-0.5 left-0.5 rounded bg-amber-500/90 px-1 text-[9px] font-medium text-black" title={`Deleted in about ${shortTimeLeft(left)}, with the recent gens older than Settings → Folders keeps. Keep it with the card (☆) or save it (💾) to hold on to it.`}>
+          ⏳ {shortTimeLeft(left)}
+        </span>
       )}
       {(img.keptFile || img.savedPath) && <span className="pointer-events-none absolute top-0.5 right-0.5 rounded bg-black/60 px-1 text-[9px] text-white">{img.keptFile ? '★' : '✓'}</span>}
     </div>

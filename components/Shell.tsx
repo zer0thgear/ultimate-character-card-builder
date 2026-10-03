@@ -31,6 +31,9 @@ import { importFromUrl, overwriteCard } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
 import { TrashDialog, duplicateCard, openTrash } from '@/components/TrashDialog';
 import { VersionsDialog, openVersions } from '@/components/VersionsDialog';
+import { TitleStatus } from '@/components/TitleStatus';
+import { FirstRunChecklist } from '@/components/FirstRun';
+import { ShortcutsDialog, openShortcuts } from '@/components/ShortcutsDialog';
 
 export function Shell() {
   const project = useProjectStore((s) => s.project);
@@ -180,6 +183,8 @@ export function Shell() {
       <ConfirmHost />
       <TrashDialog />
       <VersionsDialog />
+      <TitleStatus />
+      <ShortcutsDialog />
       <VisionWriteHost />
       <ExtensionHosts />
       <AssistInspectorHost />
@@ -315,6 +320,11 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
         {!phone && (
           <IconButton title={theme === 'dark' ? 'Light mode' : 'Dark mode'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
             {theme === 'dark' ? '☀' : '☾'}
+          </IconButton>
+        )}
+        {!phone && (
+          <IconButton title="Keyboard shortcuts (?)" onClick={openShortcuts}>
+            ⌨
           </IconButton>
         )}
         <IconButton title="Settings" onClick={() => openSettings()}>
@@ -500,6 +510,7 @@ function CardsHome() {
           </Button>
           {total > 1 && <CardSortControl className="ml-auto w-44" />}
         </div>
+        <FirstRunChecklist onNewCard={() => void create()} />
         <TagFilter cards={builderCards} />
         {summaries.length === 0 ? (
           <p className="text-sm text-slate-500">{total ? 'No cards have all of those tags.' : 'No cards yet. Start one, import one, or drop a PNG, JSON or CHARX card anywhere. You can also start one from a picture in the gen library.'}</p>

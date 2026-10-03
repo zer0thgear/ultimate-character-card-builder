@@ -10,6 +10,7 @@ import { resolvePersona, usePersonaStore } from '@/store/personaStore';
 import { presetParams } from '@/lib/stPreset';
 import { wrapWithPreset } from '@/lib/assistPreset';
 import { useAssistLog } from '@/store/assistLog';
+import { useJobStore } from '@/store/jobStore';
 import { uuid } from '@/lib/uuid';
 
 /**
@@ -78,6 +79,7 @@ export function useLlmStream() {
     const controller = new AbortController();
     abortRef.current = controller;
     setRunning(true);
+    useJobStore.getState().bump(1);
     const result: StreamResult = { text: '', reasoning: '' };
     // A text-completion connection gets one prompt in its instruct
     // template: the chat's own (built from the card), or these messages
@@ -113,6 +115,7 @@ export function useLlmStream() {
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
       setRunning(false);
+      useJobStore.getState().bump(-1);
     }
     if (opts.prefix) result.text = opts.prefix + result.text;
     return result;

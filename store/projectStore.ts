@@ -28,6 +28,8 @@ export type SaveStatus = 'saved' | 'dirty' | 'saving' | 'error';
 
 interface ProjectState {
   summaries: ProjectSummary[];
+  /** The card list has been read from the server at least once. */
+  listed: boolean;
   project: CardProject | null;
   loading: boolean;
   status: SaveStatus;
@@ -129,6 +131,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
 
   return {
     summaries: [],
+    listed: false,
     project: null,
     loading: false,
     status: 'saved',
@@ -137,7 +140,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     future: [],
 
     refreshList: async () => {
-      set({ summaries: await api.listProjects() });
+      set({ summaries: await api.listProjects(), listed: true });
     },
 
     open: async (id) => {
