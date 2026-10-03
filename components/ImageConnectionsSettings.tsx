@@ -20,7 +20,7 @@ export function ImageConnectionsTab({ onOpenGeneral }: { onOpenGeneral: () => vo
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-slate-500">
-        Where the Image tab makes gens. NovelAI has UCCB&apos;s full generator (character prompts, positions, Img2Img, inpainting, Anlas). A1111 / Forge (and reForge, SD.Next) and ComfyUI take the style, scene and characters as one prompt, with their own checkpoints and samplers, and both do Img2Img (ComfyUI through your workflow's Load Image node, or nodes UCCB adds to load the base). Those servers are reached through UCCB&apos;s own server, so they need no CORS setting.
+        Where the Image tab makes gens. NovelAI has UCCB&apos;s full generator (character prompts, positions, Img2Img, inpainting, Anlas). A1111 / Forge (and reForge, SD.Next) and ComfyUI take the style, scene and characters as one prompt, with their own checkpoints and samplers, and both do Img2Img (ComfyUI through your workflow&apos;s Load Image node, or nodes UCCB adds to load the base). Those servers are reached through UCCB&apos;s own server, so they need no CORS setting.
       </p>
       {!connections.length && <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-200">No image connections yet: add one to start generating.</p>}
       {connections.map((c) => (
