@@ -32,6 +32,7 @@ import { importCards } from '@/components/ImportCards';
 import { TrashDialog, duplicateCard, openTrash } from '@/components/TrashDialog';
 import { VersionsDialog, openVersions } from '@/components/VersionsDialog';
 import { TitleStatus } from '@/components/TitleStatus';
+import { ShortcutsDialog, openShortcuts } from '@/components/ShortcutsDialog';
 
 export function Shell() {
   const project = useProjectStore((s) => s.project);
@@ -182,6 +183,7 @@ export function Shell() {
       <TrashDialog />
       <VersionsDialog />
       <TitleStatus />
+      <ShortcutsDialog />
       <VisionWriteHost />
       <ExtensionHosts />
       <AssistInspectorHost />
@@ -317,6 +319,11 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
         {!phone && (
           <IconButton title={theme === 'dark' ? 'Light mode' : 'Dark mode'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
             {theme === 'dark' ? '☀' : '☾'}
+          </IconButton>
+        )}
+        {!phone && (
+          <IconButton title="Keyboard shortcuts (?)" onClick={openShortcuts}>
+            ⌨
           </IconButton>
         )}
         <IconButton title="Settings" onClick={() => openSettings()}>

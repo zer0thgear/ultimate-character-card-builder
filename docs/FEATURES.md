@@ -223,6 +223,7 @@ To use it from your phone, run UCCB on your computer and open it over Tailscale 
 
 ## Keyboard
 
+- **?** (outside a text box, or ⌨ in the header) lists these shortcuts.
 - **Ctrl+Enter** in the image form generates.
 - **Ctrl+Z / Ctrl+Y** undo and redo the card (outside text boxes). **Ctrl+S** saves now.
 - **Enter** sends in chats and Brainstorm (Shift+Enter for a new line); an empty Enter asks for a reply. On a touch screen Enter is a new line instead.
