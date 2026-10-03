@@ -3,7 +3,8 @@
 import { useCallback, useRef, useState } from 'react';
 import type { LlmConnection, LlmMessage, SamplerParams } from '@/types/llm';
 import { streamLlm } from '@/lib/api';
-import { requestConnection, useLlmStore } from '@/store/llmStore';
+import { requestConnection, textTemplates, useLlmStore } from '@/store/llmStore';
+import { messagesToText } from '@/lib/textCompletion';
 import { useProjectStore } from '@/store/projectStore';
 import { resolvePersona, usePersonaStore } from '@/store/personaStore';
 import { presetParams } from '@/lib/stPreset';
@@ -58,7 +59,7 @@ export function useLlmStream() {
     onText?: (full: string) => void,
     /** `prefill`: the last message starts the reply. `params` override the
      *  connection's (a preset's samplers). */
-    opts: { prefill?: boolean; params?: Partial<SamplerParams>; onReasoning?: (full: string) => void; prefix?: string } = {},
+    opts: { prefill?: boolean; params?: Partial<SamplerParams>; onReasoning?: (full: string) => void; prefix?: string; text?: { prompt: string; stop: string[] } } = {},
   ): Promise<StreamResult> => {
     abortRef.current?.abort();
     setText('');
@@ -78,9 +79,16 @@ export function useLlmStream() {
     abortRef.current = controller;
     setRunning(true);
     const result: StreamResult = { text: '', reasoning: '' };
+    // A text-completion connection gets one prompt in its instruct
+    // template: the chat's own (built from the card), or these messages
+    // laid out in it.
+    const templates = textTemplates(connection);
+    const text = templates ? (opts.text ?? messagesToText(messages, templates.instruct, { prefill: opts.prefill })) : undefined;
+    const params = { ...connection.params, ...opts.params };
+    if (text?.stop.length) params.stop = [...new Set([...(params.stop ?? []), ...text.stop])];
     try {
       await streamLlm(
-        { connection: { ...requestConnection(connection), params: { ...connection.params, ...opts.params } }, messages, prefill: opts.prefill },
+        { connection: { ...requestConnection(connection), params }, messages, prefill: opts.prefill, ...(text ? { prompt: text.prompt } : {}) },
         (e) => {
           if (e.type === 'text') {
             result.text += e.text;

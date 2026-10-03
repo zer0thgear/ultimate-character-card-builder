@@ -3,12 +3,13 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useProjectStore } from '@/store/projectStore';
 import { useChatStore } from '@/store/chatStore';
-import { useLlmStore } from '@/store/llmStore';
+import { textTemplates, useLlmStore } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
 import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, withoutSwipe, buildChatPrompt, displayText, shownText, chatGreeting, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
 import { buildPresetPrompt } from '@/lib/presetPrompt';
+import { buildTextPrompt } from '@/lib/textCompletion';
 import { presetParams, type ChatPreset } from '@/lib/stPreset';
 import type { LlmConnection, SamplerParams } from '@/types/llm';
 import { describeEntry } from '@/lib/lorebookScan';
@@ -188,7 +189,10 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const build = (messages: ChatMessage[], opts: BuildOptions = {}): BuiltPrompt => {
     const summary = summaryInjection(useChatStore.getState().chat?.summary, summarySettings(chatSettings.summary));
     const full = { model: connection?.model, kind: connection?.kind, maxTokens: overrides.max_tokens ?? connection?.params.max_tokens, maxContext: connection?.params.max_context, summary, authorsNote: chat?.authorsNote, ...opts };
-    const built = preset ? buildPresetPrompt(card, history(messages), settings, preset, full) : buildChatPrompt(card, history(messages), settings, full);
+    // A text-completion connection lays the prompt out in its instruct
+    // template; a chat-completion preset's prompts don't apply to it.
+    const text = textTemplates(connection);
+    const built = text ? buildTextPrompt(card, history(messages), settings, text.instruct, text.context, full) : preset ? buildPresetPrompt(card, history(messages), settings, preset, full) : buildChatPrompt(card, history(messages), settings, full);
     return connection ? { ...built, sentWith: sentWith(connection, overrides, preset) } : built;
   };
 
@@ -198,7 +202,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const complete = (built: BuiltPrompt, onText: (full: string) => void) => {
     setLastPrompt(built);
     const messages = built.prefill !== undefined ? [...built.messages, { role: 'assistant' as const, content: built.prefill }] : built.messages;
-    return run(connection, messages, onText, { prefill: built.prefill !== undefined, params: overrides });
+    return run(connection, messages, onText, { prefill: built.prefill !== undefined, params: overrides, text: built.text !== undefined ? { prompt: built.text, stop: built.stop ?? [] } : undefined });
   };
 
   /**
@@ -1295,11 +1299,26 @@ function sentWith(connection: LlmConnection, overrides: Partial<SamplerParams>, 
 }
 
 function PromptInspector({ prompt, onClose }: { prompt: BuiltPrompt; onClose: () => void }) {
-  const all = useMemo(() => prompt.parts.map((p) => p.content).join('\n\n'), [prompt]);
+  const all = useMemo(() => prompt.text ?? prompt.parts.map((p) => p.content).join('\n\n'), [prompt]);
   const total = useTextTokens(all, 0);
+  const [asText, setAsText] = useState(false);
   return (
-    <Modal open onClose={onClose} title={`Prompt · ~${formatTokens(total)} tokens`} size="lg" footer={<Button onClick={() => void copyText(JSON.stringify(prompt.messages, null, 2))}>Copy as JSON</Button>}>
+    <Modal
+      open
+      onClose={onClose}
+      title={`Prompt · ~${formatTokens(total)} tokens`}
+      size="lg"
+      footer={prompt.text !== undefined ? <Button onClick={() => void copyText(prompt.text ?? '')}>Copy the text</Button> : <Button onClick={() => void copyText(JSON.stringify(prompt.messages, null, 2))}>Copy as JSON</Button>}
+    >
       <div className="flex flex-col gap-3">
+        {prompt.text !== undefined && (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+            Sent as one text prompt in the connection&apos;s instruct template.
+            <Toggle checked={asText} onChange={setAsText} label="Show it as sent" />
+            {!!prompt.stop?.length && <span className="text-slate-500">Stops at: {prompt.stop.map((s) => JSON.stringify(s)).join(', ')}</span>}
+          </div>
+        )}
+        {asText && prompt.text !== undefined && <pre className="max-h-[60vh] overflow-y-auto rounded-md border border-slate-800 p-2.5 font-mono text-[11px] whitespace-pre-wrap text-slate-300">{prompt.text}</pre>}
         {(prompt.prefill !== undefined || prompt.droppedHistory > 0) && (
           <div className="text-xs text-amber-300">
             {prompt.droppedHistory > 0 && <div>{prompt.droppedHistory} oldest messages left out to fit the preset&apos;s context size.</div>}
@@ -1324,7 +1343,7 @@ function PromptInspector({ prompt, onClose }: { prompt: BuiltPrompt; onClose: ()
           {prompt.lore.dropped.length > 0 && <span className="text-amber-300"> · over budget: {prompt.lore.dropped.map(describeEntry).join(', ')}</span>}
           {!!prompt.lore.skipped?.length && <span className="text-slate-500"> · left out: {prompt.lore.skipped.map((a) => `${describeEntry(a)} (${a.reason})`).join(', ')}</span>}
         </div>
-        {prompt.parts.map((p, i) => (
+        {!asText && prompt.parts.map((p, i) => (
           <div key={i} className="rounded-md border border-slate-800">
             <div className="flex items-center gap-2 border-b border-slate-800 px-2.5 py-1 text-xs">
               <span className={cx('rounded px-1.5 text-[10px] uppercase', p.role === 'system' ? 'bg-violet-500/15 text-violet-300' : p.role === 'user' ? 'bg-sky-500/15 text-sky-300' : 'bg-emerald-500/15 text-emerald-300')}>{p.role}</span>

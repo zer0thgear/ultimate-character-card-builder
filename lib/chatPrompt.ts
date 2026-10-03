@@ -172,6 +172,10 @@ export interface BuiltPrompt {
   prefill?: string;
   /** Oldest chat messages left out to fit the context size. */
   droppedHistory: number;
+  /** Text completion: the whole prompt as one string, and the strings
+   *  that end the reply (lib/textCompletion.ts). */
+  text?: string;
+  stop?: string[];
   /** What it goes to the model with (the chat fills this in, for the
    *  prompt inspector). */
   sentWith?: SentWith;

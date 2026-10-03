@@ -52,6 +52,13 @@ export interface LlmConnection {
   apiKey: string;
   model: string;
   params: SamplerParams;
+  /** OpenAI-compatible and NovelAI: send one text prompt laid out by an
+   *  instruct template (/completions) instead of chat messages, for local
+   *  models (lib/textCompletion.ts). */
+  textCompletion?: boolean;
+  /** The instruct and context templates it uses (built-in or imported). */
+  instructId?: string;
+  contextId?: string;
 }
 
 /** A picture sent with a message, for vision models: base64, no data: prefix. */
@@ -81,6 +88,9 @@ export interface LlmRequest {
   /** The last message is the start of the reply (a prefill) and must stay
    *  last, rather than being answered by a new user turn. */
   prefill?: boolean;
+  /** Text completion: this is the whole prompt, sent to /completions
+   *  (messages are then only for the record). */
+  prompt?: string;
 }
 
 export const NOVELAI_TEXT_BASE = 'https://text.novelai.net/oa/v1';

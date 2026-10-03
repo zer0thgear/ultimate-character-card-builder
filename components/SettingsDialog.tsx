@@ -25,6 +25,9 @@ import { AccountStatus } from '@/components/AccountStatus';
 import { ExtensionSettings, hasExtensionSettings } from '@/components/ExtensionSlots';
 import { ImageConnectionsTab } from '@/components/ImageConnectionsSettings';
 import { VersionHistorySettings } from '@/components/VersionsDialog';
+import { TextCompletionSettings } from '@/components/llm/TextTemplates';
+import { messagesToText } from '@/lib/textCompletion';
+import { textTemplates } from '@/store/llmStore';
 
 type SettingsTab = 'general' | 'folders' | 'image' | 'llm' | 'chat' | 'assist' | 'personas' | 'extensions';
 
@@ -390,7 +393,10 @@ function ConnectionEditor({ connection: c }: { connection: LlmConnection }) {
     setTesting(true);
     let reply = '';
     let failure = '';
-    await streamLlm({ connection: { ...requestConnection(c), params: { ...c.params, max_tokens: 30 } }, messages: [{ role: 'user', content: 'Reply with just the word "pong".' }] }, (e) => {
+    const messages = [{ role: 'user' as const, content: 'Reply with just the word "pong".' }];
+    const templates = textTemplates(c);
+    const text = templates ? messagesToText(messages, templates.instruct) : undefined;
+    await streamLlm({ connection: { ...requestConnection(c), params: { ...c.params, max_tokens: 30, ...(text ? { stop: text.stop } : {}) } }, messages, ...(text ? { prompt: text.prompt } : {}) }, (e) => {
       if (e.type === 'text') reply += e.text;
       if (e.type === 'error') failure = e.message;
     }).catch((err: Error) => (failure = err.message));
@@ -465,6 +471,8 @@ function ConnectionEditor({ connection: c }: { connection: LlmConnection }) {
           {isOpenRouter(c) && <MaxRequestCost price={price} contextSize={c.params.max_context} maxTokens={c.params.max_tokens} />}
         </label>
       </div>
+
+      <TextCompletionSettings connection={c} />
 
       <div className="text-xs font-semibold tracking-wide text-slate-400 uppercase">Generation</div>
       {(Object.keys(chatOver).length > 0 || Object.keys(assistOver).length > 0 || !!chatPreset?.maxContext) && (
