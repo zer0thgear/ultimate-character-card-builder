@@ -28,6 +28,7 @@ export function branchOf(chat: ChatSession, until: number, id: string, now: numb
     id,
     name: `${base} (branch at #${until + 1})`,
     greeting: chat.greeting,
+    ...(chat.greetingEdits ? { greetingEdits: { ...chat.greetingEdits } } : {}),
     messages,
     ...(chat.personaId ? { personaId: chat.personaId } : {}),
     ...(images.length ? { images } : {}),
@@ -46,6 +47,8 @@ interface ChatState {
   deleteChat: (id: string) => Promise<void>;
   rename: (name: string) => void;
   setGreeting: (greeting: number) => void;
+  /** This chat's own wording of greeting `index` (undefined: the card's again). */
+  setGreetingEdit: (index: number, text: string | undefined) => void;
   /** Lock a persona to this chat (undefined unlocks it). */
   setPersonaLock: (personaId: string | undefined) => void;
   setMessages: (change: (m: ChatMessage[]) => ChatMessage[]) => void;
@@ -122,6 +125,15 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     rename: (name) => updateChat((c) => ({ ...c, name })),
     setGreeting: (greeting) => updateChat((c) => ({ ...c, greeting })),
+    setGreetingEdit: (index, text) =>
+      updateChat((c) => {
+        const edits = { ...c.greetingEdits };
+        if (text === undefined) delete edits[index];
+        else edits[index] = text;
+        const chat: ChatSession = { ...c, greetingEdits: edits };
+        if (!Object.keys(edits).length) delete chat.greetingEdits;
+        return chat;
+      }),
     setPersonaLock: (personaId) => updateChat((c) => ({ ...c, personaId })),
     setMessages: (change) =>
       updateChat((c) => {

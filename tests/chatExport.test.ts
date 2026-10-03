@@ -63,4 +63,12 @@ describe('SillyTavern chat export', () => {
     expect(chatFileName(chat(), card())).toBe('Ann - 2026-09-26@14h05m09s');
     expect(chatToText(chat(), card(), 'Kael')).toContain('Ann:\nWelcome back, Kael.\n\nKael:\nHi Ann.\n\nAnn:\nSecond.');
   });
+
+  it("exports a chat's own wording of its greeting", () => {
+    const c = { ...chat(), greetingEdits: { 1: 'Back so soon, {{user}}?' } };
+    expect(chatToText(c, card(), 'Kael')).toContain('Ann:\nBack so soon, Kael?');
+    const first = JSON.parse(chatToStJsonl(c, card(), 'Kael').split('\n')[1]);
+    expect(first.mes).toBe('Back so soon, Kael?');
+    expect(first.swipes).toEqual(['Halt, Kael!', 'Back so soon, Kael?']);
+  });
 });

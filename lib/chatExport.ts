@@ -1,7 +1,7 @@
 import type { CardData } from '@/types/card';
 import type { ChatSession } from '@/types/project';
 import { expandMacros } from '@/lib/macros';
-import { swipeDate } from '@/lib/chatPrompt';
+import { chatGreeting, swipeDate } from '@/lib/chatPrompt';
 
 // Test chats out, as SillyTavern writes chats (which Chub imports too):
 // JSONL, a metadata line and then one line per message. The greeting is
@@ -45,7 +45,7 @@ export function chatToStJsonl(chat: ChatSession, card: CardData, userName: strin
     },
   ];
 
-  const greetings = [card.first_mes, ...card.alternate_greetings];
+  const greetings = [card.first_mes, ...card.alternate_greetings].map((_, i) => chatGreeting(card, chat, i));
   if (chat.greeting >= 0 && greetings[chat.greeting]?.trim()) {
     const swipes = greetings.map(x);
     const date = stSendDate(created);
@@ -91,7 +91,7 @@ export function chatToText(chat: ChatSession, card: CardData, userName: string):
   const names = namesFor(card, userName);
   const x = (t: string) => expandMacros(t, { char: names.char, user: names.user });
   const out: string[] = [`${chat.name}\n${names.char} and ${names.user}\n`];
-  const greeting = chat.greeting === 0 ? card.first_mes : card.alternate_greetings[chat.greeting - 1];
+  const greeting = chatGreeting(card, chat);
   if (chat.greeting >= 0 && greeting?.trim()) out.push(`${names.char}:\n${x(greeting)}`);
   for (const m of chat.messages) {
     const who = m.role === 'user' ? names.user : m.role === 'system' ? 'System' : names.char;

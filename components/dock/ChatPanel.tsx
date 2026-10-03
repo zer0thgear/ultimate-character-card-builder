@@ -7,7 +7,7 @@ import { useLlmStore } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
-import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, withoutSwipe, buildChatPrompt, displayText, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
+import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, withoutSwipe, buildChatPrompt, displayText, chatGreeting, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
 import { buildPresetPrompt } from '@/lib/presetPrompt';
 import { presetParams, type ChatPreset } from '@/lib/stPreset';
 import type { LlmConnection, SamplerParams } from '@/types/llm';
@@ -41,7 +41,7 @@ import { formatChat, type FormatNode } from '@/lib/chatFormat';
  *  centred column as it does with the dock filling the window. */
 export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const project = useProjectStore((s) => s.project);
-  const { chat, list, loadFor, newChat, openChat, deleteChat, rename, setGreeting, setMessages, branchFrom } = useChatStore();
+  const { chat, list, loadFor, newChat, openChat, deleteChat, rename, setGreeting, setGreetingEdit, setMessages, branchFrom } = useChatStore();
   const { connections, chatConnectionId, setChatConnection, chatSettings, presets } = useLlmStore();
   const personas = usePersonaStore((s) => s.personas);
   const phone = useMediaQuery(PHONE_QUERY);
@@ -163,7 +163,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
 
   /** The chat as the model sees it: the live greeting, then the messages. */
   const history = (messages: ChatMessage[]) => {
-    const g = chat ? greetingText(card, chat.greeting) : '';
+    const g = chat ? chatGreeting(card, chat) : '';
     return g.trim() ? [{ ...newMessage('assistant', g), id: 'greeting' }, ...messages] : messages;
   };
 
@@ -455,7 +455,18 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
             </div>
           ) : (
             <div className={cx('flex flex-col gap-3', column.className)} style={column.style}>
-              <GreetingBubble card={card} index={chat.greeting} count={greetingCount} onSwipe={setGreeting} userName={me.name} showId={showIds} date={showTimes ? chat.createdAt : undefined} />
+              <GreetingBubble
+                card={card}
+                index={chat.greeting}
+                edited={chat.greetingEdits?.[chat.greeting]}
+                count={greetingCount}
+                onSwipe={setGreeting}
+                onEdit={(text) => setGreetingEdit(chat.greeting, text)}
+                busy={!!streamingId}
+                userName={me.name}
+                showId={showIds}
+                date={showTimes ? chat.createdAt : undefined}
+              />
               {picturesAfter(null)}
               {chat.messages.map((m, i) => (
                 <div key={m.id} data-msg={m.id} className="flex flex-col gap-3">
@@ -588,7 +599,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
               <DrawButton
                 phone={phone}
                 disabled={!!pictures.pending && !pictures.pending.error}
-                onMoment={() => void pictures.drawMoment(card, greetingText(card, chat.greeting), chat.messages, me.name)}
+                onMoment={() => void pictures.drawMoment(card, chatGreeting(card, chat), chat.messages, me.name)}
                 onDescribe={() => setDescribing({ spec: { scene: '', characters: pictures.formCharacters() } })}
               />
             )}
@@ -606,7 +617,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
         <DescribeDialog
           initial={describing.spec}
           redrawing={!!describing.replacing}
-          onWrite={(instruction) => pictures.writeFromChat(card, greetingText(card, chat.greeting), chat.messages, me.name, instruction)}
+          onWrite={(instruction) => pictures.writeFromChat(card, chatGreeting(card, chat), chat.messages, me.name, instruction)}
           onDraw={(spec) => void pictures.draw(spec, chat.messages.at(-1)?.id ?? null, describing.replacing)}
           onClose={() => setDescribing(null)}
         />
@@ -726,41 +737,116 @@ function MessageId({ id, className }: { id: number; className?: string }) {
   return <span className={cx('text-[11px] text-slate-600 tabular-nums', className)} title={id === 0 ? 'Message #0: the greeting' : `Message #${id}`}>#{id}</span>;
 }
 
-function GreetingBubble({ card, index, count, onSwipe, userName, showId, date }: { card: CardData; index: number; count: number; onSwipe: (i: number) => void; userName: string; showId: boolean; date?: number }) {
-  const text = greetingText(card, index);
+function GreetingBubble({
+  card,
+  index,
+  edited,
+  count,
+  onSwipe,
+  onEdit,
+  busy,
+  userName,
+  showId,
+  date,
+}: {
+  card: CardData;
+  index: number;
+  /** This chat's own wording of it, if it has one. */
+  edited?: string;
+  count: number;
+  onSwipe: (i: number) => void;
+  /** Sets this chat's wording (undefined: back to the card's). */
+  onEdit: (text: string | undefined) => void;
+  busy: boolean;
+  userName: string;
+  showId: boolean;
+  date?: number;
+}) {
+  const own = greetingText(card, index);
+  const text = edited ?? own;
   const shown = text.trim() ? displayText(card, text, userName) : '';
   // As the model gets it: {{char}} and {{user}} filled in.
   const tokens = useTextTokens(shown, 400);
-  const swipe = useSwipeGesture(count > 1 ? () => onSwipe(index >= count - 1 ? 0 : index + 1) : null, count > 1 ? () => onSwipe(index <= 0 ? count - 1 : index - 1) : null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const swipe = useSwipeGesture(count > 1 && editing === null ? () => onSwipe(index >= count - 1 ? 0 : index + 1) : null, count > 1 && editing === null ? () => onSwipe(index <= 0 ? count - 1 : index - 1) : null);
+  const saveToChat = (next: string) => {
+    onEdit(next === own ? undefined : next);
+    setEditing(null);
+  };
+  // The card's greeting itself (an edit undo in the editor takes back);
+  // this chat then reads it live again.
+  const saveToCard = (next: string) => {
+    useProjectStore.getState().updateCard((d) => (index === 0 ? { ...d, first_mes: next } : { ...d, alternate_greetings: d.alternate_greetings.map((g, i) => (i === index - 1 ? next : g)) }));
+    onEdit(undefined);
+    setEditing(null);
+  };
+  const backToCards = async () => {
+    if (await confirmDialog({ title: "Use the card's greeting again?", body: "This chat's wording of the greeting is let go, and the card's (as it is now) shows in its place.", confirmLabel: "Use the card's" })) onEdit(undefined);
+  };
   return (
-    <div className="flex gap-2">
+    <div className="group flex gap-2">
       <Avatar role="assistant" />
       <div className="min-w-0 flex-1 rounded-lg bg-slate-900 px-3 py-2" {...swipe.props} style={swipe.style}>
         <div className="mb-1 flex items-center gap-2 text-xs">
           <span className="max-w-[50%] flex-shrink-0 truncate font-semibold text-slate-200">{card.nickname || card.name || 'Character'}</span>
-          <span className="min-w-0 truncate text-slate-500">greeting · live from the card</span>
+          {edited !== undefined ? (
+            <span className="min-w-0 truncate text-amber-400/80" title="Edited in this chat: changes to the card's greeting don't show here until you go back to the card's">
+              greeting · this chat&apos;s wording
+            </span>
+          ) : (
+            <span className="min-w-0 truncate text-slate-500">greeting · live from the card</span>
+          )}
           {shown && (
             <span className="flex-shrink-0 text-[10px] whitespace-nowrap text-slate-600 tabular-nums" title="Estimated tokens in this greeting (o200k tokenizer; your model may count a little differently)">
               {formatTokens(tokens)} tok
             </span>
           )}
-          {showId && <MessageId id={0} className="ml-auto" />}
+          <span className="ml-auto flex flex-shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 touch:opacity-100">
+            <IconButton title="Edit the greeting (for this chat, or on the card)" disabled={busy || editing !== null} onClick={() => setEditing(text)}>
+              ✎
+            </IconButton>
+            {edited !== undefined && (
+              <IconButton title="Use the card's greeting again (as it is now)" disabled={busy} onClick={() => void backToCards()}>
+                ↺
+              </IconButton>
+            )}
+          </span>
+          {showId && <MessageId id={0} />}
           {count > 1 && (
-            <span className={cx('flex items-center gap-1 text-slate-400', !showId && 'ml-auto')}>
-              <IconButton title="Previous greeting" onClick={() => onSwipe(index <= 0 ? count - 1 : index - 1)}>
+            <span className="flex items-center gap-1 text-slate-400">
+              <IconButton title="Previous greeting" disabled={editing !== null} onClick={() => onSwipe(index <= 0 ? count - 1 : index - 1)}>
                 ‹
               </IconButton>
               <span className="tabular-nums">
                 {index + 1}/{count}
               </span>
-              <IconButton title="Next greeting" onClick={() => onSwipe(index >= count - 1 ? 0 : index + 1)}>
+              <IconButton title="Next greeting" disabled={editing !== null} onClick={() => onSwipe(index >= count - 1 ? 0 : index + 1)}>
                 ›
               </IconButton>
             </span>
           )}
         </div>
         {date !== undefined && <MessageTime time={date} />}
-        {shown ? <Formatted text={shown} /> : <em className="text-sm text-slate-500">This greeting is empty.</em>}
+        {editing !== null ? (
+          <div className="flex flex-col gap-1.5">
+            <AutoTextarea autoFocus value={editing} onChange={(e) => setEditing(e.target.value)} minRows={3} maxRows={20} />
+            <div className="flex flex-wrap justify-end gap-1.5">
+              <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={() => saveToCard(editing)} title="Change the card's greeting itself (undo in the editor brings it back); every chat reading it live gets it, this one too">
+                Save to the card
+              </Button>
+              <Button size="sm" variant="primary" onClick={() => saveToChat(editing)} title="This chat only: the card's greeting stays as it is">
+                Save for this chat
+              </Button>
+            </div>
+          </div>
+        ) : shown ? (
+          <Formatted text={shown} />
+        ) : (
+          <em className="text-sm text-slate-500">This greeting is empty.</em>
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildChatPrompt, DEFAULT_CHAT_SETTINGS, newMessage, exampleBlocks } from '@/lib/chatPrompt';
+import { buildChatPrompt, chatGreeting, DEFAULT_CHAT_SETTINGS, newMessage, exampleBlocks } from '@/lib/chatPrompt';
 import { newCard, newEntry, newLorebook } from '@/lib/cardSpec';
 
 const card = () => {
@@ -96,5 +96,18 @@ describe('context size', () => {
     expect(buildPresetPrompt(card, chat, DEFAULT_CHAT_SETTINGS, preset, { maxContext: 1500, maxTokens: 100 }).droppedHistory).toBe(0);
     const noSize = { ...preset, maxContext: undefined };
     expect(buildPresetPrompt(card, chat, DEFAULT_CHAT_SETTINGS, noSize, { maxContext: 1500, maxTokens: 100 }).droppedHistory).toBeGreaterThan(0);
+  });
+});
+
+describe('chatGreeting', () => {
+  it("reads the card's greeting live, unless the chat has its own wording of it", () => {
+    const card = newCard().data;
+    card.first_mes = 'Hello.';
+    card.alternate_greetings = ['Hi.', 'Hey.'];
+    expect(chatGreeting(card, { greeting: 1 })).toBe('Hi.');
+    const chat = { greeting: 1, greetingEdits: { 1: 'Hi there.' } };
+    expect(chatGreeting(card, chat)).toBe('Hi there.');
+    expect(chatGreeting(card, chat, 2)).toBe('Hey.');
+    expect(chatGreeting(card, { greeting: -1, greetingEdits: { [-1]: 'x' } })).toBe('');
   });
 });

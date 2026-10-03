@@ -1,6 +1,6 @@
 import type { CardData, LorebookEntry } from '@/types/card';
 import type { LlmMessage, ProviderKind } from '@/types/llm';
-import type { ChatMessage } from '@/types/project';
+import type { ChatMessage, ChatSession } from '@/types/project';
 import { expandMacros, type MacroContext } from '@/lib/macros';
 import { scanLorebook, describeEntry, type ScanResult, type ActivatedEntry, DEFAULT_SCAN_DEPTH, DEFAULT_MAX_RECURSION, type LoreDefaults } from '@/lib/lorebookScan';
 import { uuid } from '@/lib/uuid';
@@ -347,6 +347,13 @@ export function buildChatPrompt(card: CardData, history: ChatMessage[], settings
 export function greetingText(card: CardData, index: number): string {
   if (index < 0) return '';
   return index === 0 ? card.first_mes : card.alternate_greetings[index - 1] ?? '';
+}
+
+/** The greeting a chat shows (and the model gets): the chat's own wording
+ *  of it if it has one, else the card's, live. */
+export function chatGreeting(card: CardData, chat: Pick<ChatSession, 'greeting' | 'greetingEdits'>, index = chat.greeting): string {
+  if (index < 0) return '';
+  return chat.greetingEdits?.[index] ?? greetingText(card, index);
 }
 
 export function newMessage(role: ChatMessage['role'], text: string, model?: string): ChatMessage {

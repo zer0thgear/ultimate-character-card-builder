@@ -129,6 +129,9 @@ export interface ChatSession {
   /** Which greeting opened it: 0 is first_mes, 1+ are alternate greetings,
    *  -1 for none. */
   greeting: number;
+  /** This chat's own wording of a greeting (by its index), in place of the
+   *  card's, which is read live otherwise. */
+  greetingEdits?: Record<string, string>;
   messages: ChatMessage[];
   /** A persona locked to this chat, used instead of the active one. */
   personaId?: string;

@@ -8,6 +8,7 @@ const chat = (): ChatSession => ({
   id: 'c1',
   name: 'Chat 1',
   greeting: 2,
+  greetingEdits: { 2: 'Mine' },
   personaId: 'p1',
   createdAt: 1,
   updatedAt: 1,
@@ -26,7 +27,7 @@ const chat = (): ChatSession => ({
 describe('branching a chat', () => {
   it('keeps the messages up to the one picked, with every version, its pictures, greeting and persona', () => {
     const b = branchOf(chat(), 1, 'c2', 99);
-    expect(b).toMatchObject({ id: 'c2', name: 'Chat 1 (branch at #2)', greeting: 2, personaId: 'p1', createdAt: 99 });
+    expect(b).toMatchObject({ id: 'c2', name: 'Chat 1 (branch at #2)', greeting: 2, greetingEdits: { 2: 'Mine' }, personaId: 'p1', createdAt: 99 });
     expect(b.messages.map((m) => m.id)).toEqual(['u1', 'a1']);
     expect(b.messages[1]).toMatchObject({ swipes: ['One', 'Two'], swipe: 1, swipeDates: [20, 25], reasoning: [undefined, 'Hmm'] });
     expect(b.images?.map((i) => i.id)).toEqual(['i0', 'i1']);
