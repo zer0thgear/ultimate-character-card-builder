@@ -145,7 +145,7 @@ async function comfyGenerate(c: BackendConnection, r: BackendGenRequest): Promis
   const queued = await call(c, '/prompt', { method: 'POST', body: JSON.stringify({ prompt: workflow, client_id: randomUUID() }) });
   const { prompt_id, node_errors } = await json<{ prompt_id: string; node_errors?: Record<string, { errors?: { message: string; details?: string }[]; class_type?: string }> }>(queued);
   const nodeError = Object.values(node_errors ?? {})[0];
-  if (nodeError?.errors?.length) throw new Error(`ComfyUI refused the workflow (${nodeError.class_type}): ${nodeError.errors.map((e) => e.details || e.message).join('; ')}`);
+  if (nodeError?.errors?.length) throw new Error(`ComfyUI refused the workflow (${nodeError.class_type ?? 'a node'}): ${nodeError.errors.map((e) => e.details || e.message).join('; ')}`);
 
   const until = Date.now() + GEN_TIMEOUT;
   while (Date.now() < until) {
