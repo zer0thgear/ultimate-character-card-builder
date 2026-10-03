@@ -2,13 +2,14 @@
 
 import { create } from 'zustand';
 import type { CardData, CharacterCard } from '@/types/card';
-import type { CardProject, KeptImage, ProjectSummary } from '@/types/project';
+import type { CardProject, CardVersionInfo, KeptImage, ProjectSummary, VersionReason } from '@/types/project';
 import { api } from '@/lib/api';
 import { useSessionStore } from '@/store/sessionStore';
 import { PROJECT_GEN_KEYS, useSettingsStore, DEFAULT_NEGATIVE } from '@/store/settingsStore';
 import { useUiStore, type AppMode } from '@/store/uiStore';
 import { notesSnippet } from '@/lib/cardSummary';
 import { formatTokens } from '@/lib/textTokens';
+import { startsSession } from '@/lib/versionHistory';
 
 // The open card project: loading, editing with undo/redo, and saving it
 // back to disk a moment after each change. Only one project is open at a
@@ -48,8 +49,11 @@ interface ProjectState {
   /** Changes the card. `key` groups quick edits of one field into one undo
    *  step; leave it out for one-off actions (each is its own step). */
   updateCard: (change: (data: CardData) => CardData, key?: string) => void;
-  /** Replaces the whole card (an overwrite from a file), as one undo step. */
-  replaceCard: (card: CharacterCard) => void;
+  /** Replaces the whole card (an overwrite from a file, or a version
+   *  restored), as one undo step, keeping a version of it first. */
+  replaceCard: (card: CharacterCard, reason?: VersionReason) => void;
+  /** Keeps a version of the card as it is now (lib/versionHistory.ts). */
+  keepVersion: (reason: VersionReason, label?: string) => Promise<CardVersionInfo | null>;
   setNotes: (notes: string) => void;
   undo: () => void;
   redo: () => void;
@@ -67,6 +71,8 @@ interface ProjectState {
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let saving: Promise<void> | null = null;
 let lastEdit = { key: '', at: 0 };
+/** The open card's last edit, for when a new editing session starts. */
+let lastSessionEdit = 0;
 /** Set while a project's prompt fields are being loaded into the image
  *  generator, so that isn't mistaken for an edit. */
 let applyingGen = false;
@@ -143,6 +149,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
         // A new card's first edit is an undo step of its own, however soon
         // after an edit to the last one.
         lastEdit = { key: '', at: 0 };
+        lastSessionEdit = p.updatedAt;
         set({ project: p, past: [], future: [], status: 'saved', loading: false });
         try {
           localStorage.setItem(lastCardKey(), id);
@@ -229,6 +236,9 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       lastEdit = { key: key ?? '', at: now };
       const data = change(p.card.data);
       if (data === p.card.data) return;
+      // The first edit after a break keeps the card as it was.
+      if (startsSession(lastSessionEdit, now)) void get().keepVersion('session');
+      lastSessionEdit = now;
       set((s) => ({
         project: { ...p, card: { ...p.card, data } },
         past: coalesce ? s.past : [...s.past, p.card].slice(-MAX_UNDO),
@@ -237,12 +247,25 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       schedule();
     },
 
-    replaceCard: (card) => {
+    replaceCard: (card, reason = 'overwrite') => {
       const p = get().project;
       if (!p) return;
+      void get().keepVersion(reason);
       lastEdit = { key: '', at: 0 };
+      lastSessionEdit = Date.now();
       set((s) => ({ project: { ...p, card }, past: [...s.past, p.card].slice(-MAX_UNDO), future: [] }));
       schedule();
+    },
+
+    keepVersion: async (reason, label) => {
+      const p = get().project;
+      if (!p) return null;
+      try {
+        return await api.addVersion(p.id, { card: p.card, reason, label });
+      } catch (err) {
+        console.warn("Couldn't keep a version of the card", err);
+        return null;
+      }
     },
 
     setNotes: (notes) => {

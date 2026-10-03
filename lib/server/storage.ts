@@ -38,7 +38,7 @@ export function checkId(id: string): string {
   return id;
 }
 
-const projectDir = (id: string) => path.join(PROJECTS, checkId(id));
+export const projectDir = (id: string) => path.join(PROJECTS, checkId(id));
 
 /** The previous version of a JSON file, kept beside it (writeFileAtomic). */
 export const backupOf = (file: string) => `${file}.bak`;
@@ -113,6 +113,8 @@ export async function setConfig(patch: Partial<AppConfig>): Promise<AppConfig> {
   const next = { ...(await getConfig()), ...patch };
   next.libraryFolders = [...new Set(next.libraryFolders.map((f) => f.trim()).filter(Boolean))];
   next.recentGensDays = Math.max(0, Math.round(Number(next.recentGensDays) || 0));
+  next.versionHistory = next.versionHistory !== false;
+  next.versionsToKeep = Math.max(1, Math.min(500, Math.round(Number(next.versionsToKeep) || DEFAULT_CONFIG.versionsToKeep)));
   await writeFileAtomic(path.join(DATA_DIR, 'config.json'), JSON.stringify(next, null, 2));
   return next;
 }

@@ -30,6 +30,7 @@ import { chatStatsDetail, sortDetail } from '@/lib/cardSort';
 import { importFromUrl, overwriteCard } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
 import { TrashDialog, duplicateCard, openTrash } from '@/components/TrashDialog';
+import { VersionsDialog, openVersions } from '@/components/VersionsDialog';
 
 export function Shell() {
   const project = useProjectStore((s) => s.project);
@@ -178,6 +179,7 @@ export function Shell() {
       <FieldToolsHost />
       <ConfirmHost />
       <TrashDialog />
+      <VersionsDialog />
       <VisionWriteHost />
       <ExtensionHosts />
       <AssistInspectorHost />
@@ -243,6 +245,9 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
                 </IconButton>
                 <IconButton title="Redo (Ctrl+Y)" disabled={!future.length} onClick={redo}>
                   ↷
+                </IconButton>
+                <IconButton title="Versions: earlier versions of this card, to compare or restore" onClick={openVersions}>
+                  🕘
                 </IconButton>
               </div>
             </>

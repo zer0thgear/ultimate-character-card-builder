@@ -245,6 +245,7 @@ export function ToolsPanel() {
       confirmLabel: 'Apply',
     });
     if (ok) {
+      void useProjectStore.getState().keepVersion('macro');
       updateCard(() => result.data);
       toast(`${name}: ${result.total} change${result.total === 1 ? '' : 's'}.`, 'success');
     }

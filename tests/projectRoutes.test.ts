@@ -142,6 +142,34 @@ describe('card project routes', { timeout: 30_000 }, () => {
       expect(readdirSync(path.join(dir, 'projects', full.id, 'chats'))).toContain('c1.json');
     });
 
+    it('keeps versions of a card, skipping repeats and pruning the oldest unnamed', async () => {
+      await routeFetch('/api/config', json('PUT', { versionHistory: true, versionsToKeep: 3 }));
+      const p = await create();
+      const v = (name: string, label?: string, reason = 'session') =>
+        routeFetch(`/api/projects/${p.id}/versions`, json('POST', { card: { ...p.card, data: { ...p.card.data, name } }, reason, label })).then((r) => r.json());
+      const first = await v('one', 'Named');
+      expect(first).toMatchObject({ name: 'one', label: 'Named', reason: 'session' });
+      await v('two');
+      expect(await v('two')).toBeNull();
+      await v('three');
+      await v('four');
+      const list = (await (await routeFetch(`/api/projects/${p.id}/versions`)).json()) as { name: string; label?: string; id: string }[];
+      // Three kept: the named one survives the pruning, "two" doesn't.
+      expect(list.map((x) => x.name).sort()).toEqual(['four', 'one', 'three']);
+      const full = await (await routeFetch(`/api/projects/${p.id}/versions/${list[0].id}`)).json();
+      expect(full.card.data.name).toBe(list[0].name);
+      await routeFetch(`/api/projects/${p.id}/versions/${first.id}`, json('PATCH', { label: '' }));
+      expect(((await (await routeFetch(`/api/projects/${p.id}/versions`)).json()) as { id: string; label?: string }[]).find((x) => x.id === first.id)?.label).toBeUndefined();
+      await routeFetch(`/api/projects/${p.id}/versions/${first.id}`, { method: 'DELETE' });
+      expect(((await (await routeFetch(`/api/projects/${p.id}/versions`)).json()) as unknown[]).length).toBe(2);
+
+      // Off: only versions saved by hand are kept.
+      await routeFetch('/api/config', json('PUT', { versionHistory: false }));
+      expect(await v('five')).toBeNull();
+      expect(await v('six', 'by hand', 'manual')).toMatchObject({ label: 'by hand' });
+      await routeFetch('/api/config', json('PUT', { versionHistory: true, versionsToKeep: 20 }));
+    });
+
     it('lets saves that arrive together all land, one after another', async () => {
       const p = await create();
       const kept = (n: number): KeptImage => ({ id: `g${n}`, file: `g${n}.png`, width: 1, height: 1, createdAt: n });

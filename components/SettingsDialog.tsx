@@ -24,6 +24,7 @@ import { useProjectStore } from '@/store/projectStore';
 import { AccountStatus } from '@/components/AccountStatus';
 import { ExtensionSettings, hasExtensionSettings } from '@/components/ExtensionSlots';
 import { ImageConnectionsTab } from '@/components/ImageConnectionsSettings';
+import { VersionHistorySettings } from '@/components/VersionsDialog';
 
 type SettingsTab = 'general' | 'folders' | 'image' | 'llm' | 'chat' | 'assist' | 'personas' | 'extensions';
 
@@ -102,6 +103,9 @@ function GeneralTab() {
         </div>
         <p className="text-xs text-slate-500">Kept on this computer (data/settings.json) and shared by every device you open UCCB on, like your connections and presets.</p>
         {apiKey && <AccountStatus className="mt-1" />}
+      </Row>
+      <Row label="Version history" hint="Earlier versions of each card, kept at the start of each editing session and before changes to many fields at once. 🕘 beside undo shows them, to compare or restore.">
+        <VersionHistorySettings />
       </Row>
       <Row label="Who can connect" hint="UCCB always accepts this computer and your Tailscale devices. Changes apply within a few seconds.">
         <Toggle checked={config.allowLan} onChange={(allowLan) => void update({ allowLan })} label="Also allow devices on the home network" />

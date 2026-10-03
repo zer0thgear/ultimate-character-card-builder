@@ -13,6 +13,8 @@ const ROUTES: [string, () => Promise<RouteModule>][] = [
   ['/api/projects', () => import('@/app/api/projects/route')],
   ['/api/projects/:id', () => import('@/app/api/projects/[id]/route')],
   ['/api/projects/:id/duplicate', () => import('@/app/api/projects/[id]/duplicate/route')],
+  ['/api/projects/:id/versions', () => import('@/app/api/projects/[id]/versions/route')],
+  ['/api/projects/:id/versions/:vid', () => import('@/app/api/projects/[id]/versions/[vid]/route')],
   ['/api/trash', () => import('@/app/api/trash/route')],
   ['/api/trash/:entry', () => import('@/app/api/trash/[entry]/route')],
   ['/api/projects/:id/avatar', () => import('@/app/api/projects/[id]/avatar/route')],
