@@ -1,6 +1,7 @@
 import type { CardData, LorebookEntry } from '@/types/card';
 import type { LlmMessage, ProviderKind } from '@/types/llm';
 import type { ChatMessage, ChatSession } from '@/types/project';
+import type { SummarySettings } from '@/lib/chatSummary';
 import { expandMacros, type MacroContext } from '@/lib/macros';
 import { scanLorebook, describeEntry, type ScanResult, type ActivatedEntry, DEFAULT_SCAN_DEPTH, DEFAULT_MAX_RECURSION, type LoreDefaults } from '@/lib/lorebookScan';
 import { uuid } from '@/lib/uuid';
@@ -51,6 +52,9 @@ export interface ChatPromptSettings {
   swipeGesture: boolean;
   /** How a 🧭 guide is put to the model, with {{guide}} where it goes. */
   guideTemplate: string;
+  /** The chat summary's settings (see lib/chatSummary.ts); unset ones are
+   *  SillyTavern's defaults. */
+  summary?: Partial<SummarySettings>;
 }
 
 /** The chat settings' lorebook defaults, for scanLorebook. */
@@ -114,6 +118,8 @@ export interface BuildOptions {
   /** 🧭 A one-off steer for this generation, sent last as a system message
    *  (in the settings' guide template). */
   guide?: string;
+  /** The chat's summary, and where it goes. */
+  summary?: SummaryInjection;
   model?: string;
   kind?: ProviderKind;
   /** The reply's max tokens, for fitting the context size. */
@@ -123,6 +129,25 @@ export interface BuildOptions {
   maxContext?: number;
   now?: Date;
   random?: () => number;
+}
+
+/** A chat summary as it goes into the prompt: before or after the main
+ *  prompt, or in the chat at a depth (as SillyTavern's Summarize places it). */
+export interface SummaryInjection {
+  content: string;
+  position: 'before' | 'after' | 'depth';
+  depth: number;
+  role: LlmMessage['role'];
+}
+
+/** The summary as a prompt part, if it goes at `place`. */
+export function summaryPart(summary: SummaryInjection | undefined, place: 'before' | 'after'): PromptPart | null {
+  return summary?.position === place && summary.content.trim() ? { label: 'Summary', role: summary.role, content: summary.content } : null;
+}
+
+/** The summary as an at-depth injection, if it goes in the chat. */
+export function summaryDepthInjections(summary: SummaryInjection | undefined): DepthInjection[] {
+  return summary?.position === 'depth' && summary.content.trim() ? [{ label: 'Summary', role: summary.role, content: summary.content, depth: summary.depth, order: 100 }] : [];
 }
 
 export interface BuiltPrompt {
@@ -301,7 +326,11 @@ export function buildChatPrompt(card: CardData, history: ChatMessage[], settings
 
   const main = x(settings.mainPrompt);
   const cardSystem = settings.useCardSystemPrompt && card.system_prompt.trim();
+  const summaryBefore = summaryPart(opts.summary, 'before');
+  if (summaryBefore) parts.push(summaryBefore);
   sys(cardSystem ? 'System prompt (card)' : 'Main prompt', cardSystem ? x(card.system_prompt, main) : main);
+  const summaryAfter = summaryPart(opts.summary, 'after');
+  if (summaryAfter) parts.push(summaryAfter);
 
   for (const e of loreAt('before')) sys(`Lorebook: ${e.name}`, e.content);
 
@@ -320,7 +349,7 @@ export function buildChatPrompt(card: CardData, history: ChatMessage[], settings
 
   // The history goes here, once the rest is known (to fit the context size).
   const historyAt = parts.length;
-  const injections = cardDepthInjections(card, lore.active, x);
+  const injections = [...cardDepthInjections(card, lore.active, x), ...summaryDepthInjections(opts.summary)];
 
   const phiDefault = x(settings.defaultPostHistory);
   const cardPhi = settings.useCardPostHistory && card.post_history_instructions.trim();

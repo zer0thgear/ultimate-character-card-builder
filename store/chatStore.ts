@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import type { ChatImage, ChatMessage, ChatSession, ChatSummary } from '@/types/project';
+import type { ChatImage, ChatMessage, ChatSession, ChatSessionSummary, ChatSummary } from '@/types/project';
 import { api } from '@/lib/api';
 import { uuid } from '@/lib/uuid';
 import { useProjectStore } from '@/store/projectStore';
@@ -32,6 +32,8 @@ export function branchOf(chat: ChatSession, until: number, id: string, now: numb
     messages,
     ...(chat.personaId ? { personaId: chat.personaId } : {}),
     ...(images.length ? { images } : {}),
+    // The summary, if it covers no more than the branch does.
+    ...(chat.summary && (chat.summary.through === null || ids.has(chat.summary.through)) ? { summary: { ...chat.summary } } : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -52,6 +54,8 @@ interface ChatState {
   /** Lock a persona to this chat (undefined unlocks it). */
   setPersonaLock: (personaId: string | undefined) => void;
   setMessages: (change: (m: ChatMessage[]) => ChatMessage[]) => void;
+  /** The chat's summary (undefined clears it). */
+  setSummary: (summary: ChatSessionSummary | undefined) => void;
   /** Adds a picture to the chat, or replaces one with the same id. */
   putImage: (image: ChatImage) => void;
   removeImage: (id: string) => void;
@@ -144,6 +148,12 @@ export const useChatStore = create<ChatState>((set, get) => {
         const { projectId } = get();
         if (projectId) for (const i of gone) void api.deleteChatImage(projectId, i.file).catch(() => {});
         return { ...c, messages, ...(gone.length ? { images: c.images!.filter((i) => !gone.includes(i)) } : {}) };
+      }),
+    setSummary: (summary) =>
+      updateChat((c) => {
+        const chat: ChatSession = { ...c, summary };
+        if (!summary) delete chat.summary;
+        return chat;
       }),
     putImage: (image) => updateChat((c) => ({ ...c, images: (c.images ?? []).some((i) => i.id === image.id) ? c.images!.map((i) => (i.id === image.id ? image : i)) : [...(c.images ?? []), image] })),
     branchFrom: async (messageId) => {

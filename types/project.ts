@@ -137,7 +137,16 @@ export interface ChatSession {
   personaId?: string;
   /** Pictures drawn in the chat (Chat mode's 🎨), each after a message. */
   images?: ChatImage[];
+  /** The story so far, summed up (see lib/chatSummary.ts). */
+  summary?: ChatSessionSummary;
   createdAt: number;
+  updatedAt: number;
+}
+
+export interface ChatSessionSummary {
+  text: string;
+  /** The last message it covers (null: none, only the greeting). */
+  through: string | null;
   updatedAt: number;
 }
 
