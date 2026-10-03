@@ -166,6 +166,17 @@ export interface ChatSession {
   updatedAt: number;
 }
 
+/** A deleted card waiting in data/trash. */
+export interface TrashedProject {
+  /** Its folder in data/trash: "<id>-<when deleted>". */
+  entry: string;
+  id: string;
+  name: string;
+  deletedAt: number;
+  hasAvatar: boolean;
+  chats: number;
+}
+
 export interface ChatSessionSummary {
   text: string;
   /** The last message it covers (null: none, only the greeting). */

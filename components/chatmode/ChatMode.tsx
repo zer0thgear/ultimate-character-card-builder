@@ -115,7 +115,7 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
                   tone="danger"
                   className="opacity-0 group-hover:opacity-100 touch:opacity-100"
                   onClick={async () => {
-                    if (await confirmDialog({ title: `Delete "${s.name || 'Unnamed'}"?`, body: 'The card and its chats move to data/trash, where you can recover them by hand.', confirmLabel: 'Delete', danger: true })) await remove(s.id);
+                    if (await confirmDialog({ title: `Delete "${s.name || 'Unnamed'}"?`, body: 'The card and its chats go to the trash, where 🗑 Trash (on the home screen) can restore them.', confirmLabel: 'Delete', danger: true })) await remove(s.id);
                   }}
                 >
                   🗑

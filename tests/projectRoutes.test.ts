@@ -110,6 +110,38 @@ describe('card project routes', { timeout: 30_000 }, () => {
       expect(JSON.parse(readFileSync(path.join(dir, 'trash', trashed, 'project.json'), 'utf8')).notes).toBe('keep me');
     });
 
+    it('lists the trash, restores from it, and deletes from it for good', async () => {
+      const p = await create({ notes: 'back again' });
+      await routeFetch(`/api/projects/${p.id}`, json('PUT', { ...p, card: { ...p.card, data: { ...p.card.data, name: 'Binned' } } }));
+      await routeFetch(`/api/projects/${p.id}`, { method: 'DELETE' });
+      const list = (await (await routeFetch('/api/trash')).json()) as { entry: string; id: string; name: string }[];
+      const t = list.find((x) => x.id === p.id)!;
+      expect(t.name).toBe('Binned');
+      const back = (await (await routeFetch(`/api/trash/${t.entry}`, { method: 'POST' })).json()) as CardProject;
+      expect(back.id).toBe(p.id);
+      expect(onDisk(p.id).notes).toBe('back again');
+
+      await routeFetch(`/api/projects/${p.id}`, { method: 'DELETE' });
+      const again = ((await (await routeFetch('/api/trash')).json()) as { entry: string; id: string }[]).find((x) => x.id === p.id)!;
+      expect((await routeFetch(`/api/trash/${again.entry}`, { method: 'DELETE' })).status).toBe(200);
+      expect(existsSync(path.join(dir, 'trash', again.entry))).toBe(false);
+      expect((await routeFetch('/api/trash/..%2Fprojects', { method: 'DELETE' })).status).toBe(400);
+    });
+
+    it('duplicates a project, with its chats only when asked', async () => {
+      const p = await create({ notes: 'original' });
+      await routeFetch(`/api/projects/${p.id}`, json('PUT', { ...p, card: { ...p.card, data: { ...p.card.data, name: 'Ann' } } }));
+      const chat: ChatSession = { id: 'c1', name: 'C', greeting: 0, messages: [], createdAt: 1, updatedAt: 1 };
+      await routeFetch(`/api/projects/${p.id}/chats/c1`, json('PUT', chat));
+      const bare = (await (await routeFetch(`/api/projects/${p.id}/duplicate`, json('POST', {}))).json()) as CardProject;
+      expect(bare.id).not.toBe(p.id);
+      expect(bare.card.data.name).toBe('Ann (copy)');
+      expect(onDisk(bare.id).notes).toBe('original');
+      expect(existsSync(path.join(dir, 'projects', bare.id, 'chats'))).toBe(false);
+      const full = (await (await routeFetch(`/api/projects/${p.id}/duplicate`, json('POST', { chats: true }))).json()) as CardProject;
+      expect(readdirSync(path.join(dir, 'projects', full.id, 'chats'))).toContain('c1.json');
+    });
+
     it('lets saves that arrive together all land, one after another', async () => {
       const p = await create();
       const kept = (n: number): KeptImage => ({ id: `g${n}`, file: `g${n}.png`, width: 1, height: 1, createdAt: n });

@@ -2,7 +2,7 @@ import 'server-only';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { AppConfig, CardProject, ChatSession, ChatSummary, Persona, ProjectSummary } from '@/types/project';
+import type { AppConfig, CardProject, ChatSession, ChatSummary, Persona, ProjectSummary, TrashedProject } from '@/types/project';
 import { DEFAULT_CONFIG } from '@/types/project';
 import { newCard } from '@/lib/cardSpec';
 import { normalizeCard } from '@/lib/cardSpec';
@@ -16,7 +16,7 @@ import { sumTallies, tallyChat, type ChatTally } from '@/lib/chatStats';
 //   data/projects/<id>/avatar.png
 //   data/projects/<id>/gallery/*.png    kept gens
 //   data/projects/<id>/chats/<id>.json  test chats
-//   data/trash/<id>-<time>/             deleted projects, recoverable by hand
+//   data/trash/<id>-<time>/             deleted projects, until restored or emptied
 //   data/library-index.json             the gen library's metadata cache
 //   data/recent-gens/<id>.png + .json   recent gens, until kept, cleared or expired
 
@@ -231,6 +231,91 @@ export async function trashProject(id: string) {
   const from = projectDir(id);
   await fs.mkdir(TRASH, { recursive: true });
   await fs.rename(from, path.join(TRASH, `${id}-${Date.now()}`));
+}
+
+/**
+ * A copy of a project under a new id, named "… (copy)": the card, its
+ * picture, notes, art prompts and kept gens, and its chats (with their
+ * pictures) if `chats` is set. Version history stays with the original.
+ */
+export async function duplicateProject(id: string, { chats = false }: { chats?: boolean } = {}): Promise<CardProject> {
+  const src = await getProject(id);
+  const newId = randomUUID();
+  const to = projectDir(newId);
+  await fs.mkdir(to, { recursive: true });
+  for (const sub of ['avatar.png', 'gallery', ...(chats ? ['chats', 'chat-images'] : [])]) {
+    await fs.cp(path.join(projectDir(id), sub), path.join(to, sub), { recursive: true }).catch((err: NodeJS.ErrnoException) => {
+      if (err.code !== 'ENOENT') throw err;
+    });
+  }
+  // Chat pictures are filed under their chat's id, which a copy keeps.
+  const now = Date.now();
+  const name = src.card.data.name.trim();
+  const copy: CardProject = {
+    ...structuredClone(src),
+    id: newId,
+    card: { ...structuredClone(src.card), data: { ...structuredClone(src.card.data), name: name ? `${name} (copy)` : '' } },
+    createdAt: now,
+    updatedAt: now,
+  };
+  return saveProject(copy);
+}
+
+// ─── Trash ───────────────────────────────────────────────────────────────────
+
+const TRASH_RE = /^([a-zA-Z0-9_-]{1,64})-(\d{10,})$/;
+
+
+export async function listTrash(): Promise<TrashedProject[]> {
+  let dirs: string[];
+  try {
+    dirs = await fs.readdir(TRASH);
+  } catch {
+    return [];
+  }
+  const out: TrashedProject[] = [];
+  await Promise.all(
+    dirs.map(async (entry) => {
+      const m = entry.match(TRASH_RE);
+      if (!m) return;
+      const dir = path.join(TRASH, entry);
+      const p = await readJson<CardProject>(path.join(dir, 'project.json')).catch(() => null);
+      if (!p) return;
+      const chats = await fs.readdir(path.join(dir, 'chats')).then((f) => f.filter((x) => x.endsWith('.json')).length, () => 0);
+      const hasAvatar = await fs.stat(path.join(dir, 'avatar.png')).then(() => true, () => false);
+      out.push({ entry, id: m[1], name: p.card?.data?.name ?? '', deletedAt: Number(m[2]), hasAvatar, chats });
+    }),
+  );
+  return out.sort((a, b) => b.deletedAt - a.deletedAt);
+}
+
+const trashDir = (entry: string) => {
+  if (!TRASH_RE.test(entry)) throw new BadRequestError(`Bad trash entry: ${entry}`);
+  return path.join(TRASH, entry);
+};
+
+export const trashAvatarPath = (entry: string) => path.join(trashDir(entry), 'avatar.png');
+
+/** Puts a deleted project back (under a new id if its old one was reused). */
+export async function restoreFromTrash(entry: string): Promise<CardProject> {
+  const from = trashDir(entry);
+  const p = await readJson<CardProject>(path.join(from, 'project.json'));
+  if (!p) throw new NotFoundError(`Nothing in the trash called ${entry}`);
+  let id = entry.match(TRASH_RE)![1];
+  const taken = await fs.stat(projectDir(id)).then(() => true, () => false);
+  if (taken) id = randomUUID();
+  await fs.mkdir(PROJECTS, { recursive: true });
+  await fs.rename(from, projectDir(id));
+  return updateProject(id, (cur) => ({ ...cur, id }));
+}
+
+/** Deletes a trashed project for good. */
+export async function deleteFromTrash(entry: string) {
+  await fs.rm(trashDir(entry), { recursive: true, force: true });
+}
+
+export async function emptyTrash() {
+  for (const t of await listTrash()) await deleteFromTrash(t.entry);
 }
 
 // ─── Project files (avatar, kept gens) ───────────────────────────────────────

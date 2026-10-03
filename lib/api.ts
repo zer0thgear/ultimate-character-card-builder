@@ -1,4 +1,4 @@
-import type { AppConfig, CardProject, ChatSession, ChatSummary, KeptImage, Persona, ProjectSummary, AvatarInfo } from '@/types/project';
+import type { AppConfig, CardProject, TrashedProject, ChatSession, ChatSummary, KeptImage, Persona, ProjectSummary, AvatarInfo } from '@/types/project';
 import type { LlmEvent, LlmRequest } from '@/types/llm';
 import type { LibraryItem } from '@/lib/librarySearch';
 
@@ -25,6 +25,13 @@ export const api = {
   getProject: (id: string) => call<CardProject>(`/api/projects/${id}`),
   saveProject: (p: CardProject) => call<CardProject>(`/api/projects/${p.id}`, json('PUT', p)),
   deleteProject: (id: string) => call<{ ok: true }>(`/api/projects/${id}`, { method: 'DELETE' }),
+  duplicateProject: (id: string, chats: boolean) => call<CardProject>(`/api/projects/${id}/duplicate`, json('POST', { chats })),
+
+  listTrash: () => call<TrashedProject[]>('/api/trash'),
+  trashAvatarUrl: (entry: string) => `/api/trash/${entry}/avatar`,
+  restoreFromTrash: (entry: string) => call<CardProject>(`/api/trash/${entry}`, { method: 'POST' }),
+  deleteFromTrash: (entry: string) => call<{ ok: true }>(`/api/trash/${entry}`, { method: 'DELETE' }),
+  emptyTrash: () => call<{ ok: true }>('/api/trash', { method: 'DELETE' }),
 
   avatarUrl: (id: string, avatar?: AvatarInfo) => (avatar ? `/api/projects/${id}/avatar?v=${avatar.version}` : null),
   setAvatar: (id: string, image: Blob) => call<AvatarInfo>(`/api/projects/${id}/avatar`, { method: 'PUT', body: image }),

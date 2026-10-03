@@ -38,6 +38,10 @@ interface ProjectState {
   open: (id: string) => Promise<void>;
   create: (init?: Partial<CardProject>) => Promise<CardProject>;
   remove: (id: string) => Promise<void>;
+  /** A copy of a card (with its chats, if asked), opened. */
+  duplicate: (id: string, chats: boolean) => Promise<CardProject>;
+  /** Puts a deleted card back from the trash, opened. */
+  restore: (entry: string) => Promise<CardProject>;
   close: () => Promise<void>;
   /** A Chat-mode card joins Builder (it then shows in both modes). */
   addToBuilder: (id: string) => Promise<void>;
@@ -159,6 +163,22 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       upsertSummary(p);
       await get().open(p.id);
       if (style.trim() && !p.gen.stylePrompt?.trim() && get().project?.id === p.id) useSettingsStore.getState().set('stylePrompt', style);
+      return p;
+    },
+
+    duplicate: async (id, chats) => {
+      await get().flush();
+      const p = await api.duplicateProject(id, chats);
+      // Its chat counts come with the list.
+      await get().refreshList();
+      await get().open(p.id);
+      return p;
+    },
+
+    restore: async (entry) => {
+      const p = await api.restoreFromTrash(entry);
+      await get().refreshList();
+      await get().open(p.id);
       return p;
     },
 
