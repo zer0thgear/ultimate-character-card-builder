@@ -94,6 +94,7 @@ export function CanvasEditor({ mode, image, width, height, initialLayer, onSave,
 
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [tool, setTool] = useState<Tool>('draw');
   const [paintSize, setPaintSize] = useState(20);
   const [maskSize, setMaskSize] = useState(4);
@@ -152,6 +153,7 @@ export function CanvasEditor({ mode, image, width, height, initialLayer, onSave,
 
       if (!isMask) {
         const bitmap = await loadBitmap(image);
+        if (!live) return;
         const c = document.createElement('canvas');
         c.width = width;
         c.height = height;
@@ -172,7 +174,10 @@ export function CanvasEditor({ mode, image, width, height, initialLayer, onSave,
       setCanUndo(false);
       setCanRedo(false);
       if (live) setReady(true);
-    })();
+    })().catch(() => {
+      // A picture the browser can't decode: say so, not "Loading…" forever.
+      if (live) setLoadFailed(true);
+    });
     return () => {
       live = false;
     };
@@ -942,7 +947,7 @@ export function CanvasEditor({ mode, image, width, height, initialLayer, onSave,
               }}
             />
           </div>
-          {!ready && <p className="absolute text-xs text-slate-500">Loading…</p>}
+          {!ready && <p className="absolute text-xs text-slate-500">{loadFailed ? "Couldn't load this picture." : 'Loading…'}</p>}
         </div>
       </div>
     </div>
