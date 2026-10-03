@@ -36,3 +36,22 @@ export function recentPatch(patch: Record<string, unknown>): Record<string, unkn
   for (const k of RECENT_PATCH_KEYS) if (k in patch) out[k] = stripImages(patch[k]) ?? null;
   return Object.keys(out).length ? out : null;
 }
+
+/** Within this long of being deleted, a recent gen is marked as going soon. */
+export const EXPIRY_WARNING_MS = 24 * 3_600_000;
+
+/**
+ * How long until a recent gen is deleted (Settings → keep recent gens for
+ * N days), or null if it never will be: kept forever (0 days), or kept
+ * with a card or saved to a folder, so it's safe elsewhere.
+ */
+export function expiresIn(img: { timestamp: number; keptFile?: string; savedPath?: string }, days: number, now = Date.now()): number | null {
+  if (!(days > 0) || img.keptFile || img.savedPath) return null;
+  return Math.max(0, img.timestamp + days * 86_400_000 - now);
+}
+
+/** "5h", "40m": a short time left. */
+export function shortTimeLeft(ms: number): string {
+  const mins = Math.max(1, Math.round(ms / 60_000));
+  return mins < 60 ? `${mins}m` : `${Math.round(mins / 60)}h`;
+}
