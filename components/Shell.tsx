@@ -25,10 +25,12 @@ import { VisionWriteHost } from '@/components/VisionWriteDialog';
 import { ExtensionHosts } from '@/components/ExtensionSlots';
 import { ChatCardActions, ChatCardList, ChatHeaderAvatar, ChatHome, ChatScreen, switchAppMode } from '@/components/chatmode/ChatMode';
 import { CardListMeta } from '@/components/CardListMeta';
-import { CardSortControl, useSortedCards } from '@/components/CardSort';
+import { CardSortControl, TagFilter, TagFilterNote, useSortedCards } from '@/components/CardSort';
 import { chatStatsDetail, sortDetail } from '@/lib/cardSort';
 import { importFromUrl, overwriteCard } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
+import { TrashDialog, duplicateCard, openTrash } from '@/components/TrashDialog';
+import { VersionsDialog, openVersions } from '@/components/VersionsDialog';
 
 export function Shell() {
   const project = useProjectStore((s) => s.project);
@@ -176,6 +178,8 @@ export function Shell() {
       <SettingsDialog />
       <FieldToolsHost />
       <ConfirmHost />
+      <TrashDialog />
+      <VersionsDialog />
       <VisionWriteHost />
       <ExtensionHosts />
       <AssistInspectorHost />
@@ -241,6 +245,9 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
                 </IconButton>
                 <IconButton title="Redo (Ctrl+Y)" disabled={!future.length} onClick={redo}>
                   ↷
+                </IconButton>
+                <IconButton title="Versions: earlier versions of this card, to compare or restore" onClick={openVersions}>
+                  🕘
                 </IconButton>
               </div>
             </>
@@ -396,6 +403,7 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
           <CardSortControl className={summaries.length > 6 ? 'w-28' : 'flex-1'} />
         </div>
       )}
+      <TagFilterNote className="mx-2 mb-2" />
       <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
         {shown.map((s) => {
           const url = api.avatarUrl(s.id, s.avatar);
@@ -412,12 +420,15 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
                   <span className="block truncate text-[10px] text-slate-500" title={s.chats ? chatStatsDetail(s) : undefined}>{sortDetail(s, by)}</span>
                 </span>
               </button>
+              <IconButton title="Duplicate card" className="opacity-0 group-hover:opacity-100 touch:opacity-100" onClick={() => void duplicateCard(s).then(() => onPicked?.())}>
+                ⧉
+              </IconButton>
               <IconButton
                 title="Delete card"
                 tone="danger"
                 className="opacity-0 group-hover:opacity-100 touch:opacity-100"
                 onClick={async () => {
-                  if (await confirmDialog({ title: `Delete "${s.name || 'Unnamed'}"?`, body: 'The project (card, gens kept with it, chats) moves to data/trash, where you can recover it by hand.', confirmLabel: 'Delete', danger: true })) {
+                  if (await confirmDialog({ title: `Delete "${s.name || 'Unnamed'}"?`, body: 'The card, the gens kept with it and its chats go to the trash, where 🗑 Trash (on the home screen) can restore them.', confirmLabel: 'Delete', danger: true })) {
                     await remove(s.id);
                   }
                 }}
@@ -429,6 +440,9 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
         })}
         {summaries.length === 0 && <p className="px-2 py-4 text-xs text-slate-500">No cards yet. Make a new one, or drop a card file anywhere.</p>}
       </div>
+      <button type="button" className="mx-2 mb-2 rounded-md px-2 py-1 text-left text-xs text-slate-500 hover:bg-slate-900 hover:text-slate-300" onClick={openTrash} title="Deleted cards, to restore or delete for good">
+        🗑 Trash
+      </button>
     </nav>
   );
 }
@@ -455,7 +469,8 @@ function Home({ loading }: { loading: boolean }) {
 
 function CardsHome() {
   const { summaries: all, open, create } = useProjectStore();
-  const { sorted: summaries, by } = useSortedCards(useMemo(() => all.filter((s) => !s.chatOnly), [all]));
+  const builderCards = useMemo(() => all.filter((s) => !s.chatOnly), [all]);
+  const { sorted: summaries, by, total } = useSortedCards(builderCards);
   const setHomeTab = useUiStore((s) => s.setHomeTab);
   const importFile = () => importCards();
   return (
@@ -480,10 +495,14 @@ function CardsHome() {
           <Button variant="ghost" onClick={() => openSettings()}>
             Settings
           </Button>
-          {summaries.length > 1 && <CardSortControl className="ml-auto w-44" />}
+          <Button variant="ghost" onClick={openTrash} title="Deleted cards, to restore or delete for good">
+            🗑 Trash
+          </Button>
+          {total > 1 && <CardSortControl className="ml-auto w-44" />}
         </div>
+        <TagFilter cards={builderCards} />
         {summaries.length === 0 ? (
-          <p className="text-sm text-slate-500">No cards yet. Start one, import one, or drop a PNG, JSON or CHARX card anywhere. You can also start one from a picture in the gen library.</p>
+          <p className="text-sm text-slate-500">{total ? 'No cards have all of those tags.' : 'No cards yet. Start one, import one, or drop a PNG, JSON or CHARX card anywhere. You can also start one from a picture in the gen library.'}</p>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3 phone:grid-cols-[repeat(auto-fill,minmax(104px,1fr))] phone:gap-2">
             {summaries.map((s) => {

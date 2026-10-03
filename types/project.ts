@@ -166,6 +166,34 @@ export interface ChatSession {
   updatedAt: number;
 }
 
+/** Why a version of a card was kept: the start of an editing session, a
+ *  change to many fields at once, a restore, or by hand. */
+export type VersionReason = 'session' | 'overwrite' | 'macro' | 'assistant' | 'restore' | 'manual';
+
+/** An earlier version of a card, kept in data/projects/<id>/versions. */
+export interface CardVersion {
+  id: string;
+  createdAt: number;
+  reason: VersionReason;
+  /** A name it was given (named versions are never pruned). */
+  label?: string;
+  card: CharacterCard;
+}
+
+/** A version as listed: without the card, with its name and size. */
+export type CardVersionInfo = Omit<CardVersion, 'card'> & { name: string; bytes: number };
+
+/** A deleted card waiting in data/trash. */
+export interface TrashedProject {
+  /** Its folder in data/trash: "<id>-<when deleted>". */
+  entry: string;
+  id: string;
+  name: string;
+  deletedAt: number;
+  hasAvatar: boolean;
+  chats: number;
+}
+
 export interface ChatSessionSummary {
   text: string;
   /** The last message it covers (null: none, only the greeting). */
@@ -200,6 +228,10 @@ export interface AppConfig {
   /** Days recent gens (the Gallery's session gens) stay on the server
    *  before they're cleaned up; 0 keeps them until cleared. */
   recentGensDays: number;
+  /** Keep earlier versions of each card (lib/server/versions.ts). */
+  versionHistory: boolean;
+  /** How many a card keeps; past it, the oldest unnamed ones go. */
+  versionsToKeep: number;
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -209,4 +241,6 @@ export const DEFAULT_CONFIG: AppConfig = {
   libraryFolders: [],
   allowLan: false,
   recentGensDays: 7,
+  versionHistory: true,
+  versionsToKeep: 20,
 };

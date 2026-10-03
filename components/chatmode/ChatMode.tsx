@@ -14,7 +14,7 @@ import { SourceButton } from '@/components/CardSource';
 import { WritingToolsContext } from '@/components/editor/fieldTools';
 import { openLightbox } from '@/components/Lightbox';
 import { CardListMeta } from '@/components/CardListMeta';
-import { CardSortControl, useSortedCards } from '@/components/CardSort';
+import { CardSortControl, TagFilter, TagFilterNote, useSortedCards } from '@/components/CardSort';
 import { chatStatsDetail, sortDetail } from '@/lib/cardSort';
 import { importFromUrl } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
@@ -83,6 +83,7 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
           <CardSortControl className={summaries.length > 6 ? 'w-28' : 'flex-1'} />
         </div>
       )}
+      <TagFilterNote className="mx-2 mb-2" />
       <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
         {shown.map((s) => {
           const url = avatarOf(s);
@@ -115,7 +116,7 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
                   tone="danger"
                   className="opacity-0 group-hover:opacity-100 touch:opacity-100"
                   onClick={async () => {
-                    if (await confirmDialog({ title: `Delete "${s.name || 'Unnamed'}"?`, body: 'The card and its chats move to data/trash, where you can recover them by hand.', confirmLabel: 'Delete', danger: true })) await remove(s.id);
+                    if (await confirmDialog({ title: `Delete "${s.name || 'Unnamed'}"?`, body: 'The card and its chats go to the trash, where 🗑 Trash (on the home screen) can restore them.', confirmLabel: 'Delete', danger: true })) await remove(s.id);
                   }}
                 >
                   🗑
@@ -133,7 +134,7 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
 /** No card open in Chat mode: every card to pick from. */
 export function ChatHome({ loading }: { loading: boolean }) {
   const { summaries: all, open } = useProjectStore();
-  const { sorted: summaries, by } = useSortedCards(all);
+  const { sorted: summaries, by, total } = useSortedCards(all);
   if (loading) return <div className="flex flex-1 items-center justify-center text-slate-500">Opening…</div>;
   return (
     <div className="h-full min-w-0 flex-1 overflow-y-auto p-4 phone:p-3">
@@ -152,10 +153,11 @@ export function ChatHome({ loading }: { loading: boolean }) {
           <Button variant="ghost" onClick={() => void switchAppMode('builder')}>
             🛠 Switch to Builder
           </Button>
-          {summaries.length > 1 && <CardSortControl className="ml-auto w-44" />}
+          {total > 1 && <CardSortControl className="ml-auto w-44" />}
         </div>
+        <TagFilter cards={all} />
         {summaries.length === 0 ? (
-          <p className="text-sm text-slate-500">No cards yet. Import a PNG, JSON or CHARX card, or drop one anywhere.</p>
+          <p className="text-sm text-slate-500">{total ? 'No cards have all of those tags.' : 'No cards yet. Import a PNG, JSON or CHARX card, or drop one anywhere.'}</p>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3 phone:grid-cols-[repeat(auto-fill,minmax(104px,1fr))] phone:gap-2">
             {summaries.map((s) => {

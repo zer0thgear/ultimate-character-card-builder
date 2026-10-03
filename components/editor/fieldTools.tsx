@@ -112,6 +112,7 @@ function AssistDialog({ path, onClose }: { path: string; onClose: () => void }) 
   };
   const apply = (mode: 'replace' | 'append') => {
     const next = mode === 'replace' ? draft : current.replace(/\s*$/, '') + (action === 'continue' ? '' : '\n\n') + draft;
+    void useProjectStore.getState().keepVersion('assistant');
     updateCard((d) => setPath(d, path, next));
     onClose();
   };
