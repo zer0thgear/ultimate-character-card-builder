@@ -29,7 +29,7 @@ async function call(c: BackendConnection, path: string, init: RequestInit = {}, 
   const url = `${base(c)}${path}`;
   let res: Response;
   try {
-    res = await fetch(url, { ...init, headers: { ...headers(c, init.body !== undefined), ...(init.headers as Record<string, string>) }, signal: AbortSignal.timeout(timeoutMs) });
+    res = await fetch(url, { ...init, headers: { ...headers(c, init.body !== undefined && !(init.body instanceof FormData)), ...(init.headers as Record<string, string>) }, signal: AbortSignal.timeout(timeoutMs) });
   } catch (err) {
     const e = err as Error & { cause?: { code?: string } };
     if (e.name === 'TimeoutError') throw new Error(`${url} took too long to answer.`);
@@ -89,7 +89,6 @@ const GEN_TIMEOUT = 15 * 60_000;
 export async function backendGenerate(c: BackendConnection, r: BackendGenRequest): Promise<Uint8Array[]> {
   if (c.kind === 'a1111') return a1111Generate(c, r);
   if (c.kind === 'comfyui') {
-    if (r.init) throw new BadRequestError("Img2Img isn't available with ComfyUI yet. Use NovelAI or an A1111 connection for it.");
     return comfyGenerate(c, r);
   }
   throw new BadRequestError('NovelAI gens are sent from the browser.');
@@ -116,8 +115,25 @@ interface ComfyHistory {
   outputs?: Record<string, { images?: { filename: string; subfolder: string; type: string }[] }>;
 }
 
+/** Puts an Img2Img base in ComfyUI's input folder; its name there. */
+async function comfyUpload(c: BackendConnection, png: string): Promise<string> {
+  const form = new FormData();
+  form.append('image', new Blob([Buffer.from(png.replace(/^data:[^,]*,/, ''), 'base64')], { type: 'image/png' }), `uccb-base-${randomUUID()}.png`);
+  form.append('type', 'input');
+  form.append('overwrite', 'true');
+  const res = await call(c, '/upload/image', { method: 'POST', body: form }, 60_000);
+  const { name, subfolder } = await json<{ name: string; subfolder?: string }>(res);
+  return subfolder ? `${subfolder}/${name}` : name;
+}
+
 async function comfyGenerate(c: BackendConnection, r: BackendGenRequest): Promise<Uint8Array[]> {
-  const workflow = fillComfyWorkflow(c.workflow ?? builtInWorkflow(), r);
+  const image = r.init ? await comfyUpload(c, r.init.image) : undefined;
+  let workflow;
+  try {
+    workflow = fillComfyWorkflow(c.workflow ?? builtInWorkflow(), r, image);
+  } catch (err) {
+    throw new BadRequestError((err as Error).message);
+  }
   // The built-in workflow needs a checkpoint: the first the server has, if none was picked.
   if (!c.workflow && !r.checkpoint) {
     const { checkpoints } = await backendOptions(c);

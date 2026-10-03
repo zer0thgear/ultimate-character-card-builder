@@ -20,7 +20,7 @@ export function ImageConnectionsTab({ onOpenGeneral }: { onOpenGeneral: () => vo
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-slate-500">
-        Where the Image tab makes gens. NovelAI has UCCB&apos;s full generator (character prompts, positions, Img2Img, inpainting, Anlas). A1111 / Forge (and reForge, SD.Next) and ComfyUI take the style, scene and characters as one prompt, with their own checkpoints and samplers; A1111 does Img2Img too. Those servers are reached through UCCB&apos;s own server, so they need no CORS setting.
+        Where the Image tab makes gens. NovelAI has UCCB&apos;s full generator (character prompts, positions, Img2Img, inpainting, Anlas). A1111 / Forge (and reForge, SD.Next) and ComfyUI take the style, scene and characters as one prompt, with their own checkpoints and samplers, and both do Img2Img (ComfyUI through your workflow's Load Image node, or nodes UCCB adds to load the base). Those servers are reached through UCCB&apos;s own server, so they need no CORS setting.
       </p>
       {!connections.length && <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-200">No image connections yet: add one to start generating.</p>}
       {connections.map((c) => (
@@ -161,7 +161,7 @@ function ImageConnectionEditor({ connection: c, onOpenGeneral }: { connection: I
             {c.workflow
               ? `UCCB fills in its ${slots ? describeSlots(slots).join(', ') || 'nothing (add %prompt% placeholders)' : ''}; everything else (LoRAs, upscalers, custom nodes) runs as you built it.`
               : 'A checkpoint, your prompt and negative, then the sampler: the workflow ComfyUI starts with. For LoRAs, upscaling or custom nodes, build your own in ComfyUI and import it.'}{' '}
-            To import one: in ComfyUI, Workflow → Export (API). UCCB finds the prompt through the sampler&apos;s positive and negative inputs; or put %prompt%, %negative%, %seed%, %width%, %height% (and so on) in any node&apos;s fields to say exactly where.
+            To import one: in ComfyUI, Workflow → Export (API). UCCB finds the prompt through the sampler&apos;s positive and negative inputs; or put %prompt%, %negative%, %seed%, %width%, %height% (and so on) in any node&apos;s fields to say exactly where. For Img2Img, the base goes into the workflow&apos;s Load Image node (or %image%), with the strength as the sampler&apos;s denoise (or %denoise%); a workflow without one gets nodes added to load the base, scale it to the gen&apos;s size and encode it.
           </p>
         </div>
       )}

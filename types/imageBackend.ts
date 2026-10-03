@@ -39,7 +39,7 @@ export interface BackendGenRequest {
   checkpoint: string;
   sampler: string;
   scheduler: string;
-  /** Img2Img (A1111): the base as base64 PNG, and how much to change it. */
+  /** Img2Img: the base as base64 PNG, and how much to change it. */
   init?: { image: string; strength: number };
 }
 
