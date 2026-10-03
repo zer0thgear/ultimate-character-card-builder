@@ -68,6 +68,9 @@ interface UiState {
   /** Each mode's card order (lib/cardSort.ts). */
   cardSort: Record<AppMode, CardSort>;
   setCardSort: (mode: AppMode, sort: CardSort) => void;
+  /** Each mode's tag filter: the cards shown have every one of these. */
+  cardTags: Record<AppMode, string[]>;
+  setCardTags: (mode: AppMode, tags: string[]) => void;
   /** Local extensions whose buttons on pictures are hidden (by id). */
   hiddenImageActions: string[];
   setImageActionsHidden: (extension: string, hidden: boolean) => void;
@@ -121,6 +124,8 @@ export const useUiStore = create<UiState>()(
       setCardList: (patch) => set(patch),
       cardSort: { builder: DEFAULT_CARD_SORT, chat: DEFAULT_CARD_SORT },
       setCardSort: (mode, sort) => set((s) => ({ cardSort: { ...s.cardSort, [mode]: sort } })),
+      cardTags: { builder: [], chat: [] },
+      setCardTags: (mode, tags) => set((s) => ({ cardTags: { ...s.cardTags, [mode]: tags } })),
       hiddenImageActions: [],
       setImageActionsHidden: (extension, hidden) =>
         set((s) => ({ hiddenImageActions: hidden ? [...new Set([...s.hiddenImageActions, extension])] : s.hiddenImageActions.filter((id) => id !== extension) })),

@@ -67,3 +67,33 @@ export function sortDetail(s: Sortable, by: CardSortBy): string {
   if (by === 'tokens') return `${formatTokens(s.tokens ?? 0)} tokens · ${plural(s.messages ?? 0, 'message')}`;
   return date(lastUsed(s));
 }
+
+// ─── Tags ────────────────────────────────────────────────────────────────────
+
+/** Every tag on the cards with how many have it, most used first (then A–Z).
+ *  Tags are matched without regard to case; the commonest spelling shows. */
+export function tagCounts(cards: Pick<ProjectSummary, 'tags'>[]): { tag: string; count: number }[] {
+  const by = new Map<string, { spellings: Map<string, number>; count: number }>();
+  for (const c of cards) {
+    for (const t of new Set(c.tags.map((x) => x.trim()).filter(Boolean))) {
+      const key = t.toLowerCase();
+      const e = by.get(key) ?? { spellings: new Map(), count: 0 };
+      e.count++;
+      e.spellings.set(t, (e.spellings.get(t) ?? 0) + 1);
+      by.set(key, e);
+    }
+  }
+  return [...by.values()]
+    .map((e) => ({ tag: [...e.spellings].sort((a, b) => b[1] - a[1])[0][0], count: e.count }))
+    .sort((a, b) => b.count - a.count || byName.compare(a.tag, b.tag));
+}
+
+/** The cards that have every one of `tags` (any case). */
+export function withTags<T extends Pick<ProjectSummary, 'tags'>>(cards: T[], tags: string[]): T[] {
+  if (!tags.length) return cards;
+  const want = tags.map((t) => t.toLowerCase());
+  return cards.filter((c) => {
+    const have = new Set(c.tags.map((t) => t.trim().toLowerCase()));
+    return want.every((t) => have.has(t));
+  });
+}

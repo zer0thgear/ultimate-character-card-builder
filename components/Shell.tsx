@@ -25,7 +25,7 @@ import { VisionWriteHost } from '@/components/VisionWriteDialog';
 import { ExtensionHosts } from '@/components/ExtensionSlots';
 import { ChatCardActions, ChatCardList, ChatHeaderAvatar, ChatHome, ChatScreen, switchAppMode } from '@/components/chatmode/ChatMode';
 import { CardListMeta } from '@/components/CardListMeta';
-import { CardSortControl, useSortedCards } from '@/components/CardSort';
+import { CardSortControl, TagFilter, TagFilterNote, useSortedCards } from '@/components/CardSort';
 import { chatStatsDetail, sortDetail } from '@/lib/cardSort';
 import { importFromUrl, overwriteCard } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
@@ -398,6 +398,7 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
           <CardSortControl className={summaries.length > 6 ? 'w-28' : 'flex-1'} />
         </div>
       )}
+      <TagFilterNote className="mx-2 mb-2" />
       <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
         {shown.map((s) => {
           const url = api.avatarUrl(s.id, s.avatar);
@@ -463,7 +464,8 @@ function Home({ loading }: { loading: boolean }) {
 
 function CardsHome() {
   const { summaries: all, open, create } = useProjectStore();
-  const { sorted: summaries, by } = useSortedCards(useMemo(() => all.filter((s) => !s.chatOnly), [all]));
+  const builderCards = useMemo(() => all.filter((s) => !s.chatOnly), [all]);
+  const { sorted: summaries, by, total } = useSortedCards(builderCards);
   const setHomeTab = useUiStore((s) => s.setHomeTab);
   const importFile = () => importCards();
   return (
@@ -491,10 +493,11 @@ function CardsHome() {
           <Button variant="ghost" onClick={openTrash} title="Deleted cards, to restore or delete for good">
             🗑 Trash
           </Button>
-          {summaries.length > 1 && <CardSortControl className="ml-auto w-44" />}
+          {total > 1 && <CardSortControl className="ml-auto w-44" />}
         </div>
+        <TagFilter cards={builderCards} />
         {summaries.length === 0 ? (
-          <p className="text-sm text-slate-500">No cards yet. Start one, import one, or drop a PNG, JSON or CHARX card anywhere. You can also start one from a picture in the gen library.</p>
+          <p className="text-sm text-slate-500">{total ? 'No cards have all of those tags.' : 'No cards yet. Start one, import one, or drop a PNG, JSON or CHARX card anywhere. You can also start one from a picture in the gen library.'}</p>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3 phone:grid-cols-[repeat(auto-fill,minmax(104px,1fr))] phone:gap-2">
             {summaries.map((s) => {

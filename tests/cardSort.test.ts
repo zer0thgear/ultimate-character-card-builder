@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { chatStatsDetail, lastUsed, sortCards, sortDetail } from '@/lib/cardSort';
+import { chatStatsDetail, lastUsed, sortCards, sortDetail, tagCounts, withTags } from '@/lib/cardSort';
 
 // The card lists' order, and the chat counts the server lists them with.
 
@@ -89,5 +89,21 @@ describe('card list chat counts', { timeout: 30_000 }, () => {
     await storage.deleteChat(p.id, '11111111-1111-4111-8111-111111111111');
     s = await summary();
     expect([s.chats, s.messages]).toEqual([1, 6]);
+  });
+});
+
+describe('tag filter', () => {
+  const card = (tags: string[]) => ({ tags });
+  it('counts tags across cards, any case, most used first', () => {
+    expect(tagCounts([card(['Fantasy', 'elf']), card(['fantasy']), card(['fantasy', 'sci-fi'])])).toEqual([
+      { tag: 'fantasy', count: 3 },
+      { tag: 'elf', count: 1 },
+      { tag: 'sci-fi', count: 1 },
+    ]);
+  });
+  it('keeps cards that have every picked tag', () => {
+    const cards = [card(['a', 'B']), card(['a']), card(['b'])];
+    expect(withTags(cards, ['A', 'b'])).toEqual([cards[0]]);
+    expect(withTags(cards, [])).toBe(cards);
   });
 });
