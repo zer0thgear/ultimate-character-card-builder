@@ -33,6 +33,7 @@ import { TrashDialog, duplicateCard, openTrash } from '@/components/TrashDialog'
 import { VersionsDialog, openVersions } from '@/components/VersionsDialog';
 import { TitleStatus } from '@/components/TitleStatus';
 import { FirstRunChecklist } from '@/components/FirstRun';
+import { HelpDesk } from '@/components/HelpDesk';
 import { ShortcutsDialog, openShortcuts } from '@/components/ShortcutsDialog';
 
 export function Shell() {
@@ -470,9 +471,10 @@ function Home({ loading }: { loading: boolean }) {
         tabs={[
           { value: 'cards', label: '🗂 Cards' },
           { value: 'library', label: '📚 Gen library' },
+          { value: 'helper', label: '🛎 Helper' },
         ]}
       />
-      <div className="min-h-0 flex-1">{homeTab === 'library' ? <LibraryPanel /> : <CardsHome />}</div>
+      <div className="min-h-0 flex-1">{homeTab === 'library' ? <LibraryPanel /> : homeTab === 'helper' ? <HelpDesk /> : <CardsHome />}</div>
     </div>
   );
 }
@@ -499,6 +501,9 @@ function CardsHome() {
             🔗 Import from a URL…
           </Button>
           <Button onClick={() => setHomeTab('library')}>📚 Browse the gen library</Button>
+          <Button variant="ghost" onClick={() => setHomeTab('helper')} title="Ask how anything in UCCB works: buttons, macros, setup">
+            🛎 Ask the helper
+          </Button>
           <Button variant="ghost" onClick={() => void switchAppMode('chat')} title="Chat with your cards, the building tools out of the way">
             💬 Switch to Chat
           </Button>

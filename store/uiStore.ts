@@ -10,6 +10,7 @@ import { api } from '@/lib/api';
 // Layout and preferences (persisted), the server's config, and toasts.
 
 export type EditorTab = 'basics' | 'greetings' | 'lorebook' | 'prompts' | 'creator' | 'notes' | 'tools';
+export type HomeTab = 'cards' | 'library' | 'helper';
 export type DockTab = 'image' | 'gallery' | 'library' | 'chat' | 'assist';
 
 /** Builder: writing and drawing cards. Chat: chatting with them, the
@@ -32,9 +33,10 @@ interface UiState {
   /** On a phone, which one screen shows: the card editor or the dock. */
   phoneView: 'card' | 'dock';
   setPhoneView: (v: 'card' | 'dock') => void;
-  /** The home screen (no card open): the card list, or the gen library. */
-  homeTab: 'cards' | 'library';
-  setHomeTab: (t: 'cards' | 'library') => void;
+  /** The home screen (no card open): the card list, the gen library, or
+   *  the helper. */
+  homeTab: HomeTab;
+  setHomeTab: (t: HomeTab) => void;
   /** The dock's share of the workspace width, 0.25–0.75. */
   dockWidth: number;
   setDockWidth: (w: number) => void;

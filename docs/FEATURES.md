@@ -4,7 +4,7 @@ Everything UCCB does, in detail. New to it? Start with the [tour](TOUR.md). For 
 
 ## Cards
 
-- **The home screen** (⌂ in the header closes the open card and comes back here, and stays here on the next visit): your cards as a grid of pictures, and the **Gen library**, usable without a card open. From the library, **New card from this image** starts a card with that picture as its avatar and its prompt in the art settings.
+- **The home screen** (⌂ in the header closes the open card and comes back here, and stays here on the next visit): your cards as a grid of pictures, the **Gen library**, usable without a card open, and the **🛎 Helper** (see [The helper](#the-helper)). From the library, **New card from this image** starts a card with that picture as its avatar and its prompt in the art settings.
 - **Getting started**: until they're done, the home screen lists the first steps (image generation, an LLM connection, a persona, a first card, a first chat), ticking each off as it's done, with a button to each one's settings. ✕ hides it on that device.
 - **One project per card.** The left sidebar lists them with their pictures; **+ New card**, **Import**, or drop a PNG, JSON or CHARX card anywhere to import it as a new one. **⧉ Duplicate** copies a card (its picture, notes, art prompts and kept gens, and its chats if you like) and opens the copy, to try a variant on.
 - **Trash.** Deleting moves the card to the trash. **🗑 Trash** (on the home screen, and under the card list) lists deleted cards with their pictures, to **Restore** or delete for good, or empty the trash.
@@ -157,6 +157,12 @@ The **🛠 Builder | 💬 Chat** switch in the header (at the top of the ☰ dra
 ## Brainstorm
 
 **✨ Brainstorm** is a free-form chat with the writing assistant, which always sees the card as it is right now. Replies can be copied or added to the card's Notes.
+
+## The helper
+
+**🛎 Helper** (a tab on the home screen, or **🛎 Ask the helper**) is a chat that answers questions about UCCB itself: where a button is, what a setting does, which macros work, how to get set up. It answers from this guide, the tour and the README, sending the parts of them each question is about, so it knows the version you're running. It uses the writing assistant's connection unless you pick another one beside it.
+
+Pick a **personality** to have it ham up a trope while it helps: Helpful (plain), Dry wit, Teasing brat, Mommy, Bored, Tsundere, Hype or Villain, or **Your own…** to describe one yourself. The conversation and your choices stay in that browser until you **Clear** them.
 
 ## References
 

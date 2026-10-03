@@ -1,6 +1,7 @@
 import type { AppConfig, CardProject, CardVersion, CardVersionInfo, TrashedProject, ChatSession, ChatSummary, KeptImage, Persona, ProjectSummary, AvatarInfo } from '@/types/project';
 import type { LlmEvent, LlmRequest } from '@/types/llm';
 import type { LibraryItem } from '@/lib/librarySearch';
+import type { HelpDocs } from '@/lib/helpDesk';
 
 // The browser side of the local API routes (app/api/*).
 
@@ -73,6 +74,8 @@ export const api = {
   chatImageUrl: (id: string, file: string) => `/api/projects/${id}/chat-images/${file}`,
   putChatImage: (id: string, file: string, png: Blob) => call<{ file: string }>(`/api/projects/${id}/chat-images/${file}`, { method: 'PUT', body: png, headers: { 'Content-Type': 'image/png' } }),
   deleteChatImage: (id: string, file: string) => call<{ ok: true }>(`/api/projects/${id}/chat-images/${file}`, { method: 'DELETE' }),
+
+  helpDocs: () => call<HelpDocs>('/api/help/docs'),
 
   listPersonas: () => call<Persona[]>('/api/personas'),
   savePersonas: (list: Persona[]) => call<Persona[]>('/api/personas', json('PUT', list)),
