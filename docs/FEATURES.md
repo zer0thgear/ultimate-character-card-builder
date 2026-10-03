@@ -5,6 +5,7 @@ Everything UCCB does, in detail. New to it? Start with the [tour](TOUR.md). For 
 ## Cards
 
 - **The home screen** (⌂ in the header closes the open card and comes back here, and stays here on the next visit): your cards as a grid of pictures, and the **Gen library**, usable without a card open. From the library, **New card from this image** starts a card with that picture as its avatar and its prompt in the art settings.
+- **Getting started**: until they're done, the home screen lists the first steps (image generation, an LLM connection, a persona, a first card, a first chat), ticking each off as it's done, with a button to each one's settings. ✕ hides it on that device.
 - **One project per card.** The left sidebar lists them with their pictures; **+ New card**, **Import**, or drop a PNG, JSON or CHARX card anywhere to import it as a new one. **⧉ Duplicate** copies a card (its picture, notes, art prompts and kept gens, and its chats if you like) and opens the copy, to try a variant on.
 - **Trash.** Deleting moves the card to the trash. **🗑 Trash** (on the home screen, and under the card list) lists deleted cards with their pictures, to **Restore** or delete for good, or empty the trash.
 - **Tags** filter the home screen: the commonest show as chips over the cards (the rest a click away), each with how many cards it would leave; pick several to see cards with all of them. Each mode keeps its own filter, the card list follows it, and a chip at its top says so and clears it.
