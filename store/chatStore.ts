@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import type { ChatImage, ChatMessage, ChatSession, ChatSummary } from '@/types/project';
+import type { AuthorsNote, ChatImage, ChatMessage, ChatSession, ChatSummary } from '@/types/project';
 import { api } from '@/lib/api';
 import { uuid } from '@/lib/uuid';
 import { useProjectStore } from '@/store/projectStore';
@@ -16,7 +16,8 @@ const SAVE_DELAY_MS = 600;
  * A branch of `chat` at its message `until` (an index): the messages up to
  * and including it, each with every version (and their reasoning,
  * continues and times), the pictures among them (still to be given files of
- * their own), its greeting and pinned persona. A new id and name.
+ * their own), its greeting, pinned persona and author's note. A new id
+ * and name.
  */
 export function branchOf(chat: ChatSession, until: number, id: string, now: number): ChatSession {
   const messages = structuredClone(chat.messages.slice(0, until + 1));
@@ -31,6 +32,7 @@ export function branchOf(chat: ChatSession, until: number, id: string, now: numb
     ...(chat.greetingEdits ? { greetingEdits: { ...chat.greetingEdits } } : {}),
     messages,
     ...(chat.personaId ? { personaId: chat.personaId } : {}),
+    ...(chat.authorsNote ? { authorsNote: { ...chat.authorsNote } } : {}),
     ...(images.length ? { images } : {}),
     createdAt: now,
     updatedAt: now,
@@ -51,6 +53,8 @@ interface ChatState {
   setGreetingEdit: (index: number, text: string | undefined) => void;
   /** Lock a persona to this chat (undefined unlocks it). */
   setPersonaLock: (personaId: string | undefined) => void;
+  /** This chat's author's note (undefined removes it). */
+  setAuthorsNote: (note: AuthorsNote | undefined) => void;
   setMessages: (change: (m: ChatMessage[]) => ChatMessage[]) => void;
   /** Adds a picture to the chat, or replaces one with the same id. */
   putImage: (image: ChatImage) => void;
@@ -135,6 +139,12 @@ export const useChatStore = create<ChatState>((set, get) => {
         return chat;
       }),
     setPersonaLock: (personaId) => updateChat((c) => ({ ...c, personaId })),
+    setAuthorsNote: (note) =>
+      updateChat((c) => {
+        const chat: ChatSession = { ...c, authorsNote: note };
+        if (!note) delete chat.authorsNote;
+        return chat;
+      }),
     setMessages: (change) =>
       updateChat((c) => {
         const messages = change(c.messages);

@@ -2,6 +2,7 @@ import type { CardData } from '@/types/card';
 import type { ChatSession } from '@/types/project';
 import { expandMacros } from '@/lib/macros';
 import { chatGreeting, swipeDate } from '@/lib/chatPrompt';
+import { authorsNoteOf } from '@/lib/authorsNote';
 
 // Test chats out, as SillyTavern writes chats (which Chub imports too):
 // JSONL, a metadata line and then one line per message. The greeting is
@@ -32,6 +33,21 @@ export function namesFor(card: CardData, userName: string): ExportNames {
   return { char: card.nickname || card.name || 'Character', user: userName || 'User' };
 }
 
+/** The chat's author's note in SillyTavern's chat metadata, so it comes
+ *  along when the chat's imported there. */
+function stNoteMetadata(chat: ChatSession): Record<string, string | number> {
+  if (!chat.authorsNote?.prompt.trim()) return {};
+  const n = authorsNoteOf(chat.authorsNote);
+  return {
+    note_prompt: n.prompt,
+    note_interval: n.frequency,
+    // SillyTavern's numbers: 0 after the main prompt, 1 in the chat, 2 before.
+    note_position: n.position === 'after' ? 0 : n.position === 'before' ? 2 : 1,
+    note_depth: n.depth,
+    note_role: ['system', 'user', 'assistant'].indexOf(n.role),
+  };
+}
+
 export function chatToStJsonl(chat: ChatSession, card: CardData, userName: string): string {
   const names = namesFor(card, userName);
   const x = (t: string) => expandMacros(t, { char: names.char, user: names.user });
@@ -41,7 +57,7 @@ export function chatToStJsonl(chat: ChatSession, card: CardData, userName: strin
       user_name: names.user,
       character_name: names.char,
       create_date: stCreateDate(created),
-      chat_metadata: {},
+      chat_metadata: stNoteMetadata(chat),
     },
   ];
 
