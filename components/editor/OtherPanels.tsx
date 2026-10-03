@@ -6,12 +6,12 @@ import { useLlmStore } from '@/store/llmStore';
 import { toast } from '@/store/uiStore';
 import { CardTextField, useCardField, useWritingTools } from '@/components/editor/fieldTools';
 import { SourceList } from '@/components/CardSource';
-import { AutoTextarea, Button, ChipInput, Section, TokenBadge, Toggle, confirmDialog, cx, inputClass } from '@/components/ui';
+import { AutoTextarea, Button, ChipInput, NumberInput, Section, TokenBadge, Toggle, confirmDialog, cx, inputClass } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { useLlmStream } from '@/hooks/useLlmStream';
 import { cardTagsMessages, critiqueMessages } from '@/lib/assist';
 import { findPattern, findReplace, nameToMacro, purgeAsterisks, straightenQuotes, tidyWhitespace, type ToolResult } from '@/lib/textTools';
-import { fieldLabel, listTextFields, type FieldGroup } from '@/lib/cardPath';
+import { CHARACTER_NOTE_PATH, fieldLabel, listTextFields, type FieldGroup } from '@/lib/cardPath';
 import { useTextTokens, formatTokens } from '@/lib/textTokens';
 import { buildChatPrompt } from '@/lib/chatPrompt';
 import { AssistReasoning, AssistTraceButton } from '@/components/llm/AssistTrace';
@@ -26,6 +26,41 @@ export function PromptsPanel() {
       </p>
       <CardTextField path="system_prompt" label="System prompt" hint="Replaces the main prompt" minRows={5} />
       <CardTextField path="post_history_instructions" label="Post-history instructions" hint="Sent after the chat (UJB)" minRows={4} />
+      <CharacterNote />
+    </div>
+  );
+}
+
+/** SillyTavern's Character's Note: kept in the card (extensions.depth_prompt)
+ *  and sent in the chat at its depth with every reply. Unlike a chat's
+ *  author's note, it goes wherever the card goes. */
+function CharacterNote() {
+  const note = useProjectStore((s) => (s.project?.card.data.extensions as { depth_prompt?: { depth?: unknown; role?: unknown } } | undefined)?.depth_prompt);
+  const updateCard = useProjectStore((s) => s.updateCard);
+  const depth = typeof note?.depth === 'number' ? note.depth : 4;
+  const role = note?.role === 'user' || note?.role === 'assistant' ? note.role : 'system';
+  const set = (patch: { depth?: number; role?: string }, key: string) =>
+    updateCard((d) => {
+      const ext = d.extensions as { depth_prompt?: Record<string, unknown> };
+      return { ...d, extensions: { ...d.extensions, depth_prompt: { prompt: '', depth: 4, role: 'system', ...ext.depth_prompt, ...patch } } };
+    }, `depth_prompt.${key}`);
+  return (
+    <div className="flex flex-col gap-2">
+      <CardTextField path={CHARACTER_NOTE_PATH} label="Character's note" hint="Sent in the chat, a few messages from the end, with every reply (SillyTavern's Character's Note). It's part of the card, unlike a chat's author's note" minRows={3} />
+      <div className="flex flex-wrap items-end gap-4">
+        <label className="flex w-28 flex-col gap-0.5 text-xs text-slate-400" title="Messages from the end of the chat: 0 goes after the last one">
+          Depth
+          <NumberInput value={depth} onChange={(v) => set({ depth: v ?? 4 }, 'depth')} min={0} step={1} />
+        </label>
+        <label className="flex flex-col gap-0.5 text-xs text-slate-400">
+          Role
+          <select value={role} onChange={(e) => set({ role: e.target.value }, 'role')} className={cx(inputClass, 'py-1')}>
+            <option value="system">System</option>
+            <option value="user">User</option>
+            <option value="assistant">Assistant</option>
+          </select>
+        </label>
+      </div>
     </div>
   );
 }

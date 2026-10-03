@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { findReplace, purgeAsterisks, nameToMacro, straightenQuotes, tidyWhitespace } from '@/lib/textTools';
-import { getPath, setPath, listTextFields } from '@/lib/cardPath';
+import { CHARACTER_NOTE_PATH, getPath, setPath, listTextFields } from '@/lib/cardPath';
 import { newCard, newEntry, newLorebook } from '@/lib/cardSpec';
 import type { FieldGroup } from '@/lib/cardPath';
 
@@ -28,6 +28,13 @@ describe('card paths', () => {
   it('lists greetings after the first message', () => {
     const paths = listTextFields(card()).map((f) => f.path);
     expect(paths.indexOf('alternate_greetings.0')).toBe(paths.indexOf('first_mes') + 1);
+  });
+
+  it("writes the character's note into a card that has none, keeping other extensions", () => {
+    const d = { ...card(), extensions: { other: 1 } };
+    const next = setPath(d, CHARACTER_NOTE_PATH, 'Keep it short.');
+    expect(next.extensions).toEqual({ other: 1, depth_prompt: { prompt: 'Keep it short.' } });
+    expect(listTextFields(next).find((f) => f.path === CHARACTER_NOTE_PATH)?.text).toBe('Keep it short.');
   });
 });
 
