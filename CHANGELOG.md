@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **🛎 Helper** on the home screen: ask how anything in UCCB works (buttons, settings, macros, setup) and it answers from the app's own guide, in a personality of your choice (dry wit, teasing brat, mommy, bored, tsundere, hype, villain, or your own).
+
 ## 1.0.0 (2026-10-03)
 
 The first stable release.
