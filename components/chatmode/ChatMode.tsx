@@ -14,6 +14,8 @@ import { SourceButton } from '@/components/CardSource';
 import { WritingToolsContext } from '@/components/editor/fieldTools';
 import { openLightbox } from '@/components/Lightbox';
 import { CardListMeta } from '@/components/CardListMeta';
+import { CardSortControl, useSortedCards } from '@/components/CardSort';
+import { sortDetail } from '@/lib/cardSort';
 import { importFromUrl } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
 import type { ProjectSummary } from '@/types/project';
@@ -63,7 +65,8 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
   const { summaries, project, open, remove } = useProjectStore();
   const [filter, setFilter] = useState('');
   const q = filter.trim().toLowerCase();
-  const shown = summaries.filter((s) => !q || s.name.toLowerCase().includes(q) || s.tags.some((t) => t.toLowerCase().includes(q)));
+  const { sorted, by } = useSortedCards(summaries);
+  const shown = sorted.filter((s) => !q || s.name.toLowerCase().includes(q) || s.tags.some((t) => t.toLowerCase().includes(q)));
   return (
     <nav className={cx('flex h-full w-60 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950', className)}>
       <div className="flex gap-1.5 p-2">
@@ -74,9 +77,10 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
           🔗
         </Button>
       </div>
-      {summaries.length > 6 && (
-        <div className="px-2 pb-2">
-          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search cards…" className={cx(inputClass, 'py-1 text-xs')} />
+      {summaries.length > 1 && (
+        <div className="flex gap-1 px-2 pb-2">
+          {summaries.length > 6 && <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search cards…" className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs')} />}
+          <CardSortControl className={summaries.length > 6 ? 'w-28' : 'flex-1'} />
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
@@ -101,7 +105,7 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
                   <CardListMeta summary={s} />
                   <span className="block truncate text-[10px] text-slate-500">
                     {!s.chatOnly && <span title="Your card from Builder (edits and chats are shared with it)">🛠 Builder · </span>}
-                    {new Date(s.updatedAt).toLocaleDateString()}
+                    {sortDetail(s, by)}
                   </span>
                 </span>
               </button>
@@ -128,7 +132,8 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
 
 /** No card open in Chat mode: every card to pick from. */
 export function ChatHome({ loading }: { loading: boolean }) {
-  const { summaries, open } = useProjectStore();
+  const { summaries: all, open } = useProjectStore();
+  const { sorted: summaries, by } = useSortedCards(all);
   if (loading) return <div className="flex flex-1 items-center justify-center text-slate-500">Opening…</div>;
   return (
     <div className="h-full min-w-0 flex-1 overflow-y-auto p-4 phone:p-3">
@@ -147,6 +152,7 @@ export function ChatHome({ loading }: { loading: boolean }) {
           <Button variant="ghost" onClick={() => void switchAppMode('builder')}>
             🛠 Switch to Builder
           </Button>
+          {summaries.length > 1 && <CardSortControl className="ml-auto w-44" />}
         </div>
         {summaries.length === 0 ? (
           <p className="text-sm text-slate-500">No cards yet. Import a PNG, JSON or CHARX card, or drop one anywhere.</p>
@@ -163,7 +169,10 @@ export function ChatHome({ loading }: { loading: boolean }) {
                   <div className="px-2 py-1.5">
                     <div className="truncate text-sm text-slate-200">{s.name || <em className="text-slate-500">Unnamed</em>}</div>
                     <CardListMeta summary={s} />
-                    <div className="truncate text-[10px] text-slate-500">{s.chatOnly ? new Date(s.updatedAt).toLocaleDateString() : '🛠 Builder'}</div>
+                    <div className="truncate text-[10px] text-slate-500">
+                      {!s.chatOnly && <span title="Your card from Builder (edits and chats are shared with it)">🛠 </span>}
+                      {sortDetail(s, by)}
+                    </div>
                   </div>
                 </button>
               );

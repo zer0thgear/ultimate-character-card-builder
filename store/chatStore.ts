@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import type { ChatImage, ChatMessage, ChatSession, ChatSummary } from '@/types/project';
 import { api } from '@/lib/api';
 import { uuid } from '@/lib/uuid';
+import { useProjectStore } from '@/store/projectStore';
 
 // The open card's test chats. The greeting isn't stored as a message: the
 // chat remembers which greeting opened it and reads it live from the card,
@@ -178,4 +179,14 @@ export const useChatStore = create<ChatState>((set, get) => {
       });
     },
   };
+});
+
+// The card lists' chat counts follow the open card's chats.
+useChatStore.subscribe((s, prev) => {
+  if (s.list === prev.list || !s.projectId || s.projectId !== prev.projectId) return;
+  const list = s.list;
+  useProjectStore.getState().setChatStats(
+    s.projectId,
+    list.length ? { chats: list.length, messages: list.reduce((n, c) => n + c.messageCount, 0), lastChat: Math.max(...list.map((c) => c.updatedAt)) } : {},
+  );
 });

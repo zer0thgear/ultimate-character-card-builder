@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { lastCardKey, useProjectStore } from '@/store/projectStore';
 import { useUiStore, useConfigStore, useToastStore, toast } from '@/store/uiStore';
 import { useSessionStore } from '@/store/sessionStore';
@@ -25,6 +25,8 @@ import { VisionWriteHost } from '@/components/VisionWriteDialog';
 import { ExtensionHosts } from '@/components/ExtensionSlots';
 import { ChatCardActions, ChatCardList, ChatHeaderAvatar, ChatHome, ChatScreen, switchAppMode } from '@/components/chatmode/ChatMode';
 import { CardListMeta } from '@/components/CardListMeta';
+import { CardSortControl, useSortedCards } from '@/components/CardSort';
+import { sortDetail } from '@/lib/cardSort';
 import { importFromUrl, overwriteCard } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
 
@@ -358,7 +360,8 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
   };
   const [filter, setFilter] = useState('');
   const q = filter.trim().toLowerCase();
-  const shown = summaries.filter((s) => !q || s.name.toLowerCase().includes(q) || s.tags.some((t) => t.toLowerCase().includes(q)));
+  const { sorted, by } = useSortedCards(summaries);
+  const shown = sorted.filter((s) => !q || s.name.toLowerCase().includes(q) || s.tags.some((t) => t.toLowerCase().includes(q)));
   const importFile = async () => {
     if (await importCards()) onPicked?.();
   };
@@ -387,9 +390,10 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
           🔗
         </Button>
       </div>
-      {summaries.length > 6 && (
-        <div className="px-2 pb-2">
-          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search cards…" className={cx(inputClass, 'py-1 text-xs')} />
+      {summaries.length > 1 && (
+        <div className="flex gap-1 px-2 pb-2">
+          {summaries.length > 6 && <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search cards…" className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs')} />}
+          <CardSortControl className={summaries.length > 6 ? 'w-28' : 'flex-1'} />
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
@@ -405,7 +409,7 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
                 <span className="min-w-0">
                   <span className="block truncate text-sm text-slate-200">{s.name || <em className="text-slate-500">Unnamed</em>}</span>
                   <CardListMeta summary={s} />
-                  <span className="block truncate text-[10px] text-slate-500">{new Date(s.updatedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                  <span className="block truncate text-[10px] text-slate-500">{sortDetail(s, by)}</span>
                 </span>
               </button>
               <IconButton
@@ -451,7 +455,7 @@ function Home({ loading }: { loading: boolean }) {
 
 function CardsHome() {
   const { summaries: all, open, create } = useProjectStore();
-  const summaries = all.filter((s) => !s.chatOnly);
+  const { sorted: summaries, by } = useSortedCards(useMemo(() => all.filter((s) => !s.chatOnly), [all]));
   const setHomeTab = useUiStore((s) => s.setHomeTab);
   const importFile = () => importCards();
   return (
@@ -476,6 +480,7 @@ function CardsHome() {
           <Button variant="ghost" onClick={() => openSettings()}>
             Settings
           </Button>
+          {summaries.length > 1 && <CardSortControl className="ml-auto w-44" />}
         </div>
         {summaries.length === 0 ? (
           <p className="text-sm text-slate-500">No cards yet. Start one, import one, or drop a PNG, JSON or CHARX card anywhere. You can also start one from a picture in the gen library.</p>
@@ -492,7 +497,7 @@ function CardsHome() {
                   <div className="px-2 py-1.5">
                     <div className="truncate text-sm text-slate-200">{s.name || <em className="text-slate-500">Unnamed</em>}</div>
                     <CardListMeta summary={s} />
-                    <div className="truncate text-[10px] text-slate-500">{new Date(s.updatedAt).toLocaleDateString()}</div>
+                    <div className="truncate text-[10px] text-slate-500">{sortDetail(s, by)}</div>
                   </div>
                 </button>
               );

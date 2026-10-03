@@ -129,6 +129,7 @@ Text-completion (instruct/context) presets aren't supported yet.
 The **🛠 Builder | 💬 Chat** switch in the header (at the top of the ☰ drawer on a phone) turns UCCB into a chat frontend, with the building tools out of the way. Each mode reopens the card it had open last.
 
 - **Card lists** (in both modes) show each card's author and the start of its creator's notes under its name, as SillyTavern's does; either can be switched off in Settings → General.
+- **Sorting the cards**: the card lists and the home page sort by last used (edited or chatted with), name, when made, how many chats, or how many messages, with ↑/↓ to reverse it. Builder and Chat mode each keep their own order, and the line under each card shows what it's sorted by (when it was made, or its chats and messages).
 - **Cards**: the list has your Builder cards (marked 🛠 Builder; their chats and edits are shared with Builder) and cards imported in Chat mode (**Import a card**, or drop one anywhere). Those stay out of Builder until **+ Add to Builder**, which puts them in both. **🛠 Open in Builder** takes a Builder card there.
 - **The chat** fills the window (in the full-width column, its width set by the slider), with everything the test chat has: presets, personas, swipes, continues, 🧭 guides, the prompt inspector.
 - **The header** holds the card's picture (tap for full size), its name, **📝 Card**, Export and Builder, so the chat keeps the rest of the screen; on a phone the top is just the header and the chat's own row.

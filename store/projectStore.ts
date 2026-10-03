@@ -51,6 +51,8 @@ interface ProjectState {
   updateKept: (file: string, patch: Partial<KeptImage>) => void;
   /** Saves now, if anything is waiting. */
   flush: () => Promise<void>;
+  /** A card's chat counts in the lists, as its chats change. */
+  setChatStats: (id: string, stats: Pick<ProjectSummary, 'chats' | 'messages' | 'lastChat'>) => void;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -85,8 +87,13 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     saveTimer = setTimeout(() => void get().flush(), SAVE_DELAY_MS);
   };
 
+  // (The card's chat counts are kept: they aren't in the project.)
   const upsertSummary = (p: CardProject) =>
-    set((s) => ({ summaries: [summaryOf(p), ...s.summaries.filter((x) => x.id !== p.id)].sort((a, b) => b.updatedAt - a.updatedAt) }));
+    set((s) => {
+      const old = s.summaries.find((x) => x.id === p.id);
+      const stats = old ? { chats: old.chats, messages: old.messages, lastChat: old.lastChat } : {};
+      return { summaries: [{ ...stats, ...summaryOf(p) }, ...s.summaries.filter((x) => x.id !== p.id)] };
+    });
 
   const loadGen = (p: CardProject) => {
     applyingGen = true;
@@ -305,6 +312,14 @@ export const useProjectStore = create<ProjectState>((set, get) => {
           saving = null;
         });
       await saving;
+    },
+
+    setChatStats: (id, stats) => {
+      const old = get().summaries.find((x) => x.id === id);
+      // A reply streaming in changes its chat's time with every word: the
+      // lists only need it to the minute.
+      if (!old || (old.chats === stats.chats && old.messages === stats.messages && Math.abs((old.lastChat ?? 0) - (stats.lastChat ?? 0)) < 60_000)) return;
+      set((s) => ({ summaries: s.summaries.map((x) => (x.id === id ? { ...x, chats: stats.chats, messages: stats.messages, lastChat: stats.lastChat } : x)) }));
     },
   };
 });

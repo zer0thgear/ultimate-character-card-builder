@@ -170,6 +170,7 @@ export async function listProjects(): Promise<ProjectSummary[]> {
         ...(p.chatOnly ? { chatOnly: true } : {}),
         ...(p.card?.data?.creator?.trim() ? { creator: p.card.data.creator.trim() } : {}),
         ...(notesSnippet(p.card?.data?.creator_notes) ? { notes: notesSnippet(p.card?.data?.creator_notes) } : {}),
+        ...(await chatStats(id)),
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
       });
@@ -266,6 +267,36 @@ export async function listChats(projectId: string): Promise<ChatSummary[]> {
     .filter((c): c is ChatSession => !!c)
     .map((c) => ({ id: c.id, name: c.name, createdAt: c.createdAt, updatedAt: c.updatedAt, messageCount: c.messages.length }))
     .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+/** Each chat file's message count and time, kept while the file's
+ *  unchanged, so listing cards doesn't read every chat every time. */
+const chatStatCache = new Map<string, { mtime: number; messages: number; updatedAt: number }>();
+
+/** A card's chats in sum, for the card lists (none: nothing). */
+async function chatStats(projectId: string): Promise<Pick<ProjectSummary, 'chats' | 'messages' | 'lastChat'>> {
+  const dir = path.join(projectDir(projectId), 'chats');
+  const files = (await fs.readdir(dir).catch(() => [] as string[])).filter((f) => f.endsWith('.json'));
+  const stats = await Promise.all(
+    files.map(async (f) => {
+      const file = path.join(dir, f);
+      try {
+        const { mtimeMs } = await fs.stat(file);
+        const hit = chatStatCache.get(file);
+        if (hit?.mtime === mtimeMs) return hit;
+        const c = await readJson<ChatSession>(file);
+        if (!c) return null;
+        const stat = { mtime: mtimeMs, messages: Array.isArray(c.messages) ? c.messages.length : 0, updatedAt: c.updatedAt ?? 0 };
+        chatStatCache.set(file, stat);
+        return stat;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const found = stats.filter((s) => !!s);
+  if (!found.length) return {};
+  return { chats: found.length, messages: found.reduce((n, s) => n + s.messages, 0), lastChat: Math.max(...found.map((s) => s.updatedAt)) };
 }
 
 export async function getChat(projectId: string, chatId: string): Promise<ChatSession> {

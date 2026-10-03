@@ -76,6 +76,11 @@ export interface ProjectSummary {
    *  text (lib/cardSummary.ts), for the card lists. */
   creator?: string;
   notes?: string;
+  /** Its chats: how many, their messages in all, and the last one's time
+   *  (for sorting by use). */
+  chats?: number;
+  messages?: number;
+  lastChat?: number;
   updatedAt: number;
   createdAt: number;
 }
