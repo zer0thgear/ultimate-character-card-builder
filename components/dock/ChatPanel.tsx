@@ -1,6 +1,7 @@
 'use client';
 
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { chatMatches, splitMatches } from '@/lib/chatSearch';
 import { useProjectStore } from '@/store/projectStore';
 import { useChatStore } from '@/store/chatStore';
 import { textTemplates, useLlmStore } from '@/store/llmStore';
@@ -79,6 +80,9 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   // 📜 The chat's summary.
   const summarizer = useChatSummary();
   const [showSummary, setShowSummary] = useState(false);
+  // Search in this chat: the words (null: closed), and which match is shown.
+  const [search, setSearch] = useState<string | null>(null);
+  const [hit, setHit] = useState(0);
   const scroller = useRef<HTMLDivElement>(null);
   // Following the chat's end: true while you're at the bottom. Scrolling up
   // stops it, and so does a reply growing past the top of the view.
@@ -141,6 +145,26 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   if (!project) return null;
   const card = project.card.data;
   const greetingCount = 1 + card.alternate_greetings.length;
+
+  const matches = search && chat ? chatMatches([{ id: 'greeting', text: chatGreeting(card, chat) }, ...chat.messages.map((m) => ({ id: m.id, text: messageText(m) }))], search) : [];
+  const current = matches.length ? matches[Math.min(hit, matches.length - 1)] : null;
+  /** Shows match `i` (wrapping around), scrolled to the middle. */
+  const showMatch = (i: number, list = matches) => {
+    if (!list.length) return;
+    const n = (i + list.length) % list.length;
+    setHit(n);
+    follow.current = false;
+    setFollowing(false);
+    requestAnimationFrame(() => scroller.current?.querySelector(`[data-msg="${list[n]}"]`)?.scrollIntoView({ block: 'center' }));
+  };
+  const searchFor = (q: string) => {
+    setSearch(q);
+    // The newest match first: you're usually looking for something recent.
+    const list = chat ? chatMatches([{ id: 'greeting', text: chatGreeting(card, chat) }, ...chat.messages.map((m) => ({ id: m.id, text: messageText(m) }))], q) : [];
+    if (list.length) showMatch(list.length - 1, list);
+    else setHit(0);
+  };
+  const ring = (id: string) => (current === id ? 'rounded-lg ring-2 ring-amber-400/80' : '');
 
   /** The pictures drawn after a message (null: after the greeting), and one
    *  on its way there. */
@@ -374,7 +398,16 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div
+      className="flex h-full min-h-0 flex-col"
+      onKeyDown={(e) => {
+        // Ctrl+F inside the chat searches it rather than the page.
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && chat) {
+          e.preventDefault();
+          setSearch((q) => q ?? '');
+        }
+      }}
+    >
       {/* On a phone: one row (the chats, ⋯ for the rest, ⚙ for who and how),
           gone while you type. */}
       {!(phone && keyboard) && (
@@ -409,6 +442,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     { label: '⬆ Import a chat…', hint: 'A chat saved by SillyTavern or exported from Chub (.jsonl), as a new chat with this card', run: () => void importChatFile() },
                     ...(phone
                       ? [
+                          { label: '🔎 Search this chat', hint: '', run: () => setSearch('') },
                           { label: '📜 Summary', hint: "The chat's summary, sent with every prompt", run: () => setShowSummary(!showSummary) },
                           { label: '🔍 The next prompt', hint: 'What the next reply would send', run: preview },
                           ...(lastPrompt ? [{ label: `🔍 The last prompt · ${lastPrompt.lore.active.length} lore`, hint: 'What the last reply sent', run: () => setInspect(lastPrompt) }] : []),
@@ -431,6 +465,11 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     </button>
                   ))}
                 </div>
+              )}
+              {!phone && (
+                <IconButton title="Search this chat (Ctrl+F)" onClick={() => setSearch(search === null ? '' : null)}>
+                  🔎
+                </IconButton>
               )}
               {!phone && (
                 <IconButton title="Delete this chat" tone="danger" onClick={deleteThisChat}>
@@ -480,7 +519,40 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
       {showSummary && chat && !(phone && keyboard) && <ChatSummaryPanel summarizer={summarizer} request={summaryRequest} onClose={() => setShowSummary(false)} />}
       {!showSettings && !phone && <ConnectionPicker value={chatConnectionId} onChange={setChatConnection} label="Connection" className="flex-shrink-0 border-b border-slate-800 px-2 py-1.5" />}
 
+      {search !== null && chat && (
+        <div className="flex flex-shrink-0 items-center gap-1.5 border-b border-slate-800 px-2 py-1.5">
+          <input
+            autoFocus
+            value={search}
+            onChange={(e) => searchFor(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                showMatch(hit + (e.shiftKey ? 1 : -1));
+              } else if (e.key === 'Escape') {
+                e.stopPropagation();
+                setSearch(null);
+              }
+            }}
+            placeholder="Search this chat…"
+            aria-label="Search this chat"
+            className={cx(inputClass, 'min-w-0 flex-1 py-1 text-sm')}
+          />
+          <span className="flex-shrink-0 text-xs text-slate-400 tabular-nums">{search.trim() ? (matches.length ? `${Math.min(hit, matches.length - 1) + 1} of ${matches.length}` : 'none') : ''}</span>
+          <IconButton title="Earlier match (Enter)" disabled={!matches.length} onClick={() => showMatch(hit - 1)}>
+            ‹
+          </IconButton>
+          <IconButton title="Later match (Shift+Enter)" disabled={!matches.length} onClick={() => showMatch(hit + 1)}>
+            ›
+          </IconButton>
+          <IconButton title="Close (Esc)" onClick={() => setSearch(null)}>
+            ✕
+          </IconButton>
+        </div>
+      )}
+
       <div className="relative min-h-0 flex-1">
+        <SearchQuery.Provider value={search ?? ''}>
         <div ref={scroller} onScroll={onScroll} className="relative h-full overflow-y-auto px-3 py-3">
           {!chat ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-slate-500">
@@ -496,6 +568,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
             </div>
           ) : (
             <div className={cx('flex flex-col gap-3', column.className)} style={column.style}>
+              <div data-msg="greeting" className={ring('greeting')}>
               <GreetingBubble
                 card={card}
                 index={chat.greeting}
@@ -511,9 +584,11 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                 depth={chat.messages.length}
                 regex={chatSettings.useCardRegex !== false}
               />
+              </div>
               {picturesAfter(null)}
               {chat.messages.map((m, i) => (
                 <div key={m.id} data-msg={m.id} className="flex flex-col gap-3">
+                  <div className={ring(m.id)}>
                   <Bubble
                     card={card}
                     message={m}
@@ -550,6 +625,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     onUndoContinue={() => undoLastContinue(m)}
                     onShowTree={() => setTreeFor(m.id)}
                   />
+                  </div>
                   {picturesAfter(m.id)}
                 </div>
               ))}
@@ -557,6 +633,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
             </div>
           )}
         </div>
+        </SearchQuery.Provider>
         {chat && !following && (
           <button
             type="button"
@@ -693,10 +770,31 @@ function Formatted({ text }: { text: string }) {
   return <div className="chat-text text-sm leading-relaxed whitespace-pre-wrap text-slate-200">{renderNodes(nodes)}</div>;
 }
 
+/** The chat's search words, to mark in the messages. */
+const SearchQuery = createContext('');
+
+function Marked({ text }: { text: string }) {
+  const q = useContext(SearchQuery);
+  if (!q.trim()) return <>{text}</>;
+  return (
+    <>
+      {splitMatches(text, q).map((p, i) =>
+        p.hit ? (
+          <mark key={i} className="rounded-sm bg-amber-400/40 text-inherit">
+            {p.text}
+          </mark>
+        ) : (
+          <Fragment key={i}>{p.text}</Fragment>
+        ),
+      )}
+    </>
+  );
+}
+
 function renderNodes(nodes: FormatNode[]): React.ReactNode {
   return nodes.map((n, i) =>
     typeof n === 'string' ? (
-      <Fragment key={i}>{n}</Fragment>
+      <Marked key={i} text={n} />
     ) : n.kind === 'em' ? (
       <em key={i}>{renderNodes(n.children)}</em>
     ) : n.kind === 'strong' ? (
