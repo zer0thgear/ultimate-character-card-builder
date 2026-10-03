@@ -7,12 +7,12 @@ import { useLlmStore } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
-import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, withoutSwipe, buildChatPrompt, displayText, chatGreeting, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
+import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, withoutSwipe, buildChatPrompt, displayText, shownText, chatGreeting, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
 import { buildPresetPrompt } from '@/lib/presetPrompt';
 import { presetParams, type ChatPreset } from '@/lib/stPreset';
 import type { LlmConnection, SamplerParams } from '@/types/llm';
 import { describeEntry } from '@/lib/lorebookScan';
-import { AutoTextarea, Button, IconButton, Modal, NumberInput, TokenBadge, Toggle, choiceDialog, confirmDialog, textDialog, cx, downloadBlob, enterSends, inputClass } from '@/components/ui';
+import { AutoTextarea, Button, IconButton, Modal, NumberInput, TokenBadge, Toggle, choiceDialog, confirmDialog, textDialog, cx, downloadBlob, enterSends, inputClass, pickFiles } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { ChatPresetSelect, PresetPicker } from '@/components/llm/PresetManager';
 import { PersonaAvatar, PersonaPicker, avatarFrame } from '@/components/llm/Personas';
@@ -25,6 +25,7 @@ import { openSettings } from '@/components/SettingsDialog';
 import { useMediaQuery, PHONE_QUERY } from '@/hooks/useMediaQuery';
 import { useKeyboard } from '@/hooks/useKeyboard';
 import { chatFileName, chatToStJsonl, chatToText } from '@/lib/chatExport';
+import { ChatImportError, parseChatFile } from '@/lib/chatImport';
 import type { Persona } from '@/types/project';
 import { useTextTokens, formatTokens } from '@/lib/textTokens';
 import type { CardData } from '@/types/card';
@@ -353,6 +354,17 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
     const name = await textDialog({ title: 'Rename chat', label: 'Chat name', initial: chat.name, confirmLabel: 'Rename' });
     if (name?.trim()) rename(name.trim());
   };
+  const importChatFile = async () => {
+    const [file] = await pickFiles('.jsonl,.json');
+    if (!file) return;
+    try {
+      const imported = parseChatFile(await file.text(), card, me.name, file.name);
+      await useChatStore.getState().importChat(imported);
+      toast(`Imported "${imported.name}": ${imported.messages.length} message${imported.messages.length === 1 ? '' : 's'}.`, 'success');
+    } catch (err) {
+      toast(err instanceof ChatImportError ? err.message : `Couldn't import that chat: ${(err as Error).message}`, 'error');
+    }
+  };
   const deleteThisChat = async () => {
     if (chat && (await confirmDialog({ title: `Delete "${chat.name}"?`, confirmLabel: 'Delete', danger: true }))) await deleteChat(chat.id);
   };
@@ -381,7 +393,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                   ✎
                 </IconButton>
               )}
-              <IconButton title={phone ? 'More: rename, export, delete, the prompt' : 'Export this chat for SillyTavern or Chub'} onClick={() => setExportOpen(!exportOpen)}>
+              <IconButton title={phone ? 'More: rename, export, import, delete, the prompt' : 'Export this chat for SillyTavern or Chub, or import one'} onClick={() => setExportOpen(!exportOpen)}>
                 {phone ? '⋯' : '⬇'}
               </IconButton>
               {exportOpen && (
@@ -390,6 +402,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     ...(phone ? [{ label: '✎ Rename', hint: '', run: renameChat }] : []),
                     { label: '⬇ SillyTavern / Chub (.jsonl)', hint: 'Import it in SillyTavern (Manage chat files → Import) or Chub', run: () => downloadBlob(chatToStJsonl(chat, card, me.name), `${chatFileName(chat, card)}.jsonl`, 'application/jsonl') },
                     { label: '⬇ Plain text (.txt)', hint: 'For reading or sharing', run: () => downloadBlob(chatToText(chat, card, me.name), `${chatFileName(chat, card)}.txt`, 'text/plain') },
+                    { label: '⬆ Import a chat…', hint: 'A chat saved by SillyTavern or exported from Chub (.jsonl), as a new chat with this card', run: () => void importChatFile() },
                     ...(phone
                       ? [
                           { label: '📜 Summary', hint: "The chat's summary, sent with every prompt", run: () => setShowSummary(!showSummary) },
@@ -468,9 +481,14 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
           {!chat ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-slate-500">
               {wide ? `Chat with ${card.name || 'this character'}.` : 'Test how the card plays.'}
-              <Button variant="primary" onClick={() => void newChat(0)}>
-                Start a chat
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button variant="primary" onClick={() => void newChat(0)}>
+                  Start a chat
+                </Button>
+                <Button variant="ghost" onClick={() => void importChatFile()} title="A chat saved by SillyTavern or exported from Chub (.jsonl)">
+                  ⬆ Import a chat
+                </Button>
+              </div>
             </div>
           ) : (
             <div className={cx('flex flex-col gap-3', column.className)} style={column.style}>
@@ -486,6 +504,8 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                 userName={me.name}
                 showId={showIds}
                 date={showTimes ? chat.createdAt : undefined}
+                depth={chat.messages.length}
+                regex={chatSettings.useCardRegex !== false}
               />
               {picturesAfter(null)}
               {chat.messages.map((m, i) => (
@@ -494,6 +514,8 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     card={card}
                     message={m}
                     messageId={showIds ? i + 1 : undefined}
+                    depth={chat.messages.length - 1 - i}
+                    regex={chatSettings.useCardRegex !== false}
                     showTime={showTimes}
                     userName={me.name}
                     persona={me.persona}
@@ -811,6 +833,8 @@ function GreetingBubble({
   userName,
   showId,
   date,
+  depth,
+  regex,
 }: {
   card: CardData;
   index: number;
@@ -826,6 +850,10 @@ function GreetingBubble({
   userName: string;
   showId: boolean;
   date?: number;
+  /** Messages after it, for the card's regex scripts' depth limits. */
+  depth: number;
+  /** Run the card's regex scripts on what's shown. */
+  regex: boolean;
 }) {
   const own = greetingText(card, index);
   const text = edited ?? own;
@@ -912,7 +940,7 @@ function GreetingBubble({
             </div>
           </div>
         ) : shown ? (
-          <Formatted text={shown} />
+          <Formatted text={shownText(card, shown, 'assistant', depth, { userName, useCardRegex: regex })} />
         ) : (
           <em className="text-sm text-slate-500">This greeting is empty.</em>
         )}
@@ -925,6 +953,8 @@ function Bubble({
   card,
   message: m,
   messageId,
+  depth,
+  regex,
   showTime,
   userName,
   persona,
@@ -945,6 +975,10 @@ function Bubble({
   message: ChatMessage;
   /** Its number in the chat (the greeting is #0), when they're shown. */
   messageId?: number;
+  /** Messages after it, for the card's regex scripts' depth limits. */
+  depth: number;
+  /** Run the card's regex scripts on what's shown. */
+  regex: boolean;
   /** Show when it (this version of it) was written. */
   showTime: boolean;
   userName: string;
@@ -1033,7 +1067,7 @@ function Bubble({
             </div>
           </div>
         ) : text ? (
-          <Formatted text={isUser ? displayText(card, text, userName) : text} />
+          <Formatted text={shownText(card, isUser ? displayText(card, text, userName) : text, m.role, depth, { userName, useCardRegex: regex })} />
         ) : (
           <span className="animate-pulse text-sm text-slate-500">…</span>
         )}
@@ -1209,6 +1243,7 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
             </label>
           </div>
         )}
+        <Toggle checked={s.useCardRegex ?? true} onChange={(v) => setChatSettings({ useCardRegex: v })} label={<span className="text-xs" title="Scripts a card carries (as SillyTavern's Regex extension runs them) to change how messages look or what the model is sent. The card's are listed on its Prompts tab">Run the card&apos;s regex scripts</span>} />
         <Toggle checked={s.showMessageIds} onChange={(v) => setChatSettings({ showMessageIds: v })} label={<span className="text-xs">Show message numbers (#0 is the greeting)</span>} />
         <Toggle checked={s.showTimestamps ?? true} onChange={(v) => setChatSettings({ showTimestamps: v })} label={<span className="text-xs" title="Each reply's versions have their own; the greeting shows when the chat began">Show when messages were sent</span>} />
         <label className="flex w-full flex-col gap-0.5 text-xs text-slate-400">
@@ -1287,6 +1322,7 @@ function PromptInspector({ prompt, onClose }: { prompt: BuiltPrompt; onClose: ()
         <div className="text-xs text-slate-400">
           Lorebook: {prompt.lore.active.length ? prompt.lore.active.map((a) => `${describeEntry(a)} (${a.reason})`).join(' · ') : 'nothing fired'}
           {prompt.lore.dropped.length > 0 && <span className="text-amber-300"> · over budget: {prompt.lore.dropped.map(describeEntry).join(', ')}</span>}
+          {!!prompt.lore.skipped?.length && <span className="text-slate-500"> · left out: {prompt.lore.skipped.map((a) => `${describeEntry(a)} (${a.reason})`).join(', ')}</span>}
         </div>
         {prompt.parts.map((p, i) => (
           <div key={i} className="rounded-md border border-slate-800">

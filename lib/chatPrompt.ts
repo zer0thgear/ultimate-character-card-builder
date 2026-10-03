@@ -5,6 +5,7 @@ import type { SummarySettings } from '@/lib/chatSummary';
 import { expandMacros, type MacroContext } from '@/lib/macros';
 import { scanLorebook, describeEntry, type ScanResult, type ActivatedEntry, DEFAULT_SCAN_DEPTH, DEFAULT_MAX_RECURSION, type LoreDefaults } from '@/lib/lorebookScan';
 import { uuid } from '@/lib/uuid';
+import { REGEX_PLACEMENT, cardRegexScripts, placementFor, runRegexScripts, type RegexPlacement } from '@/lib/regexScripts';
 import { activeAuthorsNote, AUTHORS_NOTE_LABEL } from '@/lib/authorsNote';
 import type { AuthorsNote } from '@/types/project';
 
@@ -57,7 +58,14 @@ export interface ChatPromptSettings {
   /** The chat summary's settings (see lib/chatSummary.ts); unset ones are
    *  SillyTavern's defaults. */
   summary?: Partial<SummarySettings>;
+  /** Run the card's regex scripts (lib/regexScripts.ts) on what's shown
+   *  and sent. */
+  useCardRegex?: boolean;
 }
+
+/** Where each of the chat's replies was written (its index: the history
+ *  before it was that turn's prompt), for the lorebook's timed effects. */
+export const replyPoints = (history: Pick<ChatMessage, 'role' | 'id'>[]) => history.flatMap((m, i) => (m.role === 'assistant' && m.id !== 'greeting' ? [i] : []));
 
 /** The chat settings' lorebook defaults, for scanLorebook. */
 export const loreDefaults = (s: Pick<ChatPromptSettings, 'loreScanDepth' | 'loreTokenBudget' | 'loreMaxRecursion'>): LoreDefaults => ({
@@ -99,6 +107,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatPromptSettings = {
   avatarShape: 'circle',
   swipeGesture: true,
   guideTemplate: DEFAULT_GUIDE_TEMPLATE,
+  useCardRegex: true,
 };
 
 export const DEFAULT_IMPERSONATION =
@@ -192,7 +201,7 @@ export function exampleBlocks(mesExample: string): string[] {
 
 /** Macro expansion for one prompt build: names, card fields, the chat so
  *  far, and one variable store shared by every part. */
-export function macroExpander(card: CardData, history: ChatMessage[], settings: Pick<ChatPromptSettings, 'userName' | 'persona'>, opts: BuildOptions = {}) {
+export function macroExpander(card: CardData, history: ChatMessage[], settings: Pick<ChatPromptSettings, 'userName' | 'persona' | 'useCardRegex'>, opts: BuildOptions = {}) {
   const char = card.nickname || card.name || 'Character';
   const user = settings.userName || 'User';
   const texts = history.map(messageText);
@@ -225,7 +234,24 @@ export function macroExpander(card: CardData, history: ChatMessage[], settings: 
   const setFields = (patch: NonNullable<MacroContext['fields']>) => {
     base.fields = { ...base.fields, ...patch };
   };
-  return { x, char, user, texts, setFields };
+  // The card's regex scripts, as they change what the model is sent.
+  const scripts = settings.useCardRegex === false ? [] : cardRegexScripts(card);
+  const raw = (text: string) => expandMacros(text, base);
+  const rx = (text: string, placement: RegexPlacement, depth?: number) => (scripts.length ? runRegexScripts(scripts, text, { placement, target: 'prompt', depth, macros: raw }) : text);
+  /** A lorebook entry's content as sent. */
+  const lx = (text: string) => rx(x(text), REGEX_PLACEMENT.worldInfo);
+  return { x, lx, rx, char, user, texts, setFields };
+}
+
+/** A message's text as the chat shows it, after the card's display-side
+ *  regex scripts; `depth` is how far it is from the end (0: the last). */
+export function shownText(card: CardData, text: string, role: ChatMessage['role'], depth: number, settings: Pick<ChatPromptSettings, 'userName' | 'useCardRegex'>): string {
+  const placement = placementFor(role);
+  if (settings.useCardRegex === false || placement === null) return text;
+  const scripts = cardRegexScripts(card);
+  if (!scripts.length) return text;
+  const char = card.nickname || card.name || 'Character';
+  return runRegexScripts(scripts, text, { placement, target: 'display', depth, macros: (t) => expandMacros(t, { char, user: settings.userName || 'User' }) });
 }
 
 export type LorePlace = 'before' | 'after' | 'depth';
@@ -256,7 +282,7 @@ const ROLE_BY_NUMBER: LlmMessage['role'][] = ['system', 'user', 'assistant'];
 
 /** The card's own at-depth note (SillyTavern's "Character's Note", in
  *  extensions.depth_prompt) and lorebook entries placed at a depth. */
-export function cardDepthInjections(card: CardData, lore: ActivatedEntry[], x: (t: string) => string): DepthInjection[] {
+export function cardDepthInjections(card: CardData, lore: ActivatedEntry[], x: (t: string) => string, lx: (t: string) => string = x): DepthInjection[] {
   const out: DepthInjection[] = [];
   const note = (card.extensions as { depth_prompt?: { prompt?: string; depth?: number; role?: string } }).depth_prompt;
   if (note?.prompt?.trim()) {
@@ -266,16 +292,25 @@ export function cardDepthInjections(card: CardData, lore: ActivatedEntry[], x: (
   for (const a of lore) {
     if (lorePlace(a.entry) !== 'depth') continue;
     const ext = a.entry.extensions as { depth?: number; role?: number };
-    out.push({ label: `Lorebook: ${describeEntry(a)}`, role: ROLE_BY_NUMBER[ext.role ?? 0] ?? 'system', content: x(a.entry.content), depth: typeof ext.depth === 'number' ? ext.depth : 4, order: a.entry.insertion_order ?? 100 });
+    out.push({ label: `Lorebook: ${describeEntry(a)}`, role: ROLE_BY_NUMBER[ext.role ?? 0] ?? 'system', content: lx(a.entry.content), depth: typeof ext.depth === 'number' ? ext.depth : 4, order: a.entry.insertion_order ?? 100 });
   }
   return out;
 }
 
 /** The chat as prompt parts, with at-depth injections in their places. */
-export function historyParts(history: ChatMessage[], injections: DepthInjection[], x: (t: string) => string, names: { char: string; user: string; inContent?: boolean }): PromptPart[] {
+export function historyParts(
+  history: ChatMessage[],
+  injections: DepthInjection[],
+  x: (t: string) => string,
+  names: { char: string; user: string; inContent?: boolean },
+  /** The card's regex scripts, by placement and depth from the end. */
+  rx?: (text: string, placement: RegexPlacement, depth: number) => string,
+): PromptPart[] {
   const msgs: PromptPart[] = [];
   history.forEach((m, i) => {
     let content = x(messageText(m));
+    const placement = placementFor(m.role);
+    if (rx && placement !== null && content) content = rx(content, placement, history.length - 1 - i).trim();
     if (!content) return;
     if (names.inContent && m.role !== 'system') content = `${m.role === 'user' ? names.user : names.char}: ${content}`;
     msgs.push({ label: i === 0 && m.role === 'assistant' && m.id === 'greeting' ? 'Greeting' : m.role === 'user' ? names.user : m.role === 'assistant' ? names.char : 'System', role: m.role, content });
@@ -328,7 +363,7 @@ export function buildChatPrompt(card: CardData, history: ChatMessage[], settings
   const mode = opts.mode ?? 'reply';
   // Continuing: the reply being continued is the prefill, not history.
   const chat = mode === 'continue' ? history.slice(0, -1) : history;
-  const { x, char, user, texts, setFields } = macroExpander(card, chat, settings, opts);
+  const { x, lx, rx, char, user, texts, setFields } = macroExpander(card, chat, settings, opts);
 
   const parts: PromptPart[] = [];
   const sys = (label: string, content: string) => {
@@ -336,8 +371,8 @@ export function buildChatPrompt(card: CardData, history: ChatMessage[], settings
   };
 
   // The lorebook first, so the main prompt's {{#if wiBefore}} knows what fired.
-  const lore = settings.useLorebook ? scanLorebook(card.character_book, texts, { defaults: loreDefaults(settings) }) : { active: [], dropped: [] };
-  const loreAt = (place: LorePlace) => lore.active.filter((a) => lorePlace(a.entry) === place).map((a) => ({ name: describeEntry(a), content: x(a.entry.content) }));
+  const lore = settings.useLorebook ? scanLorebook(card.character_book, texts, { defaults: loreDefaults(settings), random: opts.random, generatedAt: replyPoints(chat) }) : { active: [], dropped: [] };
+  const loreAt = (place: LorePlace) => lore.active.filter((a) => lorePlace(a.entry) === place).map((a) => ({ name: describeEntry(a), content: lx(a.entry.content) }));
   setFields({ wiBefore: loreAt('before').map((e) => e.content).filter(Boolean).join('\n'), wiAfter: loreAt('after').map((e) => e.content).filter(Boolean).join('\n') });
 
   const note = authorsNoteParts(opts.authorsNote, chat, x);
@@ -368,7 +403,7 @@ export function buildChatPrompt(card: CardData, history: ChatMessage[], settings
 
   // The history goes here, once the rest is known (to fit the context size).
   const historyAt = parts.length;
-  const injections = [...(note.injection ? [note.injection] : []), ...cardDepthInjections(card, lore.active, x), ...summaryDepthInjections(opts.summary)];
+  const injections = [...(note.injection ? [note.injection] : []), ...cardDepthInjections(card, lore.active, x, lx), ...summaryDepthInjections(opts.summary)];
 
   const phiDefault = x(settings.defaultPostHistory);
   const cardPhi = settings.useCardPostHistory && card.post_history_instructions.trim();
@@ -376,7 +411,7 @@ export function buildChatPrompt(card: CardData, history: ChatMessage[], settings
   if (mode === 'impersonate') sys('Impersonation prompt', x(DEFAULT_IMPERSONATION));
   if (opts.guide?.trim()) sys('Guide (🧭)', x(guideText(settings.guideTemplate, opts.guide)));
 
-  const toParts = (kept: ChatMessage[]) => historyParts(kept, injections, x, { char, user });
+  const toParts = (kept: ChatMessage[]) => historyParts(kept, injections, x, { char, user }, rx);
   const prefill = mode === 'continue' ? opts.continueText : undefined;
   const fixed = prefill ? [...parts, { label: 'Prefill', role: 'assistant' as const, content: prefill }] : parts;
   const { kept, dropped } = fitHistory(chat, toParts, fixed, opts.maxContext, opts.maxTokens);

@@ -39,6 +39,10 @@ export function setPath(data: CardData, path: string, value: string): CardData {
   return write(data, 0) as CardData;
 }
 
+/** SillyTavern's Character's Note: the card's own note sent at a depth in
+ *  the chat (extensions.depth_prompt, with its depth and role). */
+export const CHARACTER_NOTE_PATH = 'extensions.depth_prompt.prompt';
+
 export type FieldGroup = 'character' | 'greetings' | 'prompts' | 'lorebook' | 'creator';
 
 export interface TextFieldRef {
@@ -56,6 +60,7 @@ const MAIN: [string, string, FieldGroup][] = [
   ['first_mes', 'First message', 'greetings'],
   ['system_prompt', 'System prompt', 'prompts'],
   ['post_history_instructions', 'Post-history instructions', 'prompts'],
+  [CHARACTER_NOTE_PATH, "Character's note", 'prompts'],
   ['creator_notes', "Creator's notes", 'creator'],
 ];
 

@@ -1,6 +1,6 @@
 import type { CardData } from '@/types/card';
 import type { LlmImage, LlmMessage } from '@/types/llm';
-import { fieldLabel, getPath } from '@/lib/cardPath';
+import { CHARACTER_NOTE_PATH, fieldLabel, getPath } from '@/lib/cardPath';
 import { entryName } from '@/lib/cardSpec';
 
 // The writing assistant's requests: each builds the messages for one job,
@@ -416,6 +416,7 @@ export function cardContext(card: CardData, skipPath?: string, budget = 12000): 
   add('first_mes', 'first_message', budget * 0.15);
   add('mes_example', 'example_messages', budget * 0.1);
   add('system_prompt', 'system_prompt', budget * 0.05);
+  add(CHARACTER_NOTE_PATH, 'character_note', budget * 0.05);
   const lore = lorebookContext(card, skipPath, budget * 0.35);
   if (lore) parts.push(lore);
   return parts.join('\n\n') || '(The card is still empty.)';
@@ -458,6 +459,8 @@ const FIELD_GUIDANCE: Record<string, string> = {
     'Example dialogue showing how {{char}} talks and writes. Each example starts with <START> on its own line, followed by lines like "{{user}}: ..." and "{{char}}: ...".',
   system_prompt: 'A system prompt that replaces the frontend default for this card. It can include the default back with {{original}}.',
   post_history_instructions: 'Instructions sent after the chat history (a "jailbreak" / UJB), for rules the model must not forget. Keep it short. {{original}} includes the frontend default.',
+  [CHARACTER_NOTE_PATH]:
+    "The character's note: a short instruction sent inside the chat, a few messages from the end, with every reply (SillyTavern's Character's Note), for what the model tends to forget: tone, length, a running rule. Keep it brief.",
   creator_notes: "Notes shown to people browsing the card: what it's about, recommended settings, content warnings. Not sent to the model.",
 };
 

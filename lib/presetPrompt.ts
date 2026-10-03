@@ -10,6 +10,7 @@ import {
   exampleBlocks,
   historyParts,
   loreDefaults,
+  replyPoints,
   lorePlace,
   macroExpander,
   summaryDepthInjections,
@@ -46,13 +47,13 @@ export function buildPresetPrompt(card: CardData, history: ChatMessage[], settin
   // Continuing with a prefill: the reply being continued isn't history.
   const prefillContinue = continuing && preset.continuePrefill;
   let chat = prefillContinue ? history.slice(0, -1) : history;
-  const { x, char, user, texts, setFields } = macroExpander(card, chat, settings, opts);
+  const { x, lx, rx, char, user, texts, setFields } = macroExpander(card, chat, settings, opts);
 
-  const lore = settings.useLorebook ? scanLorebook(card.character_book, texts, { defaults: loreDefaults(settings) }) : { active: [], dropped: [] };
+  const lore = settings.useLorebook ? scanLorebook(card.character_book, texts, { defaults: loreDefaults(settings), random: opts.random, generatedAt: replyPoints(chat) }) : { active: [], dropped: [] };
   const loreText = (place: 'before' | 'after') =>
     lore.active
       .filter((a) => lorePlace(a.entry) === place)
-      .map((a) => x(a.entry.content))
+      .map((a) => lx(a.entry.content))
       .filter(Boolean)
       .join('\n');
   // For {{wiBefore}} / {{wiAfter}} and {{#if wiBefore}} in the preset.
@@ -66,7 +67,7 @@ export function buildPresetPrompt(card: CardData, history: ChatMessage[], settin
     ...enabled
       .filter((p) => !p.marker && p.injectionPosition === 1)
       .map((p) => ({ label: p.name, role: p.role, content: x(p.content), depth: p.injectionDepth, order: p.injectionOrder })),
-    ...cardDepthInjections(card, lore.active, x),
+    ...cardDepthInjections(card, lore.active, x, lx),
     ...summaryDepthInjections(opts.summary),
   ];
   // The author's note: in the chat with the rest, or beside Main Prompt
@@ -159,7 +160,7 @@ export function buildPresetPrompt(card: CardData, history: ChatMessage[], settin
   if (opts.guide?.trim()) after.push({ label: 'Guide (🧭)', role: 'system', content: x(guideText(settings.guideTemplate, opts.guide)) });
 
   // Fit the history into the context size, dropping the oldest first.
-  let chatParts = historyAt ? historyParts(chat, injections, x, names) : [];
+  let chatParts = historyAt ? historyParts(chat, injections, x, names, rx) : [];
   let droppedHistory = 0;
   // The preset's own context size, else the connection's.
   const maxContext = preset.maxContext && preset.maxContext > 0 ? preset.maxContext : opts.maxContext;
@@ -167,9 +168,9 @@ export function buildPresetPrompt(card: CardData, history: ChatMessage[], settin
     const fixed = [...before, ...after].reduce((n, p) => n + estimate(p.content), 0) + (opts.maxTokens ?? preset.samplers.max_tokens ?? 0);
     const budget = maxContext - fixed;
     let kept = chat;
-    while (kept.length > 1 && historyParts(kept, injections, x, names).reduce((n, p) => n + estimate(p.content), 0) > budget) kept = kept.slice(1);
+    while (kept.length > 1 && historyParts(kept, injections, x, names, rx).reduce((n, p) => n + estimate(p.content), 0) > budget) kept = kept.slice(1);
     droppedHistory = chat.length - kept.length;
-    if (droppedHistory) chatParts = historyParts(kept, injections, x, names);
+    if (droppedHistory) chatParts = historyParts(kept, injections, x, names, rx);
   }
 
   const parts = [...before, ...chatParts, ...after];

@@ -72,3 +72,95 @@ describe('scanLorebook', () => {
     expect(scanLorebook(rec, ['a']).active).toHaveLength(4);
   });
 });
+
+describe("SillyTavern's entry rules", () => {
+  const st = (over: Partial<LorebookEntry>, ext: Record<string, unknown>) => entry({ ...over, extensions: { selectiveLogic: 0, ...ext } });
+
+  it('applies secondary-key logic', () => {
+    const sec = { keys: ['king'], selective: true, secondary_keys: ['crown', 'throne'] };
+    const fires = (logic: number, text: string) => scanLorebook(book([st(sec, { selectiveLogic: logic })]), [text]).active.length === 1;
+    // AND ANY
+    expect(fires(0, 'king crown')).toBe(true);
+    expect(fires(0, 'king')).toBe(false);
+    // NOT ALL
+    expect(fires(1, 'king crown')).toBe(true);
+    expect(fires(1, 'king crown throne')).toBe(false);
+    // NOT ANY
+    expect(fires(2, 'king')).toBe(true);
+    expect(fires(2, 'king throne')).toBe(false);
+    // AND ALL
+    expect(fires(3, 'king crown throne')).toBe(true);
+    expect(fires(3, 'king crown')).toBe(false);
+  });
+
+  it('honours whole words, case and the entry scan depth', () => {
+    expect(scanLorebook(book([st({ keys: ['cat'] }, { match_whole_words: false })]), ['concatenate']).active).toHaveLength(1);
+    expect(scanLorebook(book([st({ keys: ['Cat'] }, { case_sensitive: true })]), ['cat']).active).toHaveLength(0);
+    expect(scanLorebook(book([st({ keys: ['sword'] }, { scan_depth: 3 })]), ['sword', 'a', 'b']).active).toHaveLength(1);
+  });
+
+  it('rolls the trigger %', () => {
+    const b = book([st({ keys: ['x'] }, { probability: 30, useProbability: true })]);
+    expect(scanLorebook(b, ['x'], { random: () => 0.2 }).active).toHaveLength(1);
+    const miss = scanLorebook(b, ['x'], { random: () => 0.5 });
+    expect(miss.active).toHaveLength(0);
+    expect(miss.skipped?.[0].reason).toMatch(/30% roll failed/);
+    // useProbability off: always.
+    expect(scanLorebook(book([st({ keys: ['x'] }, { probability: 30, useProbability: false })]), ['x'], { random: () => 0.9 }).active).toHaveLength(1);
+  });
+
+  it('keeps one entry per inclusion group', () => {
+    const a = st({ keys: ['x'], content: 'A', insertion_order: 1 }, { group: 'mood' });
+    const b = st({ keys: ['x'], content: 'B', insertion_order: 2 }, { group: 'mood', group_weight: 300 });
+    expect(scanLorebook(book([a, b]), ['x'], { random: () => 0.1 }).active.map((r) => r.entry.content)).toEqual(['A']);
+    expect(scanLorebook(book([a, b]), ['x'], { random: () => 0.9 }).active.map((r) => r.entry.content)).toEqual(['B']);
+    const over = st({ keys: ['x'], content: 'O', insertion_order: 0 }, { group: 'mood', group_override: true });
+    expect(scanLorebook(book([a, b, over]), ['x'], { random: () => 0.9 }).active.map((r) => r.entry.content)).toEqual(['O']);
+    // Scoring keeps the entry with the most matching keys.
+    const s1 = st({ keys: ['x'], content: 'one' }, { group: 'g', use_group_scoring: true });
+    const s2 = st({ keys: ['x', 'y'], content: 'two' }, { group: 'g', use_group_scoring: true });
+    expect(scanLorebook(book([s1, s2]), ['x y'], { random: () => 0 }).active.map((r) => r.entry.content)).toEqual(['two']);
+  });
+
+  it('follows the recursion switches', () => {
+    const chain = (ext: Record<string, unknown>, ext2: Record<string, unknown> = {}) =>
+      scanLorebook(book([st({ keys: ['a'], content: 'b' }, ext), st({ keys: ['b'], content: 'B' }, ext2)], { recursive_scanning: true }), ['a']).active.length;
+    expect(chain({})).toBe(2);
+    expect(chain({ prevent_recursion: true })).toBe(1);
+    expect(chain({}, { exclude_recursion: true })).toBe(1);
+    // Delayed until recursion: only fires from another entry's content.
+    const delayed = book([st({ keys: ['a'], content: 'x' }, { delay_until_recursion: true })], { recursive_scanning: true });
+    expect(scanLorebook(delayed, ['a']).active).toHaveLength(0);
+  });
+
+  it('waits out a delay', () => {
+    const b = book([st({ keys: ['x'] }, { delay: 3 })]);
+    expect(scanLorebook(b, ['g', 'x']).active).toHaveLength(0);
+    expect(scanLorebook(b, ['g', 'a', 'x']).active).toHaveLength(1);
+  });
+
+  it('keeps sticky entries in and cools entries down, replaying the chat', () => {
+    // greeting, user, reply, user, reply, user: replies at 2 and 4.
+    const chat = ['hi', 'x', 'r', 'nothing', 'r', 'still nothing'];
+    const sticky = book([st({ keys: ['x'] }, { sticky: 3 })], { scan_depth: 1 });
+    // Fired at length 2 (the first reply), stays until length 5.
+    expect(scanLorebook(sticky, chat.slice(0, 4), { generatedAt: [2] }).active[0]?.reason).toBe('sticky');
+    expect(scanLorebook(sticky, chat, { generatedAt: [2, 4] }).active).toHaveLength(0);
+
+    const cool = book([st({ keys: ['x'] }, { cooldown: 3 })], { scan_depth: 1 });
+    const again = ['hi', 'x', 'r', 'x'];
+    const r = scanLorebook(cool, again, { generatedAt: [2] });
+    expect(r.active).toHaveLength(0);
+    expect(r.skipped?.[0].reason).toMatch(/cooling down/);
+    expect(scanLorebook(cool, [...again, 'r', 'x'], { generatedAt: [2, 4] }).active).toHaveLength(1);
+  });
+
+  it('lets entries that ignore the budget past it', () => {
+    const big = st({ keys: ['x'], content: 'a'.repeat(400), priority: 0 }, { ignore_budget: true });
+    const small = st({ keys: ['x'], content: 'b'.repeat(40), priority: 9 }, {});
+    const r = scanLorebook(book([big, small], { token_budget: 20 }), ['x']);
+    // It still counts, as in SillyTavern, so it can crowd others out.
+    expect(r.active.map((a) => a.entry.content[0])).toEqual(['a']);
+    expect(r.dropped.map((a) => a.entry.content[0])).toEqual(['b']);
+  });
+});
