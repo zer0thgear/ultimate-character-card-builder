@@ -217,4 +217,14 @@ describe('project store', { timeout: 30_000 }, () => {
     store().setChatStats(id, { chats: 1, messages: 3, lastChat: 1_030_000 });
     expect(store().summaries[0]).toMatchObject({ chats: 1, messages: 3, lastChat: 1_030_000 });
   });
+
+  it('updates the token count in the lists only when it shows differently', async () => {
+    const { id } = await store().create();
+    store().setChatStats(id, { chats: 1, messages: 2, lastChat: 1_000_000, sent: 1, received: 1, tokens: 1520 });
+    const summaries = store().summaries;
+    store().setChatStats(id, { chats: 1, messages: 2, lastChat: 1_000_000, sent: 1, received: 1, tokens: 1540 });
+    expect(store().summaries).toBe(summaries);
+    store().setChatStats(id, { chats: 1, messages: 2, lastChat: 1_000_000, sent: 1, received: 1, tokens: 1560 });
+    expect(store().summaries[0]).toMatchObject({ sent: 1, received: 1, tokens: 1560 });
+  });
 });

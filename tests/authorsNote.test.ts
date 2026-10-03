@@ -95,3 +95,11 @@ describe("author's note on a branch", () => {
     expect(branch.authorsNote).not.toBe(chat.authorsNote);
   });
 });
+
+describe("author's note beside a chat summary", () => {
+  it('follows the summary on the same side of the main prompt, as SillyTavern orders them', () => {
+    const summary = { content: 'So far: a duel.', position: 'after' as const, depth: 2, role: 'system' as const };
+    const { parts } = buildChatPrompt(card(), chatOf(1), settings, { authorsNote: note({ position: 'after' }), summary });
+    expect(parts.map((p) => p.label).slice(0, 3)).toEqual(['Main prompt', expect.stringMatching(/summary/i), "Author's note"]);
+  });
+});

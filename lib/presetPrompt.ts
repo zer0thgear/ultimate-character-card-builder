@@ -12,6 +12,8 @@ import {
   loreDefaults,
   lorePlace,
   macroExpander,
+  summaryDepthInjections,
+  summaryPart,
   toMessages,
   type BuildOptions,
   type BuiltPrompt,
@@ -65,6 +67,7 @@ export function buildPresetPrompt(card: CardData, history: ChatMessage[], settin
       .filter((p) => !p.marker && p.injectionPosition === 1)
       .map((p) => ({ label: p.name, role: p.role, content: x(p.content), depth: p.injectionDepth, order: p.injectionOrder })),
     ...cardDepthInjections(card, lore.active, x),
+    ...summaryDepthInjections(opts.summary),
   ];
   // The author's note: in the chat with the rest, or beside Main Prompt
   // (SillyTavern puts it there, at the start or end of Main's place).
@@ -133,12 +136,21 @@ export function buildPresetPrompt(card: CardData, history: ChatMessage[], settin
       content = x(card.post_history_instructions, x(p.content));
       label = `${p.name} (card's post-history instructions)`;
     } else content = x(content);
+    // The summary, then the author's note, go either side of Main, as
+    // SillyTavern's do.
+    const summaryBefore = p.identifier === 'main' ? summaryPart(opts.summary, 'before') : null;
+    const summaryAfter = p.identifier === 'main' ? summaryPart(opts.summary, 'after') : null;
+    if (summaryBefore) push(summaryBefore);
     if (p.identifier === 'main' && note.before) push(note.before);
     push({ label, role: p.role, content });
+    if (summaryAfter) push(summaryAfter);
     if (p.identifier === 'main' && note.after) push(note.after);
   }
-  // With Main Prompt off, a note meant beside it goes first.
-  if (!enabled.some((p) => p.identifier === 'main')) before.unshift(...[note.before, note.after].filter((n): n is PromptPart => !!n?.content.trim()));
+  // With Main turned off, they go first.
+  if (!enabled.some((p) => p.identifier === 'main' && p.injectionPosition !== 1)) {
+    const top = [summaryPart(opts.summary, 'before') ?? summaryPart(opts.summary, 'after'), note.before, note.after].filter((n): n is PromptPart => !!n?.content.trim());
+    before.unshift(...top);
+  }
 
   // Continue / impersonate go last, after the post-history instructions.
   if (continuing && !prefillContinue) after.push({ label: 'Continue nudge', role: 'system', content: x(preset.continueNudgePrompt) });

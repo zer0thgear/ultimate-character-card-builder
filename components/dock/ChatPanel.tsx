@@ -33,6 +33,8 @@ import { uuid } from '@/lib/uuid';
 import { copyText } from '@/lib/clipboard';
 import { formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
 import { AuthorsNoteDialog } from '@/components/dock/AuthorsNote';
+import { summaryInjection, summarySettings } from '@/lib/chatSummary';
+import { ChatSummaryPanel, useChatSummary } from '@/components/dock/ChatSummaryPanel';
 
 // Test-chatting the card, built the way SillyTavern builds its prompt (see
 // lib/chatPrompt.ts), with swipes, edits, the greeting read live from the
@@ -72,6 +74,9 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const [describing, setDescribing] = useState<{ spec: DrawSpec; replacing?: ChatImage } | null>(null);
   const [treeFor, setTreeFor] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  // 📜 The chat's summary.
+  const summarizer = useChatSummary();
+  const [showSummary, setShowSummary] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   // Following the chat's end: true while you're at the bottom. Scrolling up
   // stops it, and so does a reply growing past the top of the view.
@@ -180,10 +185,13 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
 
   /** The prompt for `messages` (greeting added), through the preset if one is on. */
   const build = (messages: ChatMessage[], opts: BuildOptions = {}): BuiltPrompt => {
-    const full = { model: connection?.model, kind: connection?.kind, maxTokens: overrides.max_tokens ?? connection?.params.max_tokens, maxContext: connection?.params.max_context, authorsNote: chat?.authorsNote, ...opts };
+    const summary = summaryInjection(useChatStore.getState().chat?.summary, summarySettings(chatSettings.summary));
+    const full = { model: connection?.model, kind: connection?.kind, maxTokens: overrides.max_tokens ?? connection?.params.max_tokens, maxContext: connection?.params.max_context, summary, authorsNote: chat?.authorsNote, ...opts };
     const built = preset ? buildPresetPrompt(card, history(messages), settings, preset, full) : buildChatPrompt(card, history(messages), settings, full);
     return connection ? { ...built, sentWith: sentWith(connection, overrides, preset) } : built;
   };
+
+  const summaryRequest = () => ({ build, connection, params: overrides });
 
   /** Streams a completion for `built`, calling `onText` with the reply so far. */
   const complete = (built: BuiltPrompt, onText: (full: string) => void) => {
@@ -228,6 +236,8 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
         .filter((x) => !(x.id === id && !target && !messageText(x).trim())),
     );
     if (r.error) toast(r.error, 'error');
+    // Every so many messages, the summary catches up.
+    else void summarizer.summarizeIfDue(summaryRequest());
     return { text: written, error: r.error };
   };
 
@@ -382,6 +392,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     { label: '⬇ Plain text (.txt)', hint: 'For reading or sharing', run: () => downloadBlob(chatToText(chat, card, me.name), `${chatFileName(chat, card)}.txt`, 'text/plain') },
                     ...(phone
                       ? [
+                          { label: '📜 Summary', hint: "The chat's summary, sent with every prompt", run: () => setShowSummary(!showSummary) },
                           { label: '🔍 The next prompt', hint: 'What the next reply would send', run: preview },
                           ...(lastPrompt ? [{ label: `🔍 The last prompt · ${lastPrompt.lore.active.length} lore`, hint: 'What the last reply sent', run: () => setInspect(lastPrompt) }] : []),
                           { label: '🗑 Delete this chat', hint: '', run: deleteThisChat },
@@ -419,6 +430,11 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
             <div className="flex items-center gap-1.5">
               <PersonaPicker onManage={() => openSettings('personas')} />
               <ChatPresetSelect />
+              {chat && (
+                <IconButton title={summarizer.running ? 'Summarizing the chat…' : "The chat's summary, sent with every prompt"} onClick={() => setShowSummary(!showSummary)}>
+                  <span className={cx(summarizer.running && 'animate-pulse')}>📜</span>
+                </IconButton>
+              )}
               <IconButton title="Show the prompt the next reply would send" onClick={preview}>
                 🔍
               </IconButton>
@@ -444,6 +460,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
       )}
 
       {showSettings && !(phone && keyboard) && <ChatSettings phone={phone} onClose={() => setShowSettings(false)} />}
+      {showSummary && chat && !(phone && keyboard) && <ChatSummaryPanel summarizer={summarizer} request={summaryRequest} onClose={() => setShowSummary(false)} />}
       {!showSettings && !phone && <ConnectionPicker value={chatConnectionId} onChange={setChatConnection} label="Connection" className="flex-shrink-0 border-b border-slate-800 px-2 py-1.5" />}
 
       <div className="relative min-h-0 flex-1">

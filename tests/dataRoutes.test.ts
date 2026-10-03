@@ -121,6 +121,12 @@ describe('data routes', { timeout: 30_000 }, () => {
       expect(path.relative(out, saved).startsWith('..')).toBe(false);
     });
 
+    it('treats a backslash as a separator too (it is one on Windows)', async () => {
+      await routeFetch('/api/config', json('PUT', { outputDir: out, outputPerCard: true }));
+      const { path: saved } = await (await save({ 'x-filename': '..\\..\\escape.png', 'x-card': '..\\up' })).json();
+      expect(path.relative(out, saved)).toBe(path.join('_up', '_.._escape.png'));
+    });
+
     it('names a gen sent without a name', async () => {
       await routeFetch('/api/config', json('PUT', { outputDir: out, outputPerCard: false }));
       const { path: saved } = await (await save({})).json();

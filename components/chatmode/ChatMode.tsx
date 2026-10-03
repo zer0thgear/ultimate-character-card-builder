@@ -15,7 +15,7 @@ import { WritingToolsContext } from '@/components/editor/fieldTools';
 import { openLightbox } from '@/components/Lightbox';
 import { CardListMeta } from '@/components/CardListMeta';
 import { CardSortControl, useSortedCards } from '@/components/CardSort';
-import { sortDetail } from '@/lib/cardSort';
+import { chatStatsDetail, sortDetail } from '@/lib/cardSort';
 import { importFromUrl } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
 import type { ProjectSummary } from '@/types/project';
@@ -105,7 +105,7 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
                   <CardListMeta summary={s} />
                   <span className="block truncate text-[10px] text-slate-500">
                     {!s.chatOnly && <span title="Your card from Builder (edits and chats are shared with it)">🛠 Builder · </span>}
-                    {sortDetail(s, by)}
+                    <span title={s.chats ? chatStatsDetail(s) : undefined}>{sortDetail(s, by)}</span>
                   </span>
                 </span>
               </button>
@@ -171,7 +171,7 @@ export function ChatHome({ loading }: { loading: boolean }) {
                     <CardListMeta summary={s} />
                     <div className="truncate text-[10px] text-slate-500">
                       {!s.chatOnly && <span title="Your card from Builder (edits and chats are shared with it)">🛠 </span>}
-                      {sortDetail(s, by)}
+                      <span title={s.chats ? chatStatsDetail(s) : undefined}>{sortDetail(s, by)}</span>
                     </div>
                   </div>
                 </button>

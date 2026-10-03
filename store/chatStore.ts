@@ -1,16 +1,33 @@
 'use client';
 
 import { create } from 'zustand';
-import type { AuthorsNote, ChatImage, ChatMessage, ChatSession, ChatSummary } from '@/types/project';
+import type { AuthorsNote, ChatImage, ChatMessage, ChatSession, ChatSessionSummary, ChatSummary } from '@/types/project';
 import { api } from '@/lib/api';
 import { uuid } from '@/lib/uuid';
 import { useProjectStore } from '@/store/projectStore';
+import { sumTallies, tallyChat } from '@/lib/chatStats';
+import { countTextNow, textCounterLoaded } from '@/lib/textTokens';
 
 // The open card's test chats. The greeting isn't stored as a message: the
 // chat remembers which greeting opened it and reads it live from the card,
 // so editing the greeting and chatting again tests the edit.
 
 const SAVE_DELAY_MS = 600;
+
+// A reply streaming in changes the chat with every word: its other messages'
+// tokens are remembered rather than counted again each time.
+const tokenMemo = new Map<string, number>();
+const countMemo = (text: string) => {
+  let n = tokenMemo.get(text);
+  if (n === undefined) {
+    if (tokenMemo.size > 5000) tokenMemo.clear();
+    // The rough count while the tokenizer loads isn't kept.
+    const exact = textCounterLoaded();
+    n = countTextNow(text);
+    if (exact) tokenMemo.set(text, n);
+  }
+  return n;
+};
 
 /**
  * A branch of `chat` at its message `until` (an index): the messages up to
@@ -34,6 +51,8 @@ export function branchOf(chat: ChatSession, until: number, id: string, now: numb
     ...(chat.personaId ? { personaId: chat.personaId } : {}),
     ...(chat.authorsNote ? { authorsNote: { ...chat.authorsNote } } : {}),
     ...(images.length ? { images } : {}),
+    // The summary, if it covers no more than the branch does.
+    ...(chat.summary && (chat.summary.through === null || ids.has(chat.summary.through)) ? { summary: { ...chat.summary } } : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -56,6 +75,8 @@ interface ChatState {
   /** This chat's author's note (undefined removes it). */
   setAuthorsNote: (note: AuthorsNote | undefined) => void;
   setMessages: (change: (m: ChatMessage[]) => ChatMessage[]) => void;
+  /** The chat's summary (undefined clears it). */
+  setSummary: (summary: ChatSessionSummary | undefined) => void;
   /** Adds a picture to the chat, or replaces one with the same id. */
   putImage: (image: ChatImage) => void;
   removeImage: (id: string) => void;
@@ -78,7 +99,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     const c = get().chat;
     if (!c) return;
     const next = { ...change(c), updatedAt: Date.now() };
-    set((s) => ({ chat: next, list: s.list.map((x) => (x.id === next.id ? { ...x, name: next.name, updatedAt: next.updatedAt, messageCount: next.messages.length } : x)) }));
+    set((s) => ({ chat: next, list: s.list.map((x) => (x.id === next.id ? { ...x, name: next.name, updatedAt: next.updatedAt, messageCount: next.messages.length, ...tallyChat(next.messages, countMemo) } : x)) }));
     schedule();
   };
 
@@ -112,7 +133,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       const now = Date.now();
       const chat: ChatSession = { id: uuid(), name: `Chat ${new Date(now).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}`, greeting, messages: [], createdAt: now, updatedAt: now };
       const saved = await api.saveChat(projectId, chat);
-      set((s) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: 0 }, ...s.list] }));
+      set((s) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: 0, sent: 0, received: 0, tokens: 0 }, ...s.list] }));
     },
 
     deleteChat: async (id) => {
@@ -155,6 +176,12 @@ export const useChatStore = create<ChatState>((set, get) => {
         if (projectId) for (const i of gone) void api.deleteChatImage(projectId, i.file).catch(() => {});
         return { ...c, messages, ...(gone.length ? { images: c.images!.filter((i) => !gone.includes(i)) } : {}) };
       }),
+    setSummary: (summary) =>
+      updateChat((c) => {
+        const chat: ChatSession = { ...c, summary };
+        if (!summary) delete chat.summary;
+        return chat;
+      }),
     putImage: (image) => updateChat((c) => ({ ...c, images: (c.images ?? []).some((i) => i.id === image.id) ? c.images!.map((i) => (i.id === image.id ? image : i)) : [...(c.images ?? []), image] })),
     branchFrom: async (messageId) => {
       const { projectId, chat } = get();
@@ -177,7 +204,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         }
       }
       const saved = await api.saveChat(projectId, { ...branch, images });
-      set((s) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: saved.messages.length }, ...s.list] }));
+      set((s) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: saved.messages.length, ...tallyChat(saved.messages, countMemo) }, ...s.list] }));
     },
     removeImage: (id) =>
       updateChat((c) => {
@@ -209,6 +236,6 @@ useChatStore.subscribe((s, prev) => {
   const list = s.list;
   useProjectStore.getState().setChatStats(
     s.projectId,
-    list.length ? { chats: list.length, messages: list.reduce((n, c) => n + c.messageCount, 0), lastChat: Math.max(...list.map((c) => c.updatedAt)) } : {},
+    list.length ? { chats: list.length, messages: list.reduce((n, c) => n + c.messageCount, 0), lastChat: Math.max(...list.map((c) => c.updatedAt)), ...sumTallies(list) } : {},
   );
 });
