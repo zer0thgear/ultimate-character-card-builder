@@ -2,9 +2,11 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
-// The tests cover lib/ — the pure modules that encode how NovelAI behaves.
-// Anything needing a canvas, the network or a React tree is checked in the
-// browser instead.
+// The tests cover lib/ — the pure modules that encode how NovelAI behaves —
+// plus the API routes that save to data/ and the stores that call them
+// (through tests/helpers/routes.ts, against a temp data folder). Anything
+// needing a canvas, the network or a React tree is checked in the browser
+// instead.
 const local = (file: string, fallback: string) => fileURLToPath(new URL(`./${existsSync(new URL(`./${file}`, import.meta.url)) ? file : fallback}`, import.meta.url));
 
 export default defineConfig({

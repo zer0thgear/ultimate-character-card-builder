@@ -131,6 +131,9 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       try {
         const p = await api.getProject(id);
         loadGen(p);
+        // A new card's first edit is an undo step of its own, however soon
+        // after an edit to the last one.
+        lastEdit = { key: '', at: 0 };
         set({ project: p, past: [], future: [], status: 'saved', loading: false });
         try {
           localStorage.setItem(lastCardKey(), id);
