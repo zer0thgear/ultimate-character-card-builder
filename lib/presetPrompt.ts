@@ -11,6 +11,8 @@ import {
   loreDefaults,
   lorePlace,
   macroExpander,
+  summaryDepthInjections,
+  summaryPart,
   toMessages,
   type BuildOptions,
   type BuiltPrompt,
@@ -64,6 +66,7 @@ export function buildPresetPrompt(card: CardData, history: ChatMessage[], settin
       .filter((p) => !p.marker && p.injectionPosition === 1)
       .map((p) => ({ label: p.name, role: p.role, content: x(p.content), depth: p.injectionDepth, order: p.injectionOrder })),
     ...cardDepthInjections(card, lore.active, x),
+    ...summaryDepthInjections(opts.summary),
   ];
 
   // Send if empty: the user's turn when they sent nothing.
@@ -128,8 +131,16 @@ export function buildPresetPrompt(card: CardData, history: ChatMessage[], settin
       content = x(card.post_history_instructions, x(p.content));
       label = `${p.name} (card's post-history instructions)`;
     } else content = x(content);
+    // The summary goes either side of Main, as SillyTavern's does.
+    const summaryBefore = p.identifier === 'main' ? summaryPart(opts.summary, 'before') : null;
+    const summaryAfter = p.identifier === 'main' ? summaryPart(opts.summary, 'after') : null;
+    if (summaryBefore) push(summaryBefore);
     push({ label, role: p.role, content });
+    if (summaryAfter) push(summaryAfter);
   }
+  // With Main turned off, it goes first.
+  const summaryTop = enabled.some((p) => p.identifier === 'main' && p.injectionPosition !== 1) ? null : (summaryPart(opts.summary, 'before') ?? summaryPart(opts.summary, 'after'));
+  if (summaryTop) before.unshift(summaryTop);
 
   // Continue / impersonate go last, after the post-history instructions.
   if (continuing && !prefillContinue) after.push({ label: 'Continue nudge', role: 'system', content: x(preset.continueNudgePrompt) });
