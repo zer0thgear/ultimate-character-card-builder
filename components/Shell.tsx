@@ -31,6 +31,7 @@ import { importFromUrl, overwriteCard } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
 import { TrashDialog, duplicateCard, openTrash } from '@/components/TrashDialog';
 import { VersionsDialog, openVersions } from '@/components/VersionsDialog';
+import { TitleStatus } from '@/components/TitleStatus';
 
 export function Shell() {
   const project = useProjectStore((s) => s.project);
@@ -180,6 +181,7 @@ export function Shell() {
       <ConfirmHost />
       <TrashDialog />
       <VersionsDialog />
+      <TitleStatus />
       <VisionWriteHost />
       <ExtensionHosts />
       <AssistInspectorHost />

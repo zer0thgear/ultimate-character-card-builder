@@ -203,6 +203,8 @@ Each connection has its own max tokens, **context size**, sampler settings and s
 
 The card editor is on the left and the dock (Image, Gallery, Library, Test chat, Brainstorm) on the right; drag the bar between them to share the width. **⤢** at the end of either side's tab bar makes that side fill the window: the other side makes way (the card list stays, and ☰ still hides or shows it), and the dock keeps whichever tab you switch to. **⤡** puts them back side by side. So does anything that takes you to the hidden side: 🎨 Generate art, a greeting's 💬 or 🎨, or a lorebook entry's 🎨 from the editor; starting a card from a picture from the dock. The other side stays loaded while it's hidden, so a gen or a reply carries on, and the choice is remembered on this device. On a phone each side is already a screen of its own.
 
+**The tab's title** shows **⏳** while an image gen or an LLM reply (the chat, the assistant, Brainstorm…) is under way, as NovelAI's does, so you can watch it from another tab; when one finishes while you're away it shows **✅** until you come back.
+
 ## On a phone
 
 On a narrow screen (or a phone on its side) UCCB becomes one screen at a time: a bar along the bottom switches between the **Card** and the dock's **Image**, **Gallery**, **Library**, **Chat** and **Ideas** (Brainstorm). Both stay loaded, so a generation or a reply carries on while you look at the other. Anything that opens a dock tab (🎨 or 💬 on a greeting, Img2Img, Inpaint) switches to it.
