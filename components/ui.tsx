@@ -275,7 +275,7 @@ export function TextField({
           {actions}
         </div>
       </div>
-      <AutoTextarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} minRows={minRows} maxRows={maxRows} className={mono ? 'font-mono text-xs' : ''} />
+      <AutoTextarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} minRows={minRows} maxRows={maxRows} className={mono ? 'font-mono text-xs' : ''} aria-label={typeof label === 'string' ? label : undefined} />
     </div>
   );
 }

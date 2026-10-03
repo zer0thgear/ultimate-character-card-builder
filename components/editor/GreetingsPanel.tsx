@@ -79,7 +79,7 @@ function FirstMessage() {
         </>
       }
     >
-      <AutoTextarea value={value} onChange={(e) => setValue(e.target.value)} minRows={8} maxRows={30} placeholder="The opening message, written as {{char}}." />
+      <AutoTextarea value={value} onChange={(e) => setValue(e.target.value)} minRows={8} maxRows={30} placeholder="The opening message, written as {{char}}." aria-label="First message" />
     </Section>
   );
 }

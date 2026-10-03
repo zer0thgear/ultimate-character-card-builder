@@ -22,3 +22,7 @@ next-env.d.ts
 npm-debug.log*
 
 /.claude/settings.local.json
+
+# end-to-end runs (npm run e2e)
+/test-results/
+/playwright-report/
