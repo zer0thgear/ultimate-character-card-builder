@@ -48,7 +48,7 @@ function CharacterNote() {
     }, `depth_prompt.${key}`);
   return (
     <div className="flex flex-col gap-2">
-      <CardTextField path={CHARACTER_NOTE_PATH} label="Character's note" hint="Sent in the chat, a few messages from the end, with every reply (SillyTavern's Character's Note). It's part of the card, unlike a chat's author's note" minRows={3} />
+      <CardTextField path={CHARACTER_NOTE_PATH} label="Character's note" hint="Sent at a specified depth" minRows={3} />
       <div className="flex flex-wrap items-end gap-4">
         <label className="flex w-28 flex-col gap-0.5 text-xs text-slate-400" title="Messages from the end of the chat: 0 goes after the last one">
           Depth
