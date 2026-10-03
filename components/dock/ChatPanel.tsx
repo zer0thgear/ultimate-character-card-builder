@@ -1287,6 +1287,7 @@ function PromptInspector({ prompt, onClose }: { prompt: BuiltPrompt; onClose: ()
         <div className="text-xs text-slate-400">
           Lorebook: {prompt.lore.active.length ? prompt.lore.active.map((a) => `${describeEntry(a)} (${a.reason})`).join(' · ') : 'nothing fired'}
           {prompt.lore.dropped.length > 0 && <span className="text-amber-300"> · over budget: {prompt.lore.dropped.map(describeEntry).join(', ')}</span>}
+          {!!prompt.lore.skipped?.length && <span className="text-slate-500"> · left out: {prompt.lore.skipped.map((a) => `${describeEntry(a)} (${a.reason})`).join(', ')}</span>}
         </div>
         {prompt.parts.map((p, i) => (
           <div key={i} className="rounded-md border border-slate-800">

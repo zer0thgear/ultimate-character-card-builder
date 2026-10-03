@@ -90,6 +90,12 @@ describe('V2 export', () => {
 });
 
 describe('normalizeCard', () => {
+  it("reads SillyTavern's lorebook keys as plain text, as it does", () => {
+    const entry = (extensions: object) => ({ keys: ['cat'], content: 'x', use_regex: true, extensions });
+    const c = normalizeCard({ name: 'A', character_book: { entries: [entry({ display_index: 0 }), entry({})] } });
+    expect(c?.data.character_book?.entries.map((e) => e.use_regex)).toEqual([false, true]);
+  });
+
   it('reads a V1 card', () => {
     const c = normalizeCard({ name: 'Old', description: 'd', first_mes: 'hi', mes_example: '', personality: '', scenario: '' });
     expect(c?.data.name).toBe('Old');
@@ -126,6 +132,14 @@ describe('lorebook files', () => {
     });
     const book = await importLorebookFile('w.json', new TextEncoder().encode(file));
     expect(book.entries[0]).toMatchObject({ keys: ['sword'], name: 'Sword', comment: 'Sword', insertion_order: 50, position: 'after_char' });
+  });
+
+  it("keeps a SillyTavern world entry's own rules", async () => {
+    const file = JSON.stringify({
+      entries: { 0: { uid: 0, key: ['king'], keysecondary: ['crown'], selective: true, selectiveLogic: 3, content: 'K', position: 4, depth: 2, group: 'royals', sticky: 2, probability: 40, useProbability: true } },
+    });
+    const book = await importLorebookFile('w.json', new TextEncoder().encode(file));
+    expect(book.entries[0].extensions).toMatchObject({ selectiveLogic: 3, position: 4, depth: 2, group: 'royals', sticky: 2, probability: 40, useProbability: true });
   });
 
   it('backfills mismatched names and comments', () => {

@@ -59,6 +59,10 @@ export interface ChatPromptSettings {
   summary?: Partial<SummarySettings>;
 }
 
+/** Where each of the chat's replies was written (its index: the history
+ *  before it was that turn's prompt), for the lorebook's timed effects. */
+export const replyPoints = (history: Pick<ChatMessage, 'role' | 'id'>[]) => history.flatMap((m, i) => (m.role === 'assistant' && m.id !== 'greeting' ? [i] : []));
+
 /** The chat settings' lorebook defaults, for scanLorebook. */
 export const loreDefaults = (s: Pick<ChatPromptSettings, 'loreScanDepth' | 'loreTokenBudget' | 'loreMaxRecursion'>): LoreDefaults => ({
   scanDepth: s.loreScanDepth,
@@ -336,7 +340,7 @@ export function buildChatPrompt(card: CardData, history: ChatMessage[], settings
   };
 
   // The lorebook first, so the main prompt's {{#if wiBefore}} knows what fired.
-  const lore = settings.useLorebook ? scanLorebook(card.character_book, texts, { defaults: loreDefaults(settings) }) : { active: [], dropped: [] };
+  const lore = settings.useLorebook ? scanLorebook(card.character_book, texts, { defaults: loreDefaults(settings), random: opts.random, generatedAt: replyPoints(chat) }) : { active: [], dropped: [] };
   const loreAt = (place: LorePlace) => lore.active.filter((a) => lorePlace(a.entry) === place).map((a) => ({ name: describeEntry(a), content: x(a.entry.content) }));
   setFields({ wiBefore: loreAt('before').map((e) => e.content).filter(Boolean).join('\n'), wiAfter: loreAt('after').map((e) => e.content).filter(Boolean).join('\n') });
 

@@ -118,7 +118,30 @@ function fromSillyTavernEntry(raw: unknown) {
     case_sensitive: e.caseSensitive === true,
     use_regex: false,
     id: e.uid,
-    extensions: { depth: e.depth, probability: e.probability, useProbability: e.useProbability },
+    // Its own settings, under the names SillyTavern gives them in a card's
+    // lorebook (see lib/lorebookScan.ts).
+    extensions: {
+      position: e.position,
+      depth: e.depth,
+      role: e.role,
+      probability: e.probability,
+      useProbability: e.useProbability,
+      selectiveLogic: e.selectiveLogic ?? 0,
+      group: e.group,
+      group_override: e.groupOverride,
+      group_weight: e.groupWeight,
+      use_group_scoring: e.useGroupScoring,
+      exclude_recursion: e.excludeRecursion,
+      prevent_recursion: e.preventRecursion,
+      delay_until_recursion: e.delayUntilRecursion,
+      scan_depth: e.scanDepth,
+      match_whole_words: e.matchWholeWords,
+      case_sensitive: e.caseSensitive,
+      sticky: e.sticky,
+      cooldown: e.cooldown,
+      delay: e.delay,
+      ignore_budget: e.ignoreBudget,
+    },
   };
 }
 

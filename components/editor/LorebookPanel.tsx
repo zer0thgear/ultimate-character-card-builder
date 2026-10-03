@@ -8,7 +8,8 @@ import { useBridgeStore } from '@/store/bridgeStore';
 import { toast } from '@/store/uiStore';
 import { backfillEntryNames, entryName, hasMismatchedEntryNames, lorebookFile, newEntry, newLorebook } from '@/lib/cardSpec';
 import { importLorebookFile, cardFileName } from '@/lib/cardFile';
-import { DEFAULT_SCAN_DEPTH, scanLorebook } from '@/lib/lorebookScan';
+import { DEFAULT_SCAN_DEPTH, SELECTIVE_LOGIC, entryRules, scanLorebook } from '@/lib/lorebookScan';
+import { lorePlace } from '@/lib/chatPrompt';
 import { lorebookEntryMessages, parseLorebookEntry } from '@/lib/assist';
 import { useLlmStream } from '@/hooks/useLlmStream';
 import { SortableList, arrayMove, remapIndex } from '@/components/SortableList';
@@ -222,6 +223,14 @@ function EntryEditor({ index, entry: e, setEntry }: { index: number; entry: Lore
   // Art is Builder's: Chat mode's card drawer leaves it out.
   const writingTools = useWritingTools();
   const requestEntryPrompt = useBridgeStore((s) => s.requestEntryPrompt);
+  const rules = entryRules(e);
+  /** Sets SillyTavern's settings in the entry's extensions; undefined removes one. */
+  const setExt = (patch: Record<string, unknown>, key?: string) => {
+    const extensions = { ...e.extensions, ...patch };
+    for (const k of Object.keys(patch)) if (patch[k] === undefined) delete extensions[k];
+    setEntry({ extensions }, key);
+  };
+  const numExt = (k: string) => (typeof e.extensions[k] === 'number' ? (e.extensions[k] as number) : undefined);
   return (
     <div className="flex flex-col gap-3 border-t border-slate-800 p-3">
       <div className="grid gap-3 sm:grid-cols-2">
@@ -231,9 +240,18 @@ function EntryEditor({ index, entry: e, setEntry }: { index: number; entry: Lore
         </label>
         <label className="flex flex-col gap-1 text-xs text-slate-400">
           Position
-          <select value={e.position || 'before_char'} onChange={(ev) => setEntry({ position: ev.target.value as LorebookEntry['position'] })} className={cx(inputClass, 'py-1')}>
-            <option value="before_char">Before the character</option>
-            <option value="after_char">After the character</option>
+          <select
+            value={lorePlace(e)}
+            onChange={(ev) => {
+              const place = ev.target.value;
+              // SillyTavern reads its own number; the spec reads `position`.
+              setEntry({ position: place === 'after' ? 'after_char' : 'before_char', extensions: { ...e.extensions, position: place === 'after' ? 1 : place === 'depth' ? 4 : 0 } });
+            }}
+            className={cx(inputClass, 'py-1')}
+          >
+            <option value="before">Before the character</option>
+            <option value="after">After the character</option>
+            <option value="depth">In the chat, at a depth</option>
           </select>
         </label>
       </div>
@@ -242,8 +260,18 @@ function EntryEditor({ index, entry: e, setEntry }: { index: number; entry: Lore
         <ChipInput values={e.keys} onChange={(keys) => setEntry({ keys })} placeholder="keyword, another keyword" />
       </label>
       <div className="flex flex-col gap-1">
-        <Toggle checked={!!e.selective} onChange={(selective) => setEntry({ selective })} label={<span className="text-xs">Also needs a secondary key</span>} />
-        {e.selective && <ChipInput values={e.secondary_keys ?? []} onChange={(secondary_keys) => setEntry({ secondary_keys })} placeholder="secondary keys" />}
+        <Toggle checked={!!e.selective} onChange={(selective) => setEntry({ selective })} label={<span className="text-xs">Also check secondary keys</span>} />
+        {e.selective && (
+          <div className="flex flex-col gap-1">
+            <select value={rules.logic} onChange={(ev) => setExt({ selectiveLogic: Number(ev.target.value) })} className={cx(inputClass, 'w-auto self-start py-1 text-xs')} title="How the secondary keys decide, as SillyTavern's logic does">
+              <option value={SELECTIVE_LOGIC.andAny}>And any: one of them is there too</option>
+              <option value={SELECTIVE_LOGIC.andAll}>And all: every one of them is there too</option>
+              <option value={SELECTIVE_LOGIC.notAny}>Not any: none of them is there</option>
+              <option value={SELECTIVE_LOGIC.notAll}>Not all: not every one of them is there</option>
+            </select>
+            <ChipInput values={e.secondary_keys ?? []} onChange={(secondary_keys) => setEntry({ secondary_keys })} placeholder="secondary keys" />
+          </div>
+        )}
       </div>
       <div className="flex flex-wrap items-end gap-4">
         <label className="flex w-28 flex-col gap-0.5 text-xs text-slate-400" title="Lower goes earlier in the prompt">
@@ -258,6 +286,76 @@ function EntryEditor({ index, entry: e, setEntry }: { index: number; entry: Lore
         <Toggle checked={!!e.case_sensitive} onChange={(case_sensitive) => setEntry({ case_sensitive })} label={<span className="text-xs">Case-sensitive</span>} />
         <Toggle checked={!!e.use_regex} onChange={(use_regex) => setEntry({ use_regex })} label={<span className="text-xs">Keys are regex</span>} />
       </div>
+      {lorePlace(e) === 'depth' && (
+        <div className="flex flex-wrap items-end gap-4">
+          <label className="flex w-28 flex-col gap-0.5 text-xs text-slate-400" title="Messages from the end of the chat: 0 goes after the last one">
+            Depth
+            <NumberInput value={numExt('depth') ?? 4} onChange={(v) => setExt({ depth: v ?? 4 })} min={0} step={1} />
+          </label>
+          <label className="flex flex-col gap-0.5 text-xs text-slate-400">
+            Role
+            <select value={numExt('role') ?? 0} onChange={(ev) => setExt({ role: Number(ev.target.value) })} className={cx(inputClass, 'py-1')}>
+              <option value={0}>System</option>
+              <option value={1}>User</option>
+              <option value={2}>Assistant</option>
+            </select>
+          </label>
+        </div>
+      )}
+      <details className="rounded border border-slate-800 px-2 py-1.5" open={hasStRules(e)}>
+        <summary className="cursor-pointer text-xs text-slate-400">More rules (as SillyTavern has them){hasStRules(e) ? ' · set' : ''}</summary>
+        <div className="mt-2 flex flex-col gap-3">
+          <div className="flex flex-wrap items-end gap-4">
+            <label className="flex w-28 flex-col gap-0.5 text-xs text-slate-400" title="The chance it goes in when it fires, rolled each time">
+              Trigger %
+              <NumberInput value={rules.chance} onChange={(v) => setExt({ probability: v ?? 100, useProbability: (v ?? 100) < 100 })} min={0} max={100} step={1} />
+            </label>
+            <label className="flex w-28 flex-col gap-0.5 text-xs text-slate-400" title="Messages it stays in for once it fires, keys or not">
+              Sticky
+              <NumberInput value={rules.sticky || undefined} onChange={(v) => setExt({ sticky: v || undefined })} min={0} step={1} allowEmpty placeholder="—" />
+            </label>
+            <label className="flex w-28 flex-col gap-0.5 text-xs text-slate-400" title="Messages it can't fire for after it has (after it stops sticking)">
+              Cooldown
+              <NumberInput value={rules.cooldown || undefined} onChange={(v) => setExt({ cooldown: v || undefined })} min={0} step={1} allowEmpty placeholder="—" />
+            </label>
+            <label className="flex w-28 flex-col gap-0.5 text-xs text-slate-400" title="Messages the chat needs (the greeting counted) before it can fire">
+              Delay
+              <NumberInput value={rules.delay || undefined} onChange={(v) => setExt({ delay: v || undefined })} min={0} step={1} allowEmpty placeholder="—" />
+            </label>
+            <label className="flex w-28 flex-col gap-0.5 text-xs text-slate-400" title="Messages scanned for its keys, in place of the lorebook's scan depth">
+              Scan depth
+              <NumberInput value={rules.scanDepth} onChange={(v) => setExt({ scan_depth: v })} min={0} step={1} allowEmpty placeholder="book's" />
+            </label>
+          </div>
+          <div className="flex flex-wrap items-end gap-4">
+            <label className="flex min-w-40 flex-1 flex-col gap-0.5 text-xs text-slate-400" title="Of the entries in a group that fire together, only one goes in. Several groups: separate them with commas">
+              Inclusion group
+              <input value={typeof e.extensions.group === 'string' ? e.extensions.group : ''} onChange={(ev) => setExt({ group: ev.target.value || undefined }, 'group')} className={cx(inputClass, 'py-1')} placeholder="none" />
+            </label>
+            <label className="flex w-28 flex-col gap-0.5 text-xs text-slate-400" title="How likely it is to be the one picked from its group">
+              Group weight
+              <NumberInput value={rules.groupWeight} onChange={(v) => setExt({ group_weight: v ?? 100 })} min={0} step={1} />
+            </label>
+            <Toggle checked={rules.groupOverride} onChange={(v) => setExt({ group_override: v || undefined })} title="Picked over the rest of its group (by insertion order, if several are)" label={<span className="text-xs">Prioritize in group</span>} />
+            <Toggle checked={rules.groupScoring} onChange={(v) => setExt({ use_group_scoring: v || undefined })} title="The group's entries with the most matching keys are picked from" label={<span className="text-xs">Group scoring</span>} />
+          </div>
+          <div className="flex flex-wrap items-end gap-4">
+            <label className="flex flex-col gap-0.5 text-xs text-slate-400">
+              Whole words
+              <select value={rules.wholeWords === undefined ? '' : String(rules.wholeWords)} onChange={(ev) => setExt({ match_whole_words: ev.target.value === '' ? undefined : ev.target.value === 'true' })} className={cx(inputClass, 'py-1')}>
+                <option value="">Default (yes)</option>
+                <option value="true">Yes</option>
+                <option value="false">No: &quot;cat&quot; fires on &quot;concatenate&quot;</option>
+              </select>
+            </label>
+            <Toggle checked={rules.excludeRecursion} onChange={(v) => setExt({ exclude_recursion: v || undefined })} title="Only the chat fires it, never another entry's content" label={<span className="text-xs">Not fired by other entries</span>} />
+            <Toggle checked={rules.preventRecursion} onChange={(v) => setExt({ prevent_recursion: v || undefined })} title="Its content isn't scanned for other entries' keys" label={<span className="text-xs">Doesn&apos;t fire others</span>} />
+            <Toggle checked={rules.delayUntilRecursion > 0} onChange={(v) => setExt({ delay_until_recursion: v || undefined })} title="Only another entry's content fires it, never the chat directly" label={<span className="text-xs">Only fired by other entries</span>} />
+            <Toggle checked={rules.ignoreBudget} onChange={(v) => setExt({ ignore_budget: v || undefined })} title="Goes in even past the lorebook's token budget" label={<span className="text-xs">Ignore the budget</span>} />
+          </div>
+          <p className="text-[11px] text-slate-500">These are saved in the card the way SillyTavern saves them, and the test chat follows them. Chub and other frontends may ignore them.</p>
+        </div>
+      </details>
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between">
           <span className="text-xs text-slate-400">Content</span>
@@ -281,9 +379,15 @@ function EntryEditor({ index, entry: e, setEntry }: { index: number; entry: Lore
   );
 }
 
+/** Whether any of SillyTavern's extra rules is set on the entry. */
+function hasStRules(e: LorebookEntry) {
+  const r = entryRules(e);
+  return r.chance < 100 || r.sticky > 0 || r.cooldown > 0 || r.delay > 0 || r.scanDepth !== undefined || r.groups.length > 0 || r.wholeWords === false || r.excludeRecursion || r.preventRecursion || r.delayUntilRecursion > 0 || r.ignoreBudget;
+}
+
 function KeyTester({ book }: { book: Lorebook }) {
   const [text, setText] = useState('');
-  const result = useMemo(() => (text.trim() ? scanLorebook(book, [text], { scanDepth: 1 }) : null), [book, text]);
+  const result = useMemo(() => (text.trim() ? scanLorebook(book, [text], { scanDepth: 1, random: () => 0 }) : null), [book, text]);
   return (
     <Section title="Try the keys">
       <AutoTextarea value={text} onChange={(e) => setText(e.target.value)} minRows={2} maxRows={8} placeholder="Type or paste a message to see which entries it would fire…" />
@@ -293,6 +397,11 @@ function KeyTester({ book }: { book: Lorebook }) {
           {result.active.map((a) => (
             <span key={a.index} className="rounded bg-emerald-500/15 px-2 py-0.5 text-emerald-300" title={`Matched: ${a.reason}`}>
               {entryName(a.entry) || `Entry ${a.index + 1}`} <span className="text-emerald-400/60">· {a.reason}</span>
+            </span>
+          ))}
+          {result.skipped?.map((a) => (
+            <span key={a.index} className="rounded bg-slate-500/15 px-2 py-0.5 text-slate-400" title="Matched, but left out">
+              {entryName(a.entry) || `Entry ${a.index + 1}`} · {a.reason}
             </span>
           ))}
           {result.dropped.map((a) => (

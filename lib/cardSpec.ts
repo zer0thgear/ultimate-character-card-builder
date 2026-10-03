@@ -100,7 +100,10 @@ function normalizeEntry(raw: unknown, index: number): LorebookEntry {
     extensions: isObject(e.extensions) ? e.extensions : {},
     enabled: e.enabled !== false,
     insertion_order: typeof e.insertion_order === 'number' ? e.insertion_order : Number(e.insertion_order) || 0,
-    use_regex: e.use_regex === true,
+    // SillyTavern marks every entry it exports use_regex while reading plain
+    // keys as plain text (only /pattern/ keys are patterns), so its entries
+    // (they carry its display_index) are read the way it reads them.
+    use_regex: e.use_regex === true && !(isObject(e.extensions) && typeof e.extensions.display_index === 'number'),
   };
   if (e.secondary_keys !== undefined) entry.secondary_keys = strArray(e.secondary_keys);
   if (entry.id === undefined) entry.id = index;
