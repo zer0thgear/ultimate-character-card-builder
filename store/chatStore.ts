@@ -83,6 +83,8 @@ interface ChatState {
   /** A new chat from the open one, up to and including this message (with
    *  every version, its pictures and its pinned persona), opened. */
   branchFrom: (messageId: string) => Promise<void>;
+  /** Saves a chat brought in from a file (lib/chatImport.ts) and opens it. */
+  importChat: (chat: ChatSession) => Promise<void>;
   flush: () => Promise<void>;
 }
 
@@ -204,6 +206,13 @@ export const useChatStore = create<ChatState>((set, get) => {
         }
       }
       const saved = await api.saveChat(projectId, { ...branch, images });
+      set((s) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: saved.messages.length, ...tallyChat(saved.messages, countMemo) }, ...s.list] }));
+    },
+    importChat: async (chat) => {
+      const { projectId } = get();
+      if (!projectId) return;
+      await get().flush();
+      const saved = await api.saveChat(projectId, chat);
       set((s) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: saved.messages.length, ...tallyChat(saved.messages, countMemo) }, ...s.list] }));
     },
     removeImage: (id) =>
