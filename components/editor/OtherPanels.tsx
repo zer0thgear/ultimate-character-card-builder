@@ -6,6 +6,7 @@ import { useLlmStore } from '@/store/llmStore';
 import { toast } from '@/store/uiStore';
 import { CardTextField, useCardField, useWritingTools } from '@/components/editor/fieldTools';
 import { SourceList } from '@/components/CardSource';
+import { RegexScriptsPanel } from '@/components/editor/RegexScripts';
 import { AutoTextarea, Button, ChipInput, NumberInput, Section, TokenBadge, Toggle, confirmDialog, cx, inputClass } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { useLlmStream } from '@/hooks/useLlmStream';
@@ -27,6 +28,7 @@ export function PromptsPanel() {
       <CardTextField path="system_prompt" label="System prompt" hint="Replaces the main prompt" minRows={5} />
       <CardTextField path="post_history_instructions" label="Post-history instructions" hint="Sent after the chat (UJB)" minRows={4} />
       <CharacterNote />
+      <RegexScriptsPanel />
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { useLlmStore } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
-import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, withoutSwipe, buildChatPrompt, displayText, chatGreeting, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
+import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, withoutSwipe, buildChatPrompt, displayText, shownText, chatGreeting, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
 import { buildPresetPrompt } from '@/lib/presetPrompt';
 import { presetParams, type ChatPreset } from '@/lib/stPreset';
 import type { LlmConnection, SamplerParams } from '@/types/llm';
@@ -486,6 +486,8 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                 userName={me.name}
                 showId={showIds}
                 date={showTimes ? chat.createdAt : undefined}
+                depth={chat.messages.length}
+                regex={chatSettings.useCardRegex !== false}
               />
               {picturesAfter(null)}
               {chat.messages.map((m, i) => (
@@ -494,6 +496,8 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     card={card}
                     message={m}
                     messageId={showIds ? i + 1 : undefined}
+                    depth={chat.messages.length - 1 - i}
+                    regex={chatSettings.useCardRegex !== false}
                     showTime={showTimes}
                     userName={me.name}
                     persona={me.persona}
@@ -811,6 +815,8 @@ function GreetingBubble({
   userName,
   showId,
   date,
+  depth,
+  regex,
 }: {
   card: CardData;
   index: number;
@@ -826,6 +832,10 @@ function GreetingBubble({
   userName: string;
   showId: boolean;
   date?: number;
+  /** Messages after it, for the card's regex scripts' depth limits. */
+  depth: number;
+  /** Run the card's regex scripts on what's shown. */
+  regex: boolean;
 }) {
   const own = greetingText(card, index);
   const text = edited ?? own;
@@ -912,7 +922,7 @@ function GreetingBubble({
             </div>
           </div>
         ) : shown ? (
-          <Formatted text={shown} />
+          <Formatted text={shownText(card, shown, 'assistant', depth, { userName, useCardRegex: regex })} />
         ) : (
           <em className="text-sm text-slate-500">This greeting is empty.</em>
         )}
@@ -925,6 +935,8 @@ function Bubble({
   card,
   message: m,
   messageId,
+  depth,
+  regex,
   showTime,
   userName,
   persona,
@@ -945,6 +957,10 @@ function Bubble({
   message: ChatMessage;
   /** Its number in the chat (the greeting is #0), when they're shown. */
   messageId?: number;
+  /** Messages after it, for the card's regex scripts' depth limits. */
+  depth: number;
+  /** Run the card's regex scripts on what's shown. */
+  regex: boolean;
   /** Show when it (this version of it) was written. */
   showTime: boolean;
   userName: string;
@@ -1033,7 +1049,7 @@ function Bubble({
             </div>
           </div>
         ) : text ? (
-          <Formatted text={isUser ? displayText(card, text, userName) : text} />
+          <Formatted text={shownText(card, isUser ? displayText(card, text, userName) : text, m.role, depth, { userName, useCardRegex: regex })} />
         ) : (
           <span className="animate-pulse text-sm text-slate-500">…</span>
         )}
@@ -1209,6 +1225,7 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
             </label>
           </div>
         )}
+        <Toggle checked={s.useCardRegex ?? true} onChange={(v) => setChatSettings({ useCardRegex: v })} label={<span className="text-xs" title="Scripts a card carries (as SillyTavern's Regex extension runs them) to change how messages look or what the model is sent. The card's are listed on its Prompts tab">Run the card&apos;s regex scripts</span>} />
         <Toggle checked={s.showMessageIds} onChange={(v) => setChatSettings({ showMessageIds: v })} label={<span className="text-xs">Show message numbers (#0 is the greeting)</span>} />
         <Toggle checked={s.showTimestamps ?? true} onChange={(v) => setChatSettings({ showTimestamps: v })} label={<span className="text-xs" title="Each reply's versions have their own; the greeting shows when the chat began">Show when messages were sent</span>} />
         <label className="flex w-full flex-col gap-0.5 text-xs text-slate-400">
