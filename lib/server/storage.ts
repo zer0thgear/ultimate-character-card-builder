@@ -7,6 +7,8 @@ import { DEFAULT_CONFIG } from '@/types/project';
 import { newCard } from '@/lib/cardSpec';
 import { normalizeCard } from '@/lib/cardSpec';
 import { notesSnippet } from '@/lib/cardSummary';
+import { countTokens } from 'gpt-tokenizer';
+import { sumTallies, tallyChat, type ChatTally } from '@/lib/chatStats';
 
 // Everything UCCB saves lives under data/ (gitignored):
 //   data/config.json                    AppConfig
@@ -265,16 +267,19 @@ export async function listChats(projectId: string): Promise<ChatSummary[]> {
   );
   return chats
     .filter((c): c is ChatSession => !!c)
-    .map((c) => ({ id: c.id, name: c.name, createdAt: c.createdAt, updatedAt: c.updatedAt, messageCount: c.messages.length }))
+    .map((c) => ({ id: c.id, name: c.name, createdAt: c.createdAt, updatedAt: c.updatedAt, messageCount: c.messages.length, ...tallyChat(c.messages, countText) }))
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-/** Each chat file's message count and time, kept while the file's
+/** The same estimate the editor's token counts make (lib/textTokens.ts). */
+const countText = (text: string) => (text ? countTokens(text) : 0);
+
+/** Each chat file's message counts, tokens and time, kept while the file's
  *  unchanged, so listing cards doesn't read every chat every time. */
-const chatStatCache = new Map<string, { mtime: number; messages: number; updatedAt: number }>();
+const chatStatCache = new Map<string, { mtime: number; messages: number; updatedAt: number } & ChatTally>();
 
 /** A card's chats in sum, for the card lists (none: nothing). */
-async function chatStats(projectId: string): Promise<Pick<ProjectSummary, 'chats' | 'messages' | 'lastChat'>> {
+async function chatStats(projectId: string): Promise<Pick<ProjectSummary, 'chats' | 'messages' | 'lastChat' | 'sent' | 'received' | 'tokens'>> {
   const dir = path.join(projectDir(projectId), 'chats');
   const files = (await fs.readdir(dir).catch(() => [] as string[])).filter((f) => f.endsWith('.json'));
   const stats = await Promise.all(
@@ -286,7 +291,8 @@ async function chatStats(projectId: string): Promise<Pick<ProjectSummary, 'chats
         if (hit?.mtime === mtimeMs) return hit;
         const c = await readJson<ChatSession>(file);
         if (!c) return null;
-        const stat = { mtime: mtimeMs, messages: Array.isArray(c.messages) ? c.messages.length : 0, updatedAt: c.updatedAt ?? 0 };
+        const messages = Array.isArray(c.messages) ? c.messages : [];
+        const stat = { mtime: mtimeMs, messages: messages.length, updatedAt: c.updatedAt ?? 0, ...tallyChat(messages, countText) };
         chatStatCache.set(file, stat);
         return stat;
       } catch {
@@ -296,7 +302,7 @@ async function chatStats(projectId: string): Promise<Pick<ProjectSummary, 'chats
   );
   const found = stats.filter((s) => !!s);
   if (!found.length) return {};
-  return { chats: found.length, messages: found.reduce((n, s) => n + s.messages, 0), lastChat: Math.max(...found.map((s) => s.updatedAt)) };
+  return { chats: found.length, messages: found.reduce((n, s) => n + s.messages, 0), lastChat: Math.max(...found.map((s) => s.updatedAt)), ...sumTallies(found) };
 }
 
 export async function getChat(projectId: string, chatId: string): Promise<ChatSession> {

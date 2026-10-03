@@ -1,3 +1,4 @@
+import type { ChatTally } from '@/lib/chatStats';
 import type { ContinueNode } from '@/lib/continueTree';
 import type { CharacterCard } from '@/types/card';
 import type { BasePrompt, CharacterPromptEntry, NovelAIModel, NovelAIParameters, PromptTidbit } from '@/types/novelai';
@@ -77,10 +78,14 @@ export interface ProjectSummary {
   creator?: string;
   notes?: string;
   /** Its chats: how many, their messages in all, and the last one's time
-   *  (for sorting by use). */
+   *  (for sorting by use); and of those messages, how many were sent and
+   *  received, and their tokens (lib/chatStats.ts). */
   chats?: number;
   messages?: number;
   lastChat?: number;
+  sent?: number;
+  received?: number;
+  tokens?: number;
   updatedAt: number;
   createdAt: number;
 }
@@ -149,7 +154,7 @@ export interface Persona {
   avatar?: AvatarInfo;
 }
 
-export type ChatSummary = Pick<ChatSession, 'id' | 'name' | 'createdAt' | 'updatedAt'> & { messageCount: number };
+export type ChatSummary = Pick<ChatSession, 'id' | 'name' | 'createdAt' | 'updatedAt'> & { messageCount: number } & ChatTally;
 
 // ─── Server config ───────────────────────────────────────────────────────────
 

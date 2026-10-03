@@ -2,18 +2,18 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { lastUsed, sortCards, sortDetail } from '@/lib/cardSort';
+import { chatStatsDetail, lastUsed, sortCards, sortDetail } from '@/lib/cardSort';
 
 // The card lists' order, and the chat counts the server lists them with.
 
-const card = (name: string, createdAt: number, updatedAt: number, more: { chats?: number; messages?: number; lastChat?: number } = {}) => ({ name, createdAt, updatedAt, ...more });
+const card = (name: string, createdAt: number, updatedAt: number, more: { chats?: number; messages?: number; lastChat?: number; sent?: number; received?: number; tokens?: number } = {}) => ({ name, createdAt, updatedAt, ...more });
 
 describe('sortCards', () => {
   const cards = [
-    card('beta', 3, 30, { chats: 1, messages: 5, lastChat: 100 }),
+    card('beta', 3, 30, { chats: 1, messages: 5, lastChat: 100, sent: 2, received: 3, tokens: 1234 }),
     card('Alpha 10', 1, 50),
-    card('', 5, 60, { chats: 2, messages: 2 }),
-    card('alpha 2', 2, 40, { chats: 2, messages: 9 }),
+    card('', 5, 60, { chats: 2, messages: 2, tokens: 40 }),
+    card('alpha 2', 2, 40, { chats: 2, messages: 9, tokens: 900 }),
   ];
   const names = (by: Parameters<typeof sortCards>[1]) => sortCards(cards, by).map((c) => c.name);
 
@@ -37,6 +37,10 @@ describe('sortCards', () => {
     expect(names({ by: 'messages', desc: false })).toEqual(['Alpha 10', '', 'beta', 'alpha 2']);
   });
 
+  it('sorts by tokens', () => {
+    expect(names({ by: 'tokens', desc: true })).toEqual(['beta', 'alpha 2', '', 'Alpha 10']);
+  });
+
   it("doesn't change the list it's given", () => {
     const before = cards.map((c) => c.name);
     sortCards(cards, { by: 'name', desc: false });
@@ -45,7 +49,11 @@ describe('sortCards', () => {
 
   it('says what the order is by', () => {
     expect(sortDetail(cards[0], 'chats')).toBe('1 chat · 5 messages');
-    expect(sortDetail(cards[1], 'messages')).toBe('0 chats · 0 messages');
+    expect(sortDetail(cards[1], 'chats')).toBe('0 chats · 0 messages');
+    expect(sortDetail(cards[0], 'messages')).toBe('5 messages · 2 sent · 3 received');
+    expect(sortDetail(cards[0], 'tokens')).toBe('1.2k tokens · 5 messages');
+    expect(sortDetail(cards[1], 'tokens')).toBe('0 tokens · 0 messages');
+    expect(chatStatsDetail(cards[0])).toBe('1 chat · 2 sent · 3 received · 1.2k tokens');
     expect(sortDetail(cards[0], 'created')).toMatch(/^Created /);
   });
 });
@@ -71,6 +79,8 @@ describe('card list chat counts', { timeout: 30_000 }, () => {
     const b = await storage.saveChat(p.id, chat('22222222-2222-4222-8222-222222222222', 4));
     let s = await summary();
     expect([s.chats, s.messages, s.lastChat]).toEqual([2, 7, b.updatedAt]);
+    // Every message there is a one-token 'hi' sent by you.
+    expect([s.sent, s.received, s.tokens]).toEqual([7, 0, 7]);
 
     // A chat that changes is read again; one deleted drops out.
     await new Promise((r) => setTimeout(r, 20));

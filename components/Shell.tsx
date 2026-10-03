@@ -26,7 +26,7 @@ import { ExtensionHosts } from '@/components/ExtensionSlots';
 import { ChatCardActions, ChatCardList, ChatHeaderAvatar, ChatHome, ChatScreen, switchAppMode } from '@/components/chatmode/ChatMode';
 import { CardListMeta } from '@/components/CardListMeta';
 import { CardSortControl, useSortedCards } from '@/components/CardSort';
-import { sortDetail } from '@/lib/cardSort';
+import { chatStatsDetail, sortDetail } from '@/lib/cardSort';
 import { importFromUrl, overwriteCard } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
 
@@ -409,7 +409,7 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
                 <span className="min-w-0">
                   <span className="block truncate text-sm text-slate-200">{s.name || <em className="text-slate-500">Unnamed</em>}</span>
                   <CardListMeta summary={s} />
-                  <span className="block truncate text-[10px] text-slate-500">{sortDetail(s, by)}</span>
+                  <span className="block truncate text-[10px] text-slate-500" title={s.chats ? chatStatsDetail(s) : undefined}>{sortDetail(s, by)}</span>
                 </span>
               </button>
               <IconButton
@@ -497,7 +497,7 @@ function CardsHome() {
                   <div className="px-2 py-1.5">
                     <div className="truncate text-sm text-slate-200">{s.name || <em className="text-slate-500">Unnamed</em>}</div>
                     <CardListMeta summary={s} />
-                    <div className="truncate text-[10px] text-slate-500">{sortDetail(s, by)}</div>
+                    <div className="truncate text-[10px] text-slate-500" title={s.chats ? chatStatsDetail(s) : undefined}>{sortDetail(s, by)}</div>
                   </div>
                 </button>
               );
