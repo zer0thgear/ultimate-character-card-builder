@@ -111,6 +111,21 @@ export interface ChatMessage {
   continues?: (ContinueNode | undefined)[];
 }
 
+/** Where an author's note goes, as SillyTavern's choices: in the chat at a
+ *  depth (its default), or just after or before the main prompt. */
+export type AuthorsNotePosition = 'chat' | 'after' | 'before';
+
+/** A chat's author's note, with SillyTavern's settings for it. */
+export interface AuthorsNote {
+  prompt: string;
+  position: AuthorsNotePosition;
+  /** In the chat: messages from its end (0 goes after the last one). */
+  depth: number;
+  /** Sent when the user's messages are a multiple of this; 0 never sends it. */
+  frequency: number;
+  role: 'system' | 'user' | 'assistant';
+}
+
 /** A picture drawn in a chat: shown in it, never sent to the model or
  *  counted as a message. */
 export interface ChatImage {
@@ -142,6 +157,9 @@ export interface ChatSession {
   personaId?: string;
   /** Pictures drawn in the chat (Chat mode's 🎨), each after a message. */
   images?: ChatImage[];
+  /** This chat's author's note (lib/authorsNote.ts), as SillyTavern keeps
+   *  one per chat. */
+  authorsNote?: AuthorsNote;
   /** The story so far, summed up (see lib/chatSummary.ts). */
   summary?: ChatSessionSummary;
   createdAt: number;

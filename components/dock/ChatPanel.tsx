@@ -32,6 +32,7 @@ import type { ChatImage, ChatMessage } from '@/types/project';
 import { uuid } from '@/lib/uuid';
 import { copyText } from '@/lib/clipboard';
 import { formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
+import { AuthorsNoteDialog } from '@/components/dock/AuthorsNote';
 import { summaryInjection, summarySettings } from '@/lib/chatSummary';
 import { ChatSummaryPanel, useChatSummary } from '@/components/dock/ChatSummaryPanel';
 
@@ -67,6 +68,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const [guide, setGuide] = useState('');
   const [guideOpen, setGuideOpen] = useState(false);
   const [guidePinned, setGuidePinned] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
   // 🎨 Pictures drawn into the chat (Chat mode).
   const pictures = useChatPictures();
   const [describing, setDescribing] = useState<{ spec: DrawSpec; replacing?: ChatImage } | null>(null);
@@ -184,7 +186,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   /** The prompt for `messages` (greeting added), through the preset if one is on. */
   const build = (messages: ChatMessage[], opts: BuildOptions = {}): BuiltPrompt => {
     const summary = summaryInjection(useChatStore.getState().chat?.summary, summarySettings(chatSettings.summary));
-    const full = { model: connection?.model, kind: connection?.kind, maxTokens: overrides.max_tokens ?? connection?.params.max_tokens, maxContext: connection?.params.max_context, summary, ...opts };
+    const full = { model: connection?.model, kind: connection?.kind, maxTokens: overrides.max_tokens ?? connection?.params.max_tokens, maxContext: connection?.params.max_context, summary, authorsNote: chat?.authorsNote, ...opts };
     const built = preset ? buildPresetPrompt(card, history(messages), settings, preset, full) : buildChatPrompt(card, history(messages), settings, full);
     return connection ? { ...built, sentWith: sentWith(connection, overrides, preset) } : built;
   };
@@ -614,6 +616,15 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
               <span className={cx(phone && 'px-0.5 text-base leading-none')}>🧭</span>
               {guide.trim() ? (phone ? (guidePinned ? '📌' : '') : guidePinned ? ' Guided 📌' : ' Guided') : ''}
             </Button>
+            <Button
+              size="sm"
+              variant={chat.authorsNote?.prompt.trim() ? 'primary' : 'secondary'}
+              onClick={() => setNoteOpen(true)}
+              title="Author's note: an instruction kept with this chat and sent every reply (or every few), placed as SillyTavern places it"
+            >
+              <span className={cx(phone && 'px-0.5 text-base leading-none')}>📝</span>
+              {chat.authorsNote?.prompt.trim() && !phone ? " Author's note" : ''}
+            </Button>
             {wide && (
               <DrawButton
                 phone={phone}
@@ -632,6 +643,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
         </div>
       )}
       {inspect && <PromptInspector prompt={inspect} onClose={() => setInspect(null)} />}
+      {noteOpen && <AuthorsNoteDialog onClose={() => setNoteOpen(false)} />}
       {describing && chat && (
         <DescribeDialog
           initial={describing.spec}

@@ -5,6 +5,8 @@ import type { SummarySettings } from '@/lib/chatSummary';
 import { expandMacros, type MacroContext } from '@/lib/macros';
 import { scanLorebook, describeEntry, type ScanResult, type ActivatedEntry, DEFAULT_SCAN_DEPTH, DEFAULT_MAX_RECURSION, type LoreDefaults } from '@/lib/lorebookScan';
 import { uuid } from '@/lib/uuid';
+import { activeAuthorsNote, AUTHORS_NOTE_LABEL } from '@/lib/authorsNote';
+import type { AuthorsNote } from '@/types/project';
 
 // Builds the prompt a test chat sends, the way a SillyTavern-style frontend
 // builds it from a card, so testing here tells you how the card will play
@@ -118,6 +120,8 @@ export interface BuildOptions {
   /** 🧭 A one-off steer for this generation, sent last as a system message
    *  (in the settings' guide template). */
   guide?: string;
+  /** The chat's author's note (lib/authorsNote.ts). */
+  authorsNote?: AuthorsNote;
   /** The chat's summary, and where it goes. */
   summary?: SummaryInjection;
   model?: string;
@@ -288,6 +292,18 @@ export function historyParts(history: ChatMessage[], injections: DepthInjection[
   return out;
 }
 
+/** The chat's author's note as prompt pieces, if it goes in this time: in
+ *  the chat at its depth, or a part for just after or before the main
+ *  prompt. */
+export function authorsNoteParts(note: AuthorsNote | undefined, history: ChatMessage[], x: (t: string) => string): { injection?: DepthInjection; before?: PromptPart; after?: PromptPart } {
+  const n = activeAuthorsNote(note, history);
+  const content = n ? x(n.prompt) : '';
+  if (!n || !content) return {};
+  if (n.position === 'chat') return { injection: { label: AUTHORS_NOTE_LABEL, role: n.role, content, depth: n.depth, order: 100 } };
+  const part = { label: AUTHORS_NOTE_LABEL, role: n.role, content };
+  return n.position === 'before' ? { before: part } : { after: part };
+}
+
 export const toMessages = (parts: PromptPart[]): LlmMessage[] => parts.map(({ role, content }) => ({ role, content }));
 
 /** A rough token count, for fitting a context size. */
@@ -324,13 +340,16 @@ export function buildChatPrompt(card: CardData, history: ChatMessage[], settings
   const loreAt = (place: LorePlace) => lore.active.filter((a) => lorePlace(a.entry) === place).map((a) => ({ name: describeEntry(a), content: x(a.entry.content) }));
   setFields({ wiBefore: loreAt('before').map((e) => e.content).filter(Boolean).join('\n'), wiAfter: loreAt('after').map((e) => e.content).filter(Boolean).join('\n') });
 
+  const note = authorsNoteParts(opts.authorsNote, chat, x);
   const main = x(settings.mainPrompt);
   const cardSystem = settings.useCardSystemPrompt && card.system_prompt.trim();
   const summaryBefore = summaryPart(opts.summary, 'before');
   if (summaryBefore) parts.push(summaryBefore);
+  if (note.before) parts.push(note.before);
   sys(cardSystem ? 'System prompt (card)' : 'Main prompt', cardSystem ? x(card.system_prompt, main) : main);
   const summaryAfter = summaryPart(opts.summary, 'after');
   if (summaryAfter) parts.push(summaryAfter);
+  if (note.after) parts.push(note.after);
 
   for (const e of loreAt('before')) sys(`Lorebook: ${e.name}`, e.content);
 
@@ -349,7 +368,7 @@ export function buildChatPrompt(card: CardData, history: ChatMessage[], settings
 
   // The history goes here, once the rest is known (to fit the context size).
   const historyAt = parts.length;
-  const injections = [...cardDepthInjections(card, lore.active, x), ...summaryDepthInjections(opts.summary)];
+  const injections = [...(note.injection ? [note.injection] : []), ...cardDepthInjections(card, lore.active, x), ...summaryDepthInjections(opts.summary)];
 
   const phiDefault = x(settings.defaultPostHistory);
   const cardPhi = settings.useCardPostHistory && card.post_history_instructions.trim();
