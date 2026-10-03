@@ -65,7 +65,10 @@ describe('chat store', { timeout: 30_000 }, () => {
     expect(onDisk(id).messages).toEqual([]);
     await vi.advanceTimersByTimeAsync(1);
     await vi.waitFor(() => expect(onDisk(id).messages.map((m) => m.swipes[0])).toEqual(['hello', 'there']));
-    expect(store().list[0]).toMatchObject({ id, messageCount: 2 });
+    expect(store().list[0]).toMatchObject({ id, messageCount: 2, sent: 2, received: 0 });
+    // (Roughly, if the tokenizer's still loading.)
+    expect(store().list[0].tokens).toBeGreaterThan(0);
+    expect(useProjectStore.getState().summaries[0]).toMatchObject({ chats: 1, messages: 2, sent: 2, received: 0, tokens: store().list[0].tokens });
   });
 
   it("keeps the card list's chat counts up to date", async () => {

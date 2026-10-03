@@ -19,6 +19,16 @@ export function loadTextCounter(): Promise<Counter> {
   return loading;
 }
 
+/** Estimated tokens in `text` right away: ~4 characters a token until the
+ *  tokenizer's loaded (which this starts). */
+export const textCounterLoaded = () => counter !== null;
+
+export function countTextNow(text: string): number {
+  if (counter) return counter(text);
+  void loadTextCounter();
+  return Math.ceil(text.length / 4);
+}
+
 /** Estimated tokens in `text`, updated a moment after it stops changing.
  *  Falls back to ~4 characters a token while the tokenizer loads. */
 export function useTextTokens(text: string, delay = 250): number {

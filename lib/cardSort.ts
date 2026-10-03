@@ -2,8 +2,9 @@
 // chatted with), or how much it's been chatted with. Each mode keeps its own.
 
 import type { ProjectSummary } from '@/types/project';
+import { formatTokens } from '@/lib/textTokens';
 
-export type CardSortBy = 'name' | 'created' | 'used' | 'chats' | 'messages';
+export type CardSortBy = 'name' | 'created' | 'used' | 'chats' | 'messages' | 'tokens';
 
 export interface CardSort {
   by: CardSortBy;
@@ -18,9 +19,10 @@ export const CARD_SORTS: { value: CardSortBy; label: string; /** Which way it go
   { value: 'created', label: 'Created', desc: true },
   { value: 'chats', label: 'Chats', desc: true },
   { value: 'messages', label: 'Messages', desc: true },
+  { value: 'tokens', label: 'Tokens', desc: true },
 ];
 
-type Sortable = Pick<ProjectSummary, 'name' | 'createdAt' | 'updatedAt' | 'lastChat' | 'chats' | 'messages'>;
+type Sortable = Pick<ProjectSummary, 'name' | 'createdAt' | 'updatedAt' | 'lastChat' | 'chats' | 'messages' | 'sent' | 'received' | 'tokens'>;
 
 /** When a card was last used: edited, or chatted with. */
 export const lastUsed = (s: Pick<Sortable, 'updatedAt' | 'lastChat'>) => Math.max(s.updatedAt, s.lastChat ?? 0);
@@ -36,7 +38,7 @@ export function sortCards<T extends Sortable>(cards: T[], { by, desc }: CardSort
     if (!x || !y) return x ? -1 : y ? 1 : 0;
     return byName.compare(x, y);
   };
-  const key = (s: T) => (by === 'created' ? s.createdAt : by === 'used' ? lastUsed(s) : by === 'chats' ? (s.chats ?? 0) : (s.messages ?? 0));
+  const key = (s: T) => (by === 'created' ? s.createdAt : by === 'used' ? lastUsed(s) : by === 'chats' ? (s.chats ?? 0) : by === 'tokens' ? (s.tokens ?? 0) : (s.messages ?? 0));
   return [...cards].sort((a, b) => {
     if (by === 'name') {
       // Unnamed stay at the bottom, whichever way.
@@ -48,11 +50,20 @@ export function sortCards<T extends Sortable>(cards: T[], { by, desc }: CardSort
   });
 }
 
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
+
+/** How much a card's been chatted with: its chats, the messages sent and
+ *  received in them, and their tokens. */
+export function chatStatsDetail(s: Pick<Sortable, 'chats' | 'sent' | 'received' | 'tokens'>): string {
+  return `${plural(s.chats ?? 0, 'chat')} · ${s.sent ?? 0} sent · ${s.received ?? 0} received · ${formatTokens(s.tokens ?? 0)} tokens`;
+}
+
 /** What the list shows under a card for the order it's in. */
 export function sortDetail(s: Sortable, by: CardSortBy): string {
   const date = (t: number) => new Date(t).toLocaleDateString();
-  const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
   if (by === 'created') return `Created ${date(s.createdAt)}`;
-  if (by === 'chats' || by === 'messages') return `${plural(s.chats ?? 0, 'chat')} · ${plural(s.messages ?? 0, 'message')}`;
+  if (by === 'chats') return `${plural(s.chats ?? 0, 'chat')} · ${plural(s.messages ?? 0, 'message')}`;
+  if (by === 'messages') return `${plural(s.messages ?? 0, 'message')} · ${s.sent ?? 0} sent · ${s.received ?? 0} received`;
+  if (by === 'tokens') return `${formatTokens(s.tokens ?? 0)} tokens · ${plural(s.messages ?? 0, 'message')}`;
   return date(lastUsed(s));
 }

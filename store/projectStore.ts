@@ -8,6 +8,7 @@ import { useSessionStore } from '@/store/sessionStore';
 import { PROJECT_GEN_KEYS, useSettingsStore, DEFAULT_NEGATIVE } from '@/store/settingsStore';
 import { useUiStore, type AppMode } from '@/store/uiStore';
 import { notesSnippet } from '@/lib/cardSummary';
+import { formatTokens } from '@/lib/textTokens';
 
 // The open card project: loading, editing with undo/redo, and saving it
 // back to disk a moment after each change. Only one project is open at a
@@ -17,6 +18,10 @@ const SAVE_DELAY_MS = 800;
 /** Edits to the same field closer together than this are one undo step. */
 const COALESCE_MS = 1500;
 const MAX_UNDO = 200;
+
+/** A card's chats in sum (they aren't in the project: the server adds them). */
+type ChatStats = Pick<ProjectSummary, 'chats' | 'messages' | 'lastChat' | 'sent' | 'received' | 'tokens'>;
+const chatStatsOf = (s: ChatStats): ChatStats => ({ chats: s.chats, messages: s.messages, lastChat: s.lastChat, sent: s.sent, received: s.received, tokens: s.tokens });
 
 export type SaveStatus = 'saved' | 'dirty' | 'saving' | 'error';
 
@@ -52,7 +57,7 @@ interface ProjectState {
   /** Saves now, if anything is waiting. */
   flush: () => Promise<void>;
   /** A card's chat counts in the lists, as its chats change. */
-  setChatStats: (id: string, stats: Pick<ProjectSummary, 'chats' | 'messages' | 'lastChat'>) => void;
+  setChatStats: (id: string, stats: ChatStats) => void;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -91,7 +96,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
   const upsertSummary = (p: CardProject) =>
     set((s) => {
       const old = s.summaries.find((x) => x.id === p.id);
-      const stats = old ? { chats: old.chats, messages: old.messages, lastChat: old.lastChat } : {};
+      const stats = old ? chatStatsOf(old) : {};
       return { summaries: [{ ...stats, ...summaryOf(p) }, ...s.summaries.filter((x) => x.id !== p.id)] };
     });
 
@@ -320,9 +325,18 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     setChatStats: (id, stats) => {
       const old = get().summaries.find((x) => x.id === id);
       // A reply streaming in changes its chat's time with every word: the
-      // lists only need it to the minute.
-      if (!old || (old.chats === stats.chats && old.messages === stats.messages && Math.abs((old.lastChat ?? 0) - (stats.lastChat ?? 0)) < 60_000)) return;
-      set((s) => ({ summaries: s.summaries.map((x) => (x.id === id ? { ...x, chats: stats.chats, messages: stats.messages, lastChat: stats.lastChat } : x)) }));
+      // lists only need it to the minute, and its tokens as they're shown.
+      if (
+        !old ||
+        (old.chats === stats.chats &&
+          old.messages === stats.messages &&
+          old.sent === stats.sent &&
+          old.received === stats.received &&
+          formatTokens(old.tokens ?? 0) === formatTokens(stats.tokens ?? 0) &&
+          Math.abs((old.lastChat ?? 0) - (stats.lastChat ?? 0)) < 60_000)
+      )
+        return;
+      set((s) => ({ summaries: s.summaries.map((x) => (x.id === id ? { ...x, ...chatStatsOf(stats) } : x)) }));
     },
   };
 });
