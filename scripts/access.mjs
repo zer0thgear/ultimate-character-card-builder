@@ -41,3 +41,60 @@ export function isLocalNetwork(address) {
 export function isAllowed(address, { allowLan = false } = {}) {
   return isLoopback(address) || isTailscale(address) || (allowLan && isLocalNetwork(address));
 }
+
+// Which names UCCB may be opened by. A web page you visit can't connect from
+// another machine, but it can make your browser send requests here: either
+// straight to localhost from its own page (cross-site requests), or by
+// pointing its own domain at 127.0.0.1 once the page has loaded (DNS
+// rebinding), which would let it read the responses, keys included. So the
+// Host a request was sent to, and the Origin of the page that sent it, must
+// be names only this machine, your tailnet or your home network can answer
+// for: an IP address UCCB lets in, localhost, a bare machine name ("pc"),
+// a Tailscale name (….ts.net), a .local name, or one listed in
+// UCCB_ALLOWED_HOSTS (comma-separated).
+
+/** "Name.example:3210" / "[::1]:3210" / "1.2.3.4" → "name.example" / "::1" / "1.2.3.4". */
+export function hostName(host) {
+  const h = String(host ?? '').trim().toLowerCase();
+  if (h.startsWith('[')) return h.slice(1, h.indexOf(']') < 0 ? undefined : h.indexOf(']'));
+  // A bare IPv6 address has several colons; "name:port" has one.
+  return (h.split(':').length > 2 ? h : h.split(':')[0]).replace(/\.$/, '');
+}
+
+const isIpLiteral = (h) => !!ipv4(h) || h.includes(':');
+
+/**
+ * @param {string | undefined} host
+ * @param {{ allowLan?: boolean, extra?: string[] }} [opts]
+ */
+export function isAllowedHost(host, { allowLan = false, extra = [] } = {}) {
+  const h = hostName(host);
+  if (!h) return false;
+  if (isIpLiteral(h)) return isAllowed(h, { allowLan });
+  if (extra.map(hostName).includes(h)) return true;
+  if (!/^[a-z0-9_.-]+$/.test(h)) return false;
+  return !h.includes('.') || h === 'localhost' || ['.localhost', '.ts.net', '.local'].some((end) => h.endsWith(end));
+}
+
+/**
+ * Whether a request may go through, judged by its Host and, for anything
+ * that can change things (not GET/HEAD/OPTIONS), the page it came from.
+ * Returns null if it may, or why not.
+ * @param {{ method?: string, host?: string, origin?: string, fetchSite?: string }} req
+ * @param {{ allowLan?: boolean, extra?: string[] }} [opts]
+ */
+export function refuseRequest({ method = 'GET', host, origin, fetchSite }, opts = {}) {
+  if (!isAllowedHost(host, opts)) return 'host';
+  if (['GET', 'HEAD', 'OPTIONS'].includes(String(method).toUpperCase())) return null;
+  if (origin) {
+    let originHost = '';
+    try {
+      originHost = new URL(origin).host;
+    } catch {
+      /* "null" and other opaque origins */
+    }
+    return originHost && isAllowedHost(originHost, opts) ? null : 'origin';
+  }
+  // No Origin (older browsers, curl): the browser's own label still says where it came from.
+  return fetchSite === 'cross-site' ? 'origin' : null;
+}

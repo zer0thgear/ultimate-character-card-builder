@@ -12,7 +12,7 @@ A workbench for roleplay character cards. Write the card, draw it, and chat with
 - **A gen library** that searches folders of old gens by prompt, model or seed, to reuse a prompt or pick an existing picture.
 - **Works on a phone** over Tailscale, one screen at a time.
 
-New here? **[Take the tour](docs/TOUR.md)**. For everything in detail, see the **[feature reference](docs/FEATURES.md)**.
+New here? **[Take the tour](docs/TOUR.md)**. For everything in detail, see the **[feature reference](docs/FEATURES.md)**. What changed in each version is in the **[changelog](CHANGELOG.md)**.
 
 ## Running it
 
@@ -45,6 +45,8 @@ Then make a card (**+ New card**), or import one: **Import**, or drop a PNG, JSO
 Install [Tailscale](https://tailscale.com) on this computer and on your phone or laptop, then open `http://<this computer's name>:3210`. The server prints the address when it starts. That works at home or away. For HTTPS, which browsers need for some features (copying to the clipboard, for one), run `tailscale serve --bg 3210` once and use the `https://….ts.net` address it gives you.
 
 UCCB only accepts connections from this computer and your Tailscale devices; anything else on your network gets a page saying so. To let in other devices on your home network too, use Settings → General → **Also allow devices on the home network**. The check goes by the connection's real address, not a header, so it can't be faked.
+
+It also only answers to names that point at it: localhost, the computer's name or IP address, its Tailscale name (`….ts.net`) or a `.local` name. That stops a website you visit from using your browser to read or change your cards and keys. If you open UCCB by another name (say a hosts-file entry like `uccb.home.arpa`), start it with `UCCB_ALLOWED_HOSTS` set to that name; several can be separated by commas.
 
 ## Privacy and where things are kept
 
