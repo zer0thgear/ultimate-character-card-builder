@@ -1,6 +1,8 @@
 import type { CardData } from '@/types/card';
 import type { LlmMessage } from '@/types/llm';
-import type { ActorId, AdventureEntry, AdventureSession, AdventureSettings, AdventureWorld, CallUsage, DiceRoll, SceneState, WorldEntry, WorldOverrides } from '@/types/adventure';
+import type { ActorId, AdventureEntry, AdventureSession, AdventureSettings, AdventureWorld, CallUsage, CustomActor, DiceRoll, SceneState, WorldEntry, WorldOverrides } from '@/types/adventure';
+import { customActorId } from '@/types/adventure';
+import { fillTemplate, type AssistTemplate } from '@/lib/assist';
 import { macroExpander } from '@/lib/chatPrompt';
 import { scanLorebook, type LoreDefaults } from '@/lib/lorebookScan';
 import { uuid } from '@/lib/uuid';
@@ -145,6 +147,48 @@ export type Beat = { narrate: string } | { name: string; direction: string };
 
 export const isNarration = (b: Beat): b is { narrate: string } => 'narrate' in b;
 
+/** Starting points for an actor of your own (⚙ Actors → + Actor). */
+export const CUSTOM_ACTOR_EXAMPLES: Omit<CustomActor, 'id' | 'enabled'>[] = [
+  {
+    name: 'Inner Voice',
+    icon: '💭',
+    about: "{{user}}'s gut feeling, a line or two of instinct or doubt",
+    prompt: "You are {{user}}'s inner voice in an interactive roleplay adventure. In one or two short lines, voice a hunch, a doubt or a temptation about what just happened, in italics. Never decide for {{user}} or reveal what they couldn't know.",
+    brief: 'what the gut feeling is about, when the moment calls for one',
+    when: 'after',
+  },
+  {
+    name: 'Quest Log',
+    icon: '📒',
+    about: 'Keeps a short list of open goals and leads',
+    prompt: 'You keep the quest log of an interactive roleplay adventure. From the story so far, list the open goals, leads and promises as a short bulleted list (at most six), marking new ones (new) and crossing out finished ones with ~~strikethrough~~. Nothing else.',
+    brief: 'what changed in the goals this turn',
+    when: 'after',
+    private: true,
+  },
+  {
+    name: 'Rival',
+    icon: '⚔️',
+    about: 'A rival who is somewhere else, making moves of their own',
+    prompt: "You write short cutaways in an interactive roleplay adventure: a few sentences on what {{user}}'s rival is doing elsewhere, unseen by {{user}}. Present tense, ominous, never more than a paragraph.",
+    brief: "the rival's move, on the turns it matters",
+    when: 'after',
+  },
+];
+
+/** Your actors that take part (switched on, with a name and a prompt). */
+export function activeCustomActors(ctx: { settings: Pick<AdventureSettings, 'customActors'> }): CustomActor[] {
+  return (ctx.settings.customActors ?? []).filter((a) => a.enabled !== false && a.name.trim() && a.prompt.trim());
+}
+
+/** The field of the Director's plan that briefs your actor. */
+export const fieldKey = (a: Pick<CustomActor, 'name'>) =>
+  a.name
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
+    .replace(/^_+|_+$/g, '') || 'actor';
+
 export interface DirectorPlan {
   scene?: SceneState;
   roll?: { reason: string; dice: string; dc?: number; modifier?: number } | null;
@@ -154,6 +198,8 @@ export interface DirectorPlan {
   actors: { name: string; direction: string }[];
   /** Characters the Director brought into the story this turn. */
   newCast: { name: string; text: string }[];
+  /** Briefs for your actors, by field (fieldKey). */
+  extras?: Record<string, string>;
   notes: string;
 }
 
@@ -216,7 +262,7 @@ function parseBeats(raw: Record<string, unknown>): Beat[] {
 
 /** The Director's reply as a plan. One that isn't JSON still makes a turn:
  *  its text becomes the Narrator's brief, and the card's character acts. */
-export function parsePlan(text: string, fallbackActor: string): DirectorPlan & { parsed: boolean } {
+export function parsePlan(text: string, fallbackActor: string, fields: string[] = []): DirectorPlan & { parsed: boolean } {
   const raw = extractJson(text) as Record<string, unknown> | null;
   if (!raw || typeof raw !== 'object') {
     const beats: Beat[] = [{ narrate: text.trim() }, ...(fallbackActor ? [{ name: fallbackActor, direction: '' }] : [])];
@@ -243,10 +289,101 @@ export function parsePlan(text: string, fallbackActor: string): DirectorPlan & {
   const newCast = (Array.isArray(raw.new_cast) ? raw.new_cast : Array.isArray(raw.newCast) ? raw.newCast : [])
     .map((c) => (typeof c === 'string' ? { name: c.trim(), text: '' } : c && typeof c === 'object' ? { name: str((c as Record<string, unknown>).name), text: str((c as Record<string, unknown>).text ?? (c as Record<string, unknown>).description) } : null))
     .filter((c): c is { name: string; text: string } => !!c?.name);
-  return { scene, roll, beats, actors: actorsOf(beats), newCast, notes: str(raw.notes), parsed: true };
+  const extras: Record<string, string> = {};
+  for (const f of fields) {
+    const v = raw[f];
+    const brief = v && typeof v === 'object' ? JSON.stringify(v) : str(v);
+    if (brief && brief.toLowerCase() !== 'null') extras[f] = brief;
+  }
+  return { scene, roll, beats, actors: actorsOf(beats), newCast, notes: str(raw.notes), ...(fields.length ? { extras } : {}), parsed: true };
 }
 
 // ─── Prompts ─────────────────────────────────────────────────────────────────
+
+// Each actor's system prompt, editable in ⚙ Actors (AdventureSettings.prompts)
+// with the same {{placeholders}} as the assistant's (lib/assist.ts
+// fillTemplate): a paragraph whose placeholder comes out empty is left out.
+// Macros ({{user}}, {{char}}…) are expanded after, for the card and you.
+
+const DIRECTOR_PROMPT = `You are the Director, the game master of an interactive roleplay adventure. {{user}} is the player character, controlled only by the human player. You don't write the story's prose: each turn you decide what happens and brief the actors who write it. The Narrator describes the scene and events; the Cast plays the other characters, one at a time.
+
+Each turn, read the world, the scene and the latest events, then plan:
+- How the world responds to {{user}}'s latest action (or, if they did nothing, what happens next). Keep the story moving, give the other characters goals of their own, and keep it fair and consistent.
+- {{dice}}
+- The turn as beats, in the order things happen. A "narrate" beat is a brief for the Narrator; an "actor" beat gives one character their part. Usually start with narration of what came of {{user}}'s action.
+- Only characters with something to add get a beat: a reply, a reaction, a move that matters. Being present isn't enough; often one does, sometimes none. At most {{maxActors}} character beats, only characters present, never {{user}}.
+- Let things happen in sequence: a character can answer what another just said or did, and a short narration beat can fall between characters when the scene moves on (not every time). Don't have the Narrator describe what a character will do on their own beat.
+- Keep the rules (if any) and apply them consistently; keep track of anything they need in your notes.
+- Anyone you bring into the story who isn't in the Cast yet (a new character, a named creature, someone the player meets) goes in "new_cast" with a short sheet, so they're played the same way from then on.
+
+{{actors}}
+
+Reply with only a JSON object, no other text:
+{{format}}`;
+
+const NARRATOR_PROMPT = `You are the Narrator of an interactive roleplay adventure. Write the next passage of the story: the setting, what happens and what came of {{user}}'s latest action, following the Director's brief. {{pov}}
+- Never write {{user}}'s dialogue, thoughts or choices beyond what the player wrote.
+- The other characters speak and act for themselves, each on their own turn. {{upcoming}}
+- Don't retell what the story already shows; carry on from the latest moment.
+- {{length}} Prose only: no headings, labels or notes.
+
+Style: {{style}}`;
+
+const CAST_PROMPT = `You are playing {{name}} in an interactive roleplay adventure. Write only {{name}}'s part of this turn: their dialogue, actions and body language, in character, reacting to what just happened. {{pov}}
+- Never speak, act or decide for {{user}}, and don't play the other characters.
+- Carry on from the latest moment: answer what was just said or done, by anyone. If the story already shows {{name}} doing something, don't do it again.
+- One to three short paragraphs. No headings, and don't start with your name.
+
+Style: {{style}}`;
+
+const OPENING_PROMPT = `You are the Director, the game master of an interactive roleplay adventure, and you're opening a new one. Write its first scene: set the place and the situation, bring in who's there, and end on a moment that invites {{user}} to act. {{pov}} Never act, speak or decide for {{user}}. Two to four paragraphs of prose, nothing else.
+
+Style: {{style}}`;
+
+const SCOUT_PROMPT = `You read character cards (for roleplay) and their lorebooks, and list what an adventure set in them needs. {{user}} is the player: never list them.
+
+Reply with only a JSON object, no other text:
+{
+  "settings": [{"name": "a place, faction, organization, item of note or world fact", "text": "a few sentences on it"}],
+  "personae": [{"name": "a character's name", "text": "who they are, how they look, act and talk, and how they relate to {{user}}"}],
+  "rules": "any game-like rules or mechanics the card describes, as a short list; empty if none"
+}
+List the card's own character first in personae. Keep each text to a few sentences, faithful to the source, in plain prose. Use {{user}} for the player and the characters' own names otherwise.`;
+
+export const ADVENTURE_TEMPLATES: AssistTemplate[] = [
+  { key: 'director', group: '🎬 Director', label: 'Plans each turn', vars: ['dice', 'maxActors', 'actors', 'format'], note: '{{dice}} says whether dice are on; {{actors}} lists your own actors (left out when there are none); {{format}} is the JSON the app reads, so keep it.', text: DIRECTOR_PROMPT },
+  { key: 'opening', group: '🎬 Director', label: 'Writes a bespoke opening', vars: ['pov', 'style'], text: OPENING_PROMPT },
+  { key: 'narrator', group: '📜 Narrator', label: 'Writes each passage', vars: ['pov', 'upcoming', 'length', 'style'], note: '{{upcoming}} names the characters who act after this passage (so it leaves them be); {{length}} is shorter for a passage between characters.', text: NARRATOR_PROMPT },
+  { key: 'cast', group: '🎭 Cast', label: "Plays one character's part", vars: ['name', 'pov', 'style'], note: '{{name}} is the character being played; their sheet and the Director\'s direction come with the story.', text: CAST_PROMPT },
+  { key: 'scout', group: '🔍 Scout', label: 'Lists the card\'s world', vars: [], note: 'The reply must stay the JSON shown, for the app to read.', text: SCOUT_PROMPT },
+];
+
+export const ADVENTURE_DEFAULT_PROMPTS: Record<string, string> = Object.fromEntries(ADVENTURE_TEMPLATES.map((t) => [t.key, t.text]));
+
+/** An actor's system prompt: yours or the default, filled in, macros expanded. */
+function adventurePrompt(ctx: AdventureCtx, key: string, vars: Record<string, string>): string {
+  return expander(ctx)(fillTemplate(ctx.settings.prompts?.[key] ?? ADVENTURE_DEFAULT_PROMPTS[key] ?? '', vars));
+}
+
+/** The JSON the Director replies with ({{format}}), your actors' fields too. */
+function directorFormat(ctx: AdventureCtx, extras: CustomActor[]): string {
+  const user = ctx.userName || 'User';
+  const lines = [
+    `  "scene": {"location": "where", "time": "when", "present": ["everyone present, ${user} included"], "situation": "one or two sentences on what's going on now"},`,
+    `  "roll": null or {"reason": "what is being attempted", "dice": "1d20", "dc": 12, "modifier": 0},`,
+    `  "beats": [`,
+    `    {"narrate": "the Narrator's brief: what happens, and what came of ${user}'s action"},`,
+    `    {"actor": "a character's name", "direction": "what they do or want, in a few words"},`,
+    `    {"narrate": "optional: what happens next, between characters"},`,
+    `    {"actor": "another character", "direction": "e.g. answers the first one"}`,
+    `  ],`,
+    `  "new_cast": [{"name": "a newcomer's name", "text": "who they are, how they look, act and talk"}],`,
+    ...extras.filter((a) => a.brief.trim()).map((a) => `  ${JSON.stringify(fieldKey(a))}: null or ${JSON.stringify(a.brief.trim())},`),
+    `  "notes": "your private notes: plans, secrets, timers, and the rules' bookkeeping (items, HP, captured creatures…)"`,
+  ];
+  return `{\n${lines.join('\n')}\n}`;
+}
+
 
 /** Everything a call is built from: the card, who you are, the world as this
  *  adventure has it, and how adventures run. */
@@ -280,6 +417,7 @@ export function transcript(entries: AdventureEntry[], userName: string, budget: 
     if (e.kind === 'action') line = `[${userName}] ${e.text}`;
     else if (e.kind === 'narration') line = `[Narrator] ${e.text}`;
     else if (e.kind === 'character') line = `[${e.speaker ?? 'Character'}] ${e.text}`;
+    else if (e.kind === 'extra' && (!e.private || opts.notes)) line = `[${e.speaker ?? 'Actor'}] ${e.text}`;
     else if (e.kind === 'roll' && e.roll) line = `[Dice] ${describeRoll(e.roll)}`;
     else if (e.kind === 'note' && opts.notes) line = `[${userName}, to the Director] ${e.text}`;
     if (!line || !e.text.trim()) continue;
@@ -333,7 +471,6 @@ const povLine = (ctx: AdventureCtx) => {
   const user = ctx.userName || 'User';
   return ctx.settings.pov === 'second' ? `Address ${user} as "you" (second person).` : `Write in third person; ${user} is "${user}".`;
 };
-const styleLine = (ctx: AdventureCtx) => (ctx.settings.style.trim() ? `\nStyle: ${ctx.settings.style.trim()}` : '');
 
 /** The Director's request: plan this turn, as JSON. */
 export function directorMessages(ctx: AdventureCtx, entries: AdventureEntry[], scene: SceneState | undefined, opts: { notes?: string; directorNote?: string } = {}): LlmMessage[] {
@@ -341,30 +478,17 @@ export function directorMessages(ctx: AdventureCtx, entries: AdventureEntry[], s
   const dice = ctx.dice
     ? `Dice are on: when the outcome of what ${user} attempts is uncertain and matters, ask for a roll and the app rolls real dice. Don't roll for trivial things. Write the first narration brief for both results ("On success: … On failure: …").`
     : 'Dice are off: decide outcomes yourself, fairly, and set "roll" to null.';
-  const system = `You are the Director, the game master of an interactive roleplay adventure. ${user} is the player character, controlled only by the human player. You don't write the story's prose: each turn you decide what happens and brief the actors who write it. The Narrator describes the scene and events; the Cast plays the other characters, one at a time.
-
-Each turn, read the world, the scene and the latest events, then plan:
-- How the world responds to ${user}'s latest action (or, if they did nothing, what happens next). Keep the story moving, give the other characters goals of their own, and keep it fair and consistent.
-- ${dice}
-- The turn as beats, in the order things happen. A "narrate" beat is a brief for the Narrator; an "actor" beat gives one character their part. Usually start with narration of what came of ${user}'s action.
-- Only characters with something to add get a beat: a reply, a reaction, a move that matters. Being present isn't enough; often one does, sometimes none. At most ${ctx.settings.maxActors} character beats, only characters present, never ${user}.
-- Let things happen in sequence: a character can answer what another just said or did, and a short narration beat can fall between characters when the scene moves on (not every time). Don't have the Narrator describe what a character will do on their own beat.
-- Keep the rules (if any) and apply them consistently; keep track of anything they need in your notes.
-- Anyone you bring into the story who isn't in the Cast yet (a new character, a named creature, someone the player meets) goes in "new_cast" with a short sheet, so they're played the same way from then on.
-
-Reply with only a JSON object, no other text:
-{
-  "scene": {"location": "where", "time": "when", "present": ["everyone present, ${user} included"], "situation": "one or two sentences on what's going on now"},
-  "roll": null or {"reason": "what is being attempted", "dice": "1d20", "dc": 12, "modifier": 0},
-  "beats": [
-    {"narrate": "the Narrator's brief: what happens, and what came of ${user}'s action"},
-    {"actor": "a character's name", "direction": "what they do or want, in a few words"},
-    {"narrate": "optional: what happens next, between characters"},
-    {"actor": "another character", "direction": "e.g. answers the first one"}
-  ],
-  "new_cast": [{"name": "a newcomer's name", "text": "who they are, how they look, act and talk"}],
-  "notes": "your private notes: plans, secrets, timers, and the rules' bookkeeping (items, HP, captured creatures…)"
-}`;
+  const extras = activeCustomActors(ctx);
+  const system = adventurePrompt(ctx, 'director', {
+    dice,
+    maxActors: String(ctx.settings.maxActors),
+    actors: extras.length
+      ? `Other actors take part too, each written by a call of its own:\n${extras
+          .map((a) => `- ${a.icon || '✦'} ${a.name}${a.about.trim() ? `: ${a.about.trim().replace(/[.\s]+$/, '')}` : ''}. ${a.brief.trim() ? `Brief it in "${fieldKey(a)}" when it has something to do this turn, or set that to null to skip it.` : 'It runs every turn.'}`)
+          .join('\n')}`
+      : '',
+    format: directorFormat(ctx, extras),
+  });
   const parts = [contextBlock(ctx, entries, scene, { notes: true })];
   if (opts.notes?.trim()) parts.push(`<your_notes_so_far>\n${opts.notes.trim()}\n</your_notes_so_far>`);
   const last = entries.at(-1);
@@ -393,13 +517,13 @@ export interface BeatPlace {
 
 /** The Narrator's request: the next passage, from the Director's brief. */
 export function narratorMessages(ctx: AdventureCtx, entries: AdventureEntry[], scene: SceneState | undefined, brief: string, roll?: DiceRoll, place: BeatPlace = {}): LlmMessage[] {
-  const user = ctx.userName || 'User';
   const upcoming = [...new Set(place.upcoming ?? [])];
-  const system = `You are the Narrator of an interactive roleplay adventure. Write the next passage of the story: the setting, what happens and what came of ${user}'s latest action, following the Director's brief. ${povLine(ctx)}
-- Never write ${user}'s dialogue, thoughts or choices beyond what the player wrote.
-- The other characters speak and act for themselves, each on their own turn. ${upcoming.length ? `${upcoming.join(', ')} ${upcoming.length > 1 ? 'act' : 'acts'} right after this passage: don't write what they say or do, leave it to them.` : 'Keep to events and the world; give the characters at most a glance or a gesture.'}
-- Don't retell what the story already shows; carry on from the latest moment.
-- ${place.midTurn ? 'This passage falls between characters: keep it short, a few sentences on what happens next.' : 'One to three paragraphs.'} Prose only: no headings, labels or notes.${styleLine(ctx)}`;
+  const system = adventurePrompt(ctx, 'narrator', {
+    pov: povLine(ctx),
+    upcoming: upcoming.length ? `${upcoming.join(', ')} ${upcoming.length > 1 ? 'act' : 'acts'} right after this passage: don't write what they say or do, leave it to them.` : 'Keep to events and the world; give the characters at most a glance or a gesture.',
+    length: place.midTurn ? 'This passage falls between characters: keep it short, a few sentences on what happens next.' : 'One to three paragraphs.',
+    style: ctx.settings.style.trim(),
+  });
   const rolled = roll ? `\n\nThe dice: ${describeRoll(roll)}. Narrate the ${roll.outcome ?? 'result'}${roll.critical ? ', and make it dramatic' : ''}.` : '';
   return [
     { role: 'system', content: system },
@@ -421,10 +545,7 @@ function characterSheet(ctx: AdventureCtx, name: string): string {
 /** One character's part of the turn. */
 export function castMessages(ctx: AdventureCtx, entries: AdventureEntry[], scene: SceneState | undefined, actor: { name: string; direction: string }): LlmMessage[] {
   const user = ctx.userName || 'User';
-  const system = `You are playing ${actor.name} in an interactive roleplay adventure. Write only ${actor.name}'s part of this turn: their dialogue, actions and body language, in character, reacting to what just happened. ${ctx.settings.pov === 'second' ? `Address ${user} as "you" in narration.` : `Write in third person.`}
-- Never speak, act or decide for ${user}, and don't play the other characters.
-- Carry on from the latest moment: answer what was just said or done, by anyone. If the story already shows ${actor.name} doing something, don't do it again.
-- One to three short paragraphs. No headings, and don't start with your name.${styleLine(ctx)}`;
+  const system = adventurePrompt(ctx, 'cast', { name: actor.name, pov: ctx.settings.pov === 'second' ? `Address ${user} as "you" in narration.` : 'Write in third person.', style: ctx.settings.style.trim() });
   const direction = actor.direction ? `\n\nThe Director's direction for ${actor.name} this turn: ${actor.direction}` : '';
   return [
     { role: 'system', content: system },
@@ -432,11 +553,21 @@ export function castMessages(ctx: AdventureCtx, entries: AdventureEntry[], scene
   ];
 }
 
+/** Your actor's part of the turn, from its prompt and the Director's brief. */
+export function customActorMessages(ctx: AdventureCtx, entries: AdventureEntry[], scene: SceneState | undefined, actor: CustomActor, brief?: string): LlmMessage[] {
+  const parts = [contextBlock(ctx, entries, scene)];
+  if (brief?.trim()) parts.push(`The Director's brief for you this turn:\n${brief.trim()}`);
+  parts.push(`Write ${actor.name}'s part of this turn now.`);
+  return [
+    { role: 'system', content: expander(ctx)(actor.prompt.trim()) },
+    { role: 'user', content: parts.join('\n\n') },
+  ];
+}
+
 /** A bespoke opening, written by the Director. */
 export function openingMessages(ctx: AdventureCtx, opts: { prompt?: string; greeting?: string }): LlmMessage[] {
-  const user = ctx.userName || 'User';
   const x = expander(ctx);
-  const system = `You are the Director, the game master of an interactive roleplay adventure, and you're opening a new one. Write its first scene: set the place and the situation, bring in who's there, and end on a moment that invites ${user} to act. ${povLine(ctx)} Never act, speak or decide for ${user}. Two to four paragraphs of prose, nothing else.${styleLine(ctx)}`;
+  const system = adventurePrompt(ctx, 'opening', { pov: povLine(ctx), style: ctx.settings.style.trim() });
   const parts = [contextBlock(ctx, [], undefined)];
   if (opts.greeting?.trim()) parts.push(`Build on the card's greeting, but make the scene your own:\n<greeting>\n${x(opts.greeting)}\n</greeting>`);
   if (opts.prompt?.trim()) parts.push(`The player asked for: ${opts.prompt.trim()}`);
@@ -450,7 +581,7 @@ export function openingMessages(ctx: AdventureCtx, opts: { prompt?: string; gree
 const SCOUT_BUDGET = 60000;
 
 /** The Scout's request: the card's settings, characters and rules, as JSON. */
-export function scoutMessages(card: CardData): LlmMessage[] {
+export function scoutMessages(card: CardData, prompts?: Record<string, string>): LlmMessage[] {
   const clip = (t: string, n: number) => (t.length > n ? `${t.slice(0, n)}…` : t);
   const lore = (card.character_book?.entries ?? [])
     .filter((e) => e.enabled !== false && e.content.trim())
@@ -472,15 +603,7 @@ export function scoutMessages(card: CardData): LlmMessage[] {
   ]
     .filter(Boolean)
     .join('\n\n');
-  const system = `You read character cards (for roleplay) and their lorebooks, and list what an adventure set in them needs. {{user}} is the player: never list them.
-
-Reply with only a JSON object, no other text:
-{
-  "settings": [{"name": "a place, faction, organization, item of note or world fact", "text": "a few sentences on it"}],
-  "personae": [{"name": "a character's name", "text": "who they are, how they look, act and talk, and how they relate to {{user}}"}],
-  "rules": "any game-like rules or mechanics the card describes, as a short list; empty if none"
-}
-List the card's own character first in personae. Keep each text to a few sentences, faithful to the source, in plain prose. Use {{user}} for the player and the characters' own names otherwise.`;
+  const system = fillTemplate(prompts?.scout ?? ADVENTURE_DEFAULT_PROMPTS.scout, {});
   return [
     { role: 'system', content: system },
     { role: 'user', content: source },
@@ -572,6 +695,7 @@ export function directorNotes(entries: AdventureEntry[]): string {
 export function planText(plan: DirectorPlan): string {
   const lines = plan.beats.length ? plan.beats.map((b, i) => `${i + 1}. ${isNarration(b) ? `Narrator: ${b.narrate}` : b.direction ? `${b.name}: ${b.direction}` : b.name}`) : ['(no beats)'];
   if (plan.roll) lines.push(`Roll: ${plan.roll.reason || 'yes'} (${plan.roll.dice}${plan.roll.dc !== undefined ? ` vs ${plan.roll.dc}` : ''})`);
+  for (const [k, v] of Object.entries(plan.extras ?? {})) lines.push(`${k}: ${v}`);
   if (plan.notes) lines.push(`Notes: ${plan.notes}`);
   return lines.join('\n');
 }
@@ -644,7 +768,8 @@ export async function runTurn(input: TurnInput, deps: TurnDeps): Promise<TurnRes
   const d = await deps.call('director', '🎬 Director', directorMessages(ctx, entries, scene, { notes, directorNote }));
   if (stopped()) return { entries, scene, newCast };
   if (d.error || !d.text.trim()) return { entries, scene, newCast, error: d.error ?? 'The Director sent nothing back.' };
-  const plan = parsePlan(d.text, charName(ctx.card));
+  const extras = activeCustomActors(ctx);
+  const plan = parsePlan(d.text, charName(ctx.card), extras.filter((a) => a.brief.trim()).map(fieldKey));
   if (plan.scene) scene = plan.scene;
   add({ kind: 'director', text: planText(plan) + (plan.parsed ? '' : '\n(The plan wasn\'t JSON: its text went to the Narrator as the brief.)'), sceneBefore: sceneBefore ?? { location: '', present: [], situation: '' }, usage: d.usage });
   const beats = turnBeats(plan, ctx.settings.maxActors, user);
@@ -666,6 +791,24 @@ export async function runTurn(input: TurnInput, deps: TurnDeps): Promise<TurnRes
     add({ kind: 'roll', speaker: user, text: describeRoll(roll), roll });
   }
 
+  // Your actors, each when it runs: every turn, or when the Director briefs it.
+  const runExtras = async (when: 'before' | 'after'): Promise<string | undefined> => {
+    for (const a of extras.filter((x) => (x.when ?? 'after') === when)) {
+      const brief = a.brief.trim() ? plan.extras?.[fieldKey(a)] : undefined;
+      if (a.brief.trim() && !brief) continue;
+      const id = add({ kind: 'extra', speaker: a.name, icon: a.icon || '✦', ...(a.private ? { private: true } : {}), text: '' });
+      const r = await deps.call(customActorId(a), `${a.icon || '✦'} ${a.name}`, customActorMessages(ctx, entries.filter((e) => e.id !== id), scene, a, brief), (t) => patch(id, { text: t }));
+      patch(id, { text: r.text.trim(), usage: r.usage });
+      if (r.error) {
+        entries = entries.filter((e) => e.id !== id || e.text);
+        return r.error;
+      }
+      if (stopped()) return '';
+    }
+  };
+  const early = await runExtras('before');
+  if (early !== undefined) return { entries, scene, newCast, ...(early ? { error: early } : {}) };
+
   // 3. The beats in order: narration and each character, one call each,
   // every one seeing what came before it this turn.
   let rolled = false;
@@ -684,6 +827,8 @@ export async function runTurn(input: TurnInput, deps: TurnDeps): Promise<TurnRes
     if (r.error) return { entries: entries.filter((e) => e.id !== id || e.text), scene, newCast, error: r.error };
     if (stopped()) return { entries, scene, newCast };
   }
+  const late = await runExtras('after');
+  if (late) return { entries, scene, newCast, error: late };
   return { entries, scene, newCast };
 }
 
@@ -731,4 +876,4 @@ export function tallyUsage(usages: (CallUsage | undefined)[]): UsageTally {
  *  per acting character. */
 /** The most calls a turn makes: the Director, each character and a passage
  *  of narration around each. */
-export const callsPerTurn = (s: Pick<AdventureSettings, 'maxActors'>) => 2 + 2 * Math.max(0, s.maxActors);
+export const callsPerTurn = (s: Pick<AdventureSettings, 'maxActors' | 'customActors'>) => 2 + 2 * Math.max(0, s.maxActors) + activeCustomActors({ settings: s }).length;
