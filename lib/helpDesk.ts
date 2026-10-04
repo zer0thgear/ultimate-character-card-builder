@@ -232,7 +232,8 @@ export const QUICK_ANSWERS = `- Settings: ⚙ Settings in the header, or Setting
 - Everything saves by itself; Ctrl+S saves now. Data lives in the data/ folder next to the app.
 - 🔍 in the test chat shows the exact prompt sent (the prompt inspector).
 - Prompt tidbits (🎨 Image): + Tidbit under the scene, a character's prompt or negative, or the negative prompt adds a switchable piece, added to that prompt when on. ⇪ saves one to the Tidbit Library (bottom of the prompts, shared by every card) and 🔗 From library… links an entry under any prompt; \`__Name__\` in a prompt uses an entry too. A Random library entry is a wildcard: one line per picture.
-- ? (outside a text box) or ⌨ in the header lists keyboard shortcuts.`;
+- ? (outside a text box) or ⌨ in the header lists keyboard shortcuts.
+- Adventure mode: in Chat mode, **🎲 Adventure** in the header. A Director plans each turn (who acts, whether to roll), the app rolls real dice, a Narrator tells it and each acting character gets a call of their own (up to 4 calls a turn by default; costs show per turn). 🌍 World holds the card's dramatis personae, settings and rules (🔍 Scan the card has the Scout list them), changeable per adventure; ⚙ beside it gives each actor its own connection.`;
 
 // ─── The request ─────────────────────────────────────────────────────────────
 

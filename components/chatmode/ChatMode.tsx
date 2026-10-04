@@ -19,6 +19,8 @@ import { chatStatsDetail, sortDetail } from '@/lib/cardSort';
 import { importFromUrl } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
 import type { ProjectSummary } from '@/types/project';
+import { AdventurePanel } from '@/components/adventure/AdventurePanel';
+import { useAdventureStore } from '@/store/adventureStore';
 
 // Chat mode: the app as a chat frontend. Your cards and the ones imported
 // here, a full-width chat, and the card's definitions a click away, with
@@ -218,6 +220,7 @@ function addToBuilderNow(id: string, name: string) {
 export function ChatCardActions({ phone }: { phone: boolean }) {
   const project = useProjectStore((s) => s.project);
   const { chatCardOpen, setChatCardOpen } = useUiStore();
+  const { view, setView } = useAdventureStore();
   if (!project) return null;
   const name = project.card.data.name || 'Unnamed';
   return (
@@ -233,6 +236,14 @@ export function ChatCardActions({ phone }: { phone: boolean }) {
           </Button>
         ))}
       <SourceButton source={project.card.data.source} compact={phone} className="h-7 text-sm" />
+      <Button
+        size="sm"
+        variant={view === 'adventure' ? 'primary' : 'secondary'}
+        onClick={() => setView(view === 'adventure' ? 'chat' : 'adventure')}
+        title={view === 'adventure' ? 'Back to the chat' : 'Adventure mode: a roleplay run by a Director, with a narrator, a cast and dice'}
+      >
+        🎲{!phone && ' Adventure'}
+      </Button>
       <Button size="sm" variant={chatCardOpen ? 'primary' : 'secondary'} onClick={() => setChatCardOpen(!chatCardOpen)} title="The card's definitions and lorebook, to read or change">
         📝{!phone && ' Card'}
       </Button>
@@ -245,11 +256,16 @@ export function ChatCardActions({ phone }: { phone: boolean }) {
 export function ChatScreen({ phone }: { phone: boolean }) {
   const project = useProjectStore((s) => s.project);
   const { chatCardOpen, setChatCardOpen } = useUiStore();
+  const adventure = useAdventureStore((s) => s.view === 'adventure');
   if (!project) return null;
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1">
-      <div className="min-h-0 min-w-0 flex-1">
+      {/* Both stay mounted, so a reply or a turn carries on while the other shows. */}
+      <div className="min-h-0 min-w-0 flex-1" hidden={adventure}>
         <ChatPanel wide />
+      </div>
+      <div className="min-h-0 min-w-0 flex-1" hidden={!adventure}>
+        <AdventurePanel phone={phone} />
       </div>
       {chatCardOpen &&
         (phone ? (

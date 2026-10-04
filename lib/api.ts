@@ -2,6 +2,7 @@ import type { AppConfig, CardProject, CardVersion, CardVersionInfo, TrashedProje
 import type { LlmEvent, LlmRequest } from '@/types/llm';
 import type { LibraryItem } from '@/lib/librarySearch';
 import type { HelpDocs } from '@/lib/helpDesk';
+import type { AdventureSession, AdventureSummary } from '@/types/adventure';
 
 // The browser side of the local API routes (app/api/*).
 
@@ -74,6 +75,11 @@ export const api = {
   chatImageUrl: (id: string, file: string) => `/api/projects/${id}/chat-images/${file}`,
   putChatImage: (id: string, file: string, png: Blob) => call<{ file: string }>(`/api/projects/${id}/chat-images/${file}`, { method: 'PUT', body: png, headers: { 'Content-Type': 'image/png' } }),
   deleteChatImage: (id: string, file: string) => call<{ ok: true }>(`/api/projects/${id}/chat-images/${file}`, { method: 'DELETE' }),
+
+  listAdventures: (id: string) => call<AdventureSummary[]>(`/api/projects/${id}/adventures`),
+  getAdventure: (id: string, adventureId: string) => call<AdventureSession>(`/api/projects/${id}/adventures/${adventureId}`),
+  saveAdventure: (id: string, a: AdventureSession) => call<AdventureSession>(`/api/projects/${id}/adventures/${a.id}`, json('PUT', a)),
+  deleteAdventure: (id: string, adventureId: string) => call<{ ok: true }>(`/api/projects/${id}/adventures/${adventureId}`, { method: 'DELETE' }),
 
   helpDocs: () => call<HelpDocs>('/api/help/docs'),
 
