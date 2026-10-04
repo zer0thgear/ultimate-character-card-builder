@@ -156,9 +156,26 @@ The **🛠 Builder | 💬 Chat** switch in the header (at the top of the ☰ dra
 
   Pictures use the image connection and the Image tab's model, size and style, without changing the Image tab. They stay in the chat after the message they illustrate (and go if it's deleted), but they're never sent to the model, numbered or exported. On each one, ↻ draws it again with a new seed, ✎ changes its prompt, ★ keeps it with the card (Builder's Gallery), and 🗑 removes it.
 
+## Writing mode
+
+**✍ Story** (in Chat mode's header, in the **🗨 Chat | ✍ Story | 🎲 Adventure** switch, with a card open) writes a story together with the model instead of chatting: one flat document that you and the model both add to, as NovelAI's story mode does. Each card keeps its own stories, separate from its chats.
+
+- **Starting**: **Start a story…** (or ＋ beside the story list) opens with the card's first message, an alternate greeting, or a blank page, and can put the card's scenario in the story's memory. `{{char}}` and `{{user}}` are filled in.
+- **Writing**: type anywhere in the document, then **✍ Continue** (or Ctrl+Enter) and the model writes on from where the text stops. The line under the document steers just the next part ("the storm finally breaks") and clears after it. **↻** writes the latest part again, keeping every version: **‹ ›** step between them. **↶ ↷** undo and redo, a whole part at a time. **■ Stop** keeps what was written so far. **🔍** shows the exact prompt sent and what came back.
+- **📖 Story settings**, beside the document (over it, on a phone):
+  - **Memory**: always at the top of the prompt: the premise, setting and style.
+  - **Author's note**: put a few lines from the end of the story, to steer tone and pacing for every part.
+  - **Dramatis Personae**: the story's cast, read like lorebook entries: someone's description goes into the prompt when their name (or one of their **other names**) is in the last few paragraphs, or always, with **Always in the prompt**. A new story starts with the card's character and your persona, both read live from the card and your persona (**Make a copy to change for this story** gives the story its own version). **+ Add someone** adds anyone else. Those in the prompt right now are marked **● in**.
+  - **Lorebook**: the card's own lorebook, read against the story with its usual rules (keys, secondary keys, trigger %, groups). **Look back** sets how many paragraphs from the end names and keys are looked for in. The line under it lists what's in the prompt right now.
+  - **Model**: the connection the story is written with (the chat's, unless you pick another).
+- **Text-completion connections** (Settings → LLM connections → Text completion) get the memory, personae, lore and story as one plain text, separated by `***`, with the author's note in brackets a few lines from the end, and simply write on, as NovelAI does.
+- **Chat connections** are asked for the next part of the story (about **N words a part**, set in Model), with the memory, personae and lore in the system prompt. Whatever they wrap around it (tags, code fences, the story's last words repeated) is cleaned off, and a space goes in where it meets the story. **Proofread each part** adds a second call after each part that removes repeats and commentary, makes the first sentence join where the story stopped, and ends the part at a complete sentence; it can use another connection (**Proofreads with**). **Change the prompts…** edits the instructions and the proofreading prompt for every story.
+- When the story outgrows the connection's context size, its start is left out of the prompt (the status line says so).
+- **⬇** saves the story as a text file; ✎ renames it and 🗑 deletes it. Duplicating a card with its chats copies its stories too.
+
 ## Adventure mode
 
-**🎲 Adventure** (in Chat mode's header, beside 📝 Card) turns the open card into a roleplay run like a tabletop game, with several model calls a turn instead of one. Press it again to go back to the chat; a turn or a reply keeps running while the other one shows. Each card keeps its adventures beside its chats.
+**🎲 Adventure** (in Chat mode's header, in the **🗨 Chat | ✍ Story | 🎲 Adventure** switch) turns the open card into a roleplay run like a tabletop game, with several model calls a turn instead of one. **🗨 Chat** goes back to the chat; a turn, a story part or a reply keeps running while another one shows. Each card keeps its adventures beside its chats.
 
 - **The actors**: the **🎬 Director** (the game master) plans each turn: what happens, who acts, and whether to roll. The **📜 Narrator** describes the scene and what came of your action. The **🎭 Cast** plays each character who acts that turn, one call per character, from that character's entry. The **🔍 Scout** reads the card and lists its world.
 - **A turn**: type what you do (or say) and press Send, or send nothing to **⏭ Let it unfold** and see what happens next. The Director's plan is shown folded under your action (its brief, who acts, the roll, and its private notes, which it reads again next turn to keep track of plans, secrets and the rules' bookkeeping). **📍** above the story shows where the scene is, when, and who's there, as the Director last set it.

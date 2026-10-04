@@ -2,7 +2,7 @@ import 'server-only';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { AppConfig, CardProject, ChatSession, ChatSummary, Persona, ProjectSummary, TrashedProject } from '@/types/project';
+import type { AppConfig, CardProject, ChatSession, ChatSummary, Persona, ProjectSummary, StorySession, StorySummary, TrashedProject } from '@/types/project';
 import { DEFAULT_CONFIG } from '@/types/project';
 import type { AdventureSession, AdventureSummary } from '@/types/adventure';
 import { newCard } from '@/lib/cardSpec';
@@ -17,6 +17,7 @@ import { sumTallies, tallyChat, type ChatTally } from '@/lib/chatStats';
 //   data/projects/<id>/avatar.png
 //   data/projects/<id>/gallery/*.png    kept gens
 //   data/projects/<id>/chats/<id>.json  test chats
+//   data/projects/<id>/stories/<id>.json  Writing mode's stories
 //   data/trash/<id>-<time>/             deleted projects, until restored or emptied
 //   data/library-index.json             the gen library's metadata cache
 //   data/recent-gens/<id>.png + .json   recent gens, until kept, cleared or expired
@@ -239,14 +240,14 @@ export async function trashProject(id: string) {
 /**
  * A copy of a project under a new id, named "… (copy)": the card, its
  * picture, notes, art prompts and kept gens, and its chats (with their
- * pictures) if `chats` is set. Version history stays with the original.
+ * pictures) and stories if `chats` is set. Version history stays with the original.
  */
 export async function duplicateProject(id: string, { chats = false }: { chats?: boolean } = {}): Promise<CardProject> {
   const src = await getProject(id);
   const newId = randomUUID();
   const to = projectDir(newId);
   await fs.mkdir(to, { recursive: true });
-  for (const sub of ['avatar.png', 'gallery', ...(chats ? ['chats', 'chat-images', 'adventures'] : [])]) {
+  for (const sub of ['avatar.png', 'gallery', ...(chats ? ['chats', 'chat-images', 'stories', 'adventures'] : [])]) {
     await fs.cp(path.join(projectDir(id), sub), path.join(to, sub), { recursive: true }).catch((err: NodeJS.ErrnoException) => {
       if (err.code !== 'ENOENT') throw err;
     });
@@ -410,6 +411,39 @@ export async function deleteChat(projectId: string, chatId: string) {
   const dir = path.join(projectDir(projectId), 'chat-images');
   const files = await fs.readdir(dir).catch(() => [] as string[]);
   await Promise.all(files.filter((f) => f.startsWith(`${checkId(chatId)}-`)).map((f) => fs.rm(path.join(dir, f), { force: true })));
+}
+
+// ─── Stories (Writing mode) ──────────────────────────────────────────────────
+
+const storyPath = (projectId: string, storyId: string) => path.join(projectDir(projectId), 'stories', `${checkId(storyId)}.json`);
+
+const wordCount = (text: string) => (text.match(/\S+/g) ?? []).length;
+
+export async function listStories(projectId: string): Promise<StorySummary[]> {
+  const dir = path.join(projectDir(projectId), 'stories');
+  const files = await fs.readdir(dir).catch(() => [] as string[]);
+  const stories = await Promise.all(files.filter((f) => f.endsWith('.json')).map((f) => readJson<StorySession>(path.join(dir, f)).catch(() => null)));
+  return stories
+    .filter((s): s is StorySession => !!s)
+    .map((s) => ({ id: s.id, name: s.name, createdAt: s.createdAt, updatedAt: s.updatedAt, words: wordCount(s.text ?? '') }))
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export async function getStory(projectId: string, storyId: string): Promise<StorySession> {
+  const s = await readJson<StorySession>(storyPath(projectId, storyId));
+  if (!s) throw new NotFoundError(`No story ${storyId}`);
+  return s;
+}
+
+export async function saveStory(projectId: string, story: StorySession): Promise<StorySession> {
+  if (typeof story.text !== 'string') throw new BadRequestError('A story needs its text');
+  const saved = { ...story, updatedAt: Date.now() };
+  await writeFileAtomic(storyPath(projectId, story.id), JSON.stringify(saved));
+  return saved;
+}
+
+export async function deleteStory(projectId: string, storyId: string) {
+  await removeJson(storyPath(projectId, storyId));
 }
 
 // ─── Adventures ──────────────────────────────────────────────────────────────

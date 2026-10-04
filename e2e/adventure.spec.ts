@@ -33,7 +33,7 @@ test('an adventure: scan the card, open with the greeting, play a turn', async (
   await page.getByRole('tab', { name: /^Greetings/ }).click();
   await page.getByLabel('First message').fill('The gate looms before you.');
   await page.getByRole('tab', { name: '💬 Chat' }).click();
-  await page.getByRole('button', { name: /Adventure/ }).click();
+  await page.getByRole('tab', { name: 'Adventure' }).click();
 
   await expect(page.getByText('This card has no world for adventures yet.')).toBeVisible();
   await page.getByRole('button', { name: '🔍 Scan the card' }).first().click();

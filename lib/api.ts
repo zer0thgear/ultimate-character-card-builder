@@ -1,4 +1,4 @@
-import type { AppConfig, CardProject, CardVersion, CardVersionInfo, TrashedProject, ChatSession, ChatSummary, KeptImage, Persona, ProjectSummary, AvatarInfo } from '@/types/project';
+import type { AppConfig, CardProject, CardVersion, CardVersionInfo, TrashedProject, ChatSession, ChatSummary, StorySession, StorySummary, KeptImage, Persona, ProjectSummary, AvatarInfo } from '@/types/project';
 import type { LlmEvent, LlmRequest } from '@/types/llm';
 import type { LibraryItem } from '@/lib/librarySearch';
 import type { HelpDocs } from '@/lib/helpDesk';
@@ -72,6 +72,10 @@ export const api = {
   getChat: (id: string, chatId: string) => call<ChatSession>(`/api/projects/${id}/chats/${chatId}`),
   saveChat: (id: string, chat: ChatSession) => call<ChatSession>(`/api/projects/${id}/chats/${chat.id}`, json('PUT', chat)),
   deleteChat: (id: string, chatId: string) => call<{ ok: true }>(`/api/projects/${id}/chats/${chatId}`, { method: 'DELETE' }),
+  listStories: (id: string) => call<StorySummary[]>(`/api/projects/${id}/stories`),
+  getStory: (id: string, storyId: string) => call<StorySession>(`/api/projects/${id}/stories/${storyId}`),
+  saveStory: (id: string, story: StorySession) => call<StorySession>(`/api/projects/${id}/stories/${story.id}`, json('PUT', story)),
+  deleteStory: (id: string, storyId: string) => call<{ ok: true }>(`/api/projects/${id}/stories/${storyId}`, { method: 'DELETE' }),
   chatImageUrl: (id: string, file: string) => `/api/projects/${id}/chat-images/${file}`,
   putChatImage: (id: string, file: string, png: Blob) => call<{ file: string }>(`/api/projects/${id}/chat-images/${file}`, { method: 'PUT', body: png, headers: { 'Content-Type': 'image/png' } }),
   deleteChatImage: (id: string, file: string) => call<{ ok: true }>(`/api/projects/${id}/chat-images/${file}`, { method: 'DELETE' }),

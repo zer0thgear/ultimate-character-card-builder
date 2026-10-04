@@ -11,12 +11,14 @@ import { uuid } from '@/lib/uuid';
 const SAVE_DELAY_MS = 600;
 const VIEW_KEY = 'uccb-chat-view';
 
-export type ChatView = 'chat' | 'adventure';
+/** Chat mode's views of a card: its chats, its stories (Writing mode), or
+ *  its adventures. */
+export type ChatView = 'chat' | 'story' | 'adventure';
 
 const summaryOf = (a: AdventureSession): AdventureSummary => ({ id: a.id, name: a.name, createdAt: a.createdAt, updatedAt: a.updatedAt, turns: a.entries.reduce((n, e) => Math.max(n, e.turn), 0) });
 
 interface AdventureState {
-  /** Chat mode shows the chat, or the card's adventures. */
+  /** Chat mode shows the chat, the card's stories, or its adventures. */
   view: ChatView;
   setView: (v: ChatView) => void;
   projectId: string | null;
@@ -36,7 +38,8 @@ let dirty = false;
 
 function initialView(): ChatView {
   try {
-    return localStorage.getItem(VIEW_KEY) === 'adventure' ? 'adventure' : 'chat';
+    const v = localStorage.getItem(VIEW_KEY);
+    return v === 'adventure' || v === 'story' ? v : 'chat';
   } catch {
     return 'chat';
   }

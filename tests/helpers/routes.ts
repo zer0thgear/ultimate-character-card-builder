@@ -21,6 +21,8 @@ const ROUTES: [string, () => Promise<RouteModule>][] = [
   ['/api/projects/:id/kept/:file', () => import('@/app/api/projects/[id]/kept/[file]/route')],
   ['/api/projects/:id/chats', () => import('@/app/api/projects/[id]/chats/route')],
   ['/api/projects/:id/chats/:chatId', () => import('@/app/api/projects/[id]/chats/[chatId]/route')],
+  ['/api/projects/:id/stories', () => import('@/app/api/projects/[id]/stories/route')],
+  ['/api/projects/:id/stories/:storyId', () => import('@/app/api/projects/[id]/stories/[storyId]/route')],
   ['/api/projects/:id/adventures', () => import('@/app/api/projects/[id]/adventures/route')],
   ['/api/projects/:id/adventures/:adventureId', () => import('@/app/api/projects/[id]/adventures/[adventureId]/route')],
   ['/api/projects/:id/chat-images/:file', () => import('@/app/api/projects/[id]/chat-images/[file]/route')],

@@ -6,6 +6,7 @@ import { toast, useUiStore, type AppMode } from '@/store/uiStore';
 import { api } from '@/lib/api';
 import { Button, IconButton, Tabs, confirmDialog, cx, inputClass } from '@/components/ui';
 import { ChatPanel } from '@/components/dock/ChatPanel';
+import { StoryPanel } from '@/components/chatmode/StoryMode';
 import { BasicsPanel } from '@/components/editor/BasicsPanel';
 import { GreetingsPanel } from '@/components/editor/GreetingsPanel';
 import { LorebookPanel } from '@/components/editor/LorebookPanel';
@@ -225,6 +226,29 @@ export function ChatCardActions({ phone }: { phone: boolean }) {
   const name = project.card.data.name || 'Unnamed';
   return (
     <>
+      <div className="flex overflow-hidden rounded-md border border-slate-700 text-xs" role="tablist" aria-label="Chat, story or adventure">
+        {(
+          [
+            { view: 'chat', icon: '🗨', label: 'Chat', title: 'Chat with the character, turn by turn' },
+            { view: 'story', icon: '✍', label: 'Story', title: 'Writing mode: write a story together with the model, in one document' },
+            { view: 'adventure', icon: '🎲', label: 'Adventure', title: 'Adventure mode: a roleplay run by a Director, with a narrator, a cast and dice' },
+          ] as const
+        ).map((m) => (
+          <button
+            key={m.view}
+            type="button"
+            role="tab"
+            aria-selected={view === m.view}
+            title={m.title}
+            aria-label={m.label}
+            onClick={() => setView(m.view)}
+            className={cx('px-2 py-0.5 whitespace-nowrap', view === m.view ? 'bg-violet-600 text-white' : 'text-slate-300 hover:bg-slate-800')}
+          >
+            {m.icon}
+            {!phone && ` ${m.label}`}
+          </button>
+        ))}
+      </div>
       {!phone &&
         (project.chatOnly ? (
           <Button size="sm" variant="ghost" title="Put this card in Builder too, to work on it there (its chats come along)" onClick={() => addToBuilderNow(project.id, name)}>
@@ -236,14 +260,6 @@ export function ChatCardActions({ phone }: { phone: boolean }) {
           </Button>
         ))}
       <SourceButton source={project.card.data.source} compact={phone} className="h-7 text-sm" />
-      <Button
-        size="sm"
-        variant={view === 'adventure' ? 'primary' : 'secondary'}
-        onClick={() => setView(view === 'adventure' ? 'chat' : 'adventure')}
-        title={view === 'adventure' ? 'Back to the chat' : 'Adventure mode: a roleplay run by a Director, with a narrator, a cast and dice'}
-      >
-        🎲{!phone && ' Adventure'}
-      </Button>
       <Button size="sm" variant={chatCardOpen ? 'primary' : 'secondary'} onClick={() => setChatCardOpen(!chatCardOpen)} title="The card's definitions and lorebook, to read or change">
         📝{!phone && ' Card'}
       </Button>
@@ -251,20 +267,25 @@ export function ChatCardActions({ phone }: { phone: boolean }) {
   );
 }
 
-/** A card open in Chat mode: the chat, and its definitions. The card's
+/** A card open in Chat mode: the chat (or the story, or the adventure),
+ *  and its definitions. The card's
  *  picture, name and buttons are in the header, leaving the chat the room. */
 export function ChatScreen({ phone }: { phone: boolean }) {
   const project = useProjectStore((s) => s.project);
   const { chatCardOpen, setChatCardOpen } = useUiStore();
-  const adventure = useAdventureStore((s) => s.view === 'adventure');
+  const view = useAdventureStore((s) => s.view);
   if (!project) return null;
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1">
-      {/* Both stay mounted, so a reply or a turn carries on while the other shows. */}
-      <div className="min-h-0 min-w-0 flex-1" hidden={adventure}>
+      {/* All stay mounted, so a reply, a story part or a turn carries on
+          while another shows. */}
+      <div className="min-h-0 min-w-0 flex-1" hidden={view !== 'chat'}>
         <ChatPanel wide />
       </div>
-      <div className="min-h-0 min-w-0 flex-1" hidden={!adventure}>
+      <div className="min-h-0 min-w-0 flex-1" hidden={view !== 'story'}>
+        <StoryPanel />
+      </div>
+      <div className="min-h-0 min-w-0 flex-1" hidden={view !== 'adventure'}>
         <AdventurePanel phone={phone} />
       </div>
       {chatCardOpen &&

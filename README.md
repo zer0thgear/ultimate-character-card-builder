@@ -9,6 +9,7 @@ A workbench for roleplay character cards. Write the card, draw it, and chat with
 - **A writing assistant** on every field, for greetings, lorebook entries, tags and a card review, plus a free-form Brainstorm chat. It can take other cards and pictures as references, and a vision model can write from a gen. Every prompt it sends can be viewed and edited.
 - **A test chat** that builds the prompt the way SillyTavern does, SillyTavern chat-completion presets included, with personas, swipes, lorebook activation and a prompt inspector.
 - **Chat mode**, to use it as a chat frontend: a full-width chat with your cards and any you import for chatting, the card's definitions and lorebook a click away, and pictures of the story drawn right into the chat. Its **Adventure mode** runs a roleplay like a tabletop game: a Director, a narrator, a cast of characters with a call each, and real dice.
+- **Writing mode**, in Chat mode: write a story together with the model in one document (like NovelAI's story mode), with memory, an author's note, a Dramatis Personae cast and the card's lorebook.
 - **A gen library** that searches folders of old gens by prompt, model or seed, to reuse a prompt or pick an existing picture.
 - **Works on a phone** over Tailscale, one screen at a time.
 
