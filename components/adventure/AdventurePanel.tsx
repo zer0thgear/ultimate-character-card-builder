@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AdventureCtx, UsageTally } from '@/lib/adventure';
 import type { AdventureEntry, AdventureSession } from '@/types/adventure';
-import { callsPerTurn, effectiveWorld, openingMessages, runTurn, tallyUsage, undoLastTurn } from '@/lib/adventure';
+import { callsPerTurn, effectiveWorld, openingMessages, withOverride, runTurn, tallyUsage, undoLastTurn } from '@/lib/adventure';
 import { chatGreeting, loreDefaults, macroExpander } from '@/lib/chatPrompt';
 import { formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
 import { useProjectStore } from '@/store/projectStore';
@@ -11,6 +11,7 @@ import { useAdventureStore } from '@/store/adventureStore';
 import { useLlmStore } from '@/store/llmStore';
 import { resolvePersona, usePersonaStore } from '@/store/personaStore';
 import { toast } from '@/store/uiStore';
+import { openSettings } from '@/components/SettingsDialog';
 import { api } from '@/lib/api';
 import { uuid } from '@/lib/uuid';
 import { AutoTextarea, Button, IconButton, Toggle, confirmDialog, cx, enterSends, inputClass, textDialog } from '@/components/ui';
@@ -122,7 +123,8 @@ export function AdventurePanel({ phone }: { phone: boolean }) {
                 </IconButton>
               </>
             )}
-            <Button size="sm" variant={worldOpen ? 'primary' : 'secondary'} onClick={() => setWorldOpen(!worldOpen)} title="The world: settings, dramatis personae and rules, the card's and this adventure's">
+            {adventure && !creating && !phone && <PersonaSelect value={adventure.personaId} onChange={(personaId) => update((a) => ({ ...a, personaId }))} className="w-40" compact />}
+            <Button size="sm" variant={worldOpen ? 'primary' : 'secondary'} onClick={() => setWorldOpen(!worldOpen)} title="The world: the Cast, settings and rules, the card's and this adventure's">
               🌍{!phone && ' World'}
             </Button>
             <IconButton title="Actors: each one's connection, characters per turn, style" onClick={() => setActorsOpen(true)}>
@@ -154,6 +156,39 @@ export function AdventurePanel({ phone }: { phone: boolean }) {
 
 // ─── Starting one ────────────────────────────────────────────────────────────
 
+/** Who you play in an adventure: one of your personas, or (unset) the one
+ *  active in the chat settings. */
+function PersonaSelect({ value, onChange, className, compact }: { value: string | undefined; onChange: (id: string | undefined) => void; className?: string; compact?: boolean }) {
+  const personas = usePersonaStore((s) => s.personas);
+  const chatSettings = useLlmStore((s) => s.chatSettings);
+  const active = resolvePersona(personas, chatSettings);
+  const known = !!value && personas.some((p) => p.id === value);
+  return (
+    <span className={cx('flex items-center gap-1', className)}>
+      <select
+        value={known ? value : ''}
+        onChange={(e) => onChange(e.target.value || undefined)}
+        title="Who you play in this adventure ({{user}})"
+        aria-label="Persona"
+        className={cx(inputClass, 'min-w-0 py-1 text-xs')}
+      >
+        <option value="">{compact ? `👤 ${active.name}` : `The active persona (${active.name})`}</option>
+        {personas.map((p) => (
+          <option key={p.id} value={p.id}>
+            {compact ? '👤 ' : ''}
+            {p.name || 'Unnamed'}
+          </option>
+        ))}
+      </select>
+      {!compact && (
+        <button type="button" className="text-xs whitespace-nowrap text-violet-300 underline" onClick={() => openSettings('personas')}>
+          {personas.length ? 'Manage…' : 'Add a persona…'}
+        </button>
+      )}
+    </span>
+  );
+}
+
 /** The opening's narration (turn 0). */
 const openingEntry = (text: string): AdventureEntry => ({ id: uuid(), turn: 0, kind: 'narration', text, createdAt: Date.now() });
 
@@ -169,10 +204,16 @@ function NewAdventure({ ctx, onCancel, onStarted, onOpenWorld }: { ctx: Adventur
   const [seed, setSeed] = useState(-1);
   const [prompt, setPrompt] = useState('');
   const [dice, setDice] = useState(diceDefault);
+  const [personaId, setPersonaId] = useState<string | undefined>(undefined);
+  const personas = usePersonaStore((s) => s.personas);
+  const chatSettings = useLlmStore((s) => s.chatSettings);
   const [busy, setBusy] = useState(false);
   const [scanning, setScanning] = useState(false);
   const greetings = [card.first_mes, ...card.alternate_greetings];
-  const x = macroExpander(card, [], { userName: ctx.userName, persona: ctx.persona }).x;
+  // Who you play: the persona picked here, else the active one.
+  const me = resolvePersona(personas, chatSettings, { personaId });
+  const startCtx: AdventureCtx = { ...ctx, userName: me.name, persona: me.description, dice };
+  const x = macroExpander(card, [], { userName: me.name, persona: me.description }).x;
   const label = (i: number) => `${i === 0 ? 'First message' : `Alternate ${i}`}: ${x(greetings[i] ?? '').replace(/\s+/g, ' ').slice(0, 70) || '(empty)'}`;
   const w = project?.adventure;
   const worldEmpty = !w || !(w.settings.length || w.personae.length || w.rules.trim());
@@ -183,16 +224,16 @@ function NewAdventure({ ctx, onCancel, onStarted, onOpenWorld }: { ctx: Adventur
       if (how === 'greeting') {
         const text = x(chatGreeting(card, { greeting }));
         const entries = text.trim() ? [openingEntry(text)] : [];
-        await create({ opening: { kind: 'greeting', greeting }, entries, dice });
+        await create({ opening: { kind: 'greeting', greeting }, entries, dice, ...(personaId ? { personaId } : {}) });
         onStarted();
         return;
       }
-      const a = await create({ opening: { kind: 'director', prompt, ...(seed >= 0 ? { greeting: seed } : {}) }, entries: [], dice });
+      const a = await create({ opening: { kind: 'director', prompt, ...(seed >= 0 ? { greeting: seed } : {}) }, entries: [], dice, ...(personaId ? { personaId } : {}) });
       onStarted();
       const first = openingEntry('');
       const id = first.id;
       update((s) => ({ ...s, entries: [first] }));
-      const r = await callActor('director', '🎬 Opening', openingMessages({ ...ctx, dice }, { prompt, greeting: seed >= 0 ? chatGreeting(card, { greeting: seed }) : undefined }), {
+      const r = await callActor('director', '🎬 Opening', openingMessages(startCtx, { prompt, greeting: seed >= 0 ? chatGreeting(card, { greeting: seed }) : undefined }), {
         onText: (t) => useAdventureStore.getState().adventure?.id === a.id && update((s) => ({ ...s, entries: s.entries.map((e) => (e.id === id ? { ...e, text: t } : e)) })),
       });
       if (useAdventureStore.getState().adventure?.id !== a.id) return;
@@ -271,6 +312,10 @@ function NewAdventure({ ctx, onCancel, onStarted, onOpenWorld }: { ctx: Adventur
             </span>
           </label>
         </fieldset>
+        <label className="flex flex-col gap-1">
+          <span>You play</span>
+          <PersonaSelect value={personaId} onChange={setPersonaId} className="max-w-sm" />
+        </label>
         <Toggle checked={dice} onChange={setDice} label="🎲 Roll dice for uncertain actions" title="The Director asks for a roll when an outcome is uncertain; the app rolls real dice and the story follows the result" />
         <div className="flex gap-2">
           <Button variant="primary" disabled={busy || (how === 'greeting' && !greetings.length)} onClick={() => void start()}>
@@ -335,7 +380,8 @@ function Story({ adventure, ctx, phone }: { adventure: AdventureSession; ctx: Ad
           signal: controller.signal,
         },
       );
-      mine((s) => ({ ...s, entries: r.entries, scene: r.scene }));
+      // Newcomers join this adventure's Cast (🌍 World can add them to the card's).
+      mine((s) => ({ ...s, entries: r.entries, scene: r.scene, overrides: r.newCast.reduce((o, c) => withOverride(o, 'personae', c.id, c), s.overrides) }));
       if (r.error) setError(r.error);
     } finally {
       abort.current = null;
@@ -469,7 +515,7 @@ function EntryView({ entry: e, userName, avatar, busy, update }: { entry: Advent
           🔍
         </IconButton>
       )}
-      {e.kind !== 'roll' && (
+      {e.kind !== 'roll' && e.kind !== 'cast' && (
         <IconButton title="Edit" disabled={busy} onClick={() => setEditing(e.text)}>
           ✎
         </IconButton>
@@ -524,6 +570,15 @@ function EntryView({ entry: e, userName, avatar, busy, update }: { entry: Advent
           title={`Rolled ${e.roll.rolls.join(', ')}${e.roll.modifier ? `, ${e.roll.modifier > 0 ? '+' : ''}${e.roll.modifier}` : ''}`}
         >
           🎲 {e.text}
+        </span>
+        {tools}
+      </div>
+    );
+  if (e.kind === 'cast')
+    return (
+      <div className="group flex items-center justify-center gap-2">
+        <span className="rounded-full border border-violet-500/40 bg-violet-500/10 px-3 py-0.5 text-xs text-violet-200" title="They're in this adventure's Cast now (🌍 World), to be played the same way from here on">
+          🎭 {e.text}
         </span>
         {tools}
       </div>

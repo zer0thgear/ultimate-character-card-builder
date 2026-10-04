@@ -10,7 +10,7 @@ export type ActorId = 'director' | 'narrator' | 'cast' | 'scout';
 export const ACTORS: { id: ActorId; label: string; icon: string; blurb: string }[] = [
   { id: 'director', label: 'Director', icon: '🎬', blurb: 'Plans each turn: what happens, who acts, whether to roll. Also writes bespoke openings.' },
   { id: 'narrator', label: 'Narrator', icon: '📜', blurb: 'Sets the scene and describes what came of your action.' },
-  { id: 'cast', label: 'Cast', icon: '🎭', blurb: 'Plays each character who acts this turn, one call per character.' },
+  { id: 'cast', label: 'Cast', icon: '🎭', blurb: 'Plays each Cast member who acts this turn, one call per character.' },
   { id: 'scout', label: 'Scout', icon: '🔍', blurb: "Reads the card and lorebook to list the world's settings, characters and rules." },
 ];
 
@@ -25,7 +25,7 @@ export interface WorldEntry {
  *  what the Scout found in its definitions and lorebook, as you've edited it. */
 export interface AdventureWorld {
   settings: WorldEntry[];
-  /** Dramatis personae: everyone who can appear, the card's character first. */
+  /** The Cast: everyone who can appear, the card's character first. */
   personae: WorldEntry[];
   /** Game rules for the Director to keep (creature catching, HP, inventory…). */
   rules: string;
@@ -87,7 +87,7 @@ export interface DiceRoll {
 export interface AdventureEntry {
   id: string;
   turn: number;
-  kind: 'action' | 'note' | 'director' | 'roll' | 'narration' | 'character';
+  kind: 'action' | 'note' | 'director' | 'roll' | 'narration' | 'character' | 'cast';
   /** Who: the character's name (character), or {{user}}'s (action). */
   speaker?: string;
   text: string;
@@ -130,6 +130,8 @@ export interface AdventureSettings {
   style: string;
   /** How much of the story so far goes in each call, in characters. */
   historyBudget: number;
+  /** Newcomers the Director brings in join the adventure's Cast. */
+  autoCast?: boolean;
 }
 
 export const DEFAULT_ADVENTURE_SETTINGS: AdventureSettings = {
@@ -139,4 +141,5 @@ export const DEFAULT_ADVENTURE_SETTINGS: AdventureSettings = {
   pov: 'second',
   style: '',
   historyBudget: 24000,
+  autoCast: true,
 };

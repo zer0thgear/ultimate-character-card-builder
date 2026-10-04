@@ -144,6 +144,8 @@ export interface DirectorPlan {
   roll?: { reason: string; dice: string; dc?: number; modifier?: number } | null;
   narration: string;
   actors: { name: string; direction: string }[];
+  /** Characters the Director brought into the story this turn. */
+  newCast: { name: string; text: string }[];
   notes: string;
 }
 
@@ -179,7 +181,7 @@ const str = (v: unknown) => (typeof v === 'string' ? v.trim() : typeof v === 'nu
 export function parsePlan(text: string, fallbackActor: string): DirectorPlan & { parsed: boolean } {
   const raw = extractJson(text) as Record<string, unknown> | null;
   if (!raw || typeof raw !== 'object') {
-    return { narration: text.trim(), actors: fallbackActor ? [{ name: fallbackActor, direction: '' }] : [], notes: '', parsed: false };
+    return { narration: text.trim(), actors: fallbackActor ? [{ name: fallbackActor, direction: '' }] : [], newCast: [], notes: '', parsed: false };
   }
   const s = raw.scene as Record<string, unknown> | undefined;
   const scene: SceneState | undefined =
@@ -201,7 +203,10 @@ export function parsePlan(text: string, fallbackActor: string): DirectorPlan & {
   const actors = (Array.isArray(raw.actors) ? raw.actors : [])
     .map((a) => (typeof a === 'string' ? { name: a.trim(), direction: '' } : a && typeof a === 'object' ? { name: str((a as Record<string, unknown>).name), direction: str((a as Record<string, unknown>).direction) } : null))
     .filter((a): a is { name: string; direction: string } => !!a?.name);
-  return { scene, roll, narration: str(raw.narration), actors, notes: str(raw.notes), parsed: true };
+  const newCast = (Array.isArray(raw.new_cast) ? raw.new_cast : Array.isArray(raw.newCast) ? raw.newCast : [])
+    .map((c) => (typeof c === 'string' ? { name: c.trim(), text: '' } : c && typeof c === 'object' ? { name: str((c as Record<string, unknown>).name), text: str((c as Record<string, unknown>).text ?? (c as Record<string, unknown>).description) } : null))
+    .filter((c): c is { name: string; text: string } => !!c?.name);
+  return { scene, roll, narration: str(raw.narration), actors, newCast, notes: str(raw.notes), parsed: true };
 }
 
 // ─── Prompts ─────────────────────────────────────────────────────────────────
@@ -277,7 +282,7 @@ function contextBlock(ctx: AdventureCtx, entries: AdventureEntry[], scene: Scene
     const about = [x(card.description), card.personality.trim() && `Personality: ${x(card.personality)}`, card.scenario.trim() && `Scenario: ${x(card.scenario)}`].filter(Boolean).join('\n\n');
     if (about) parts.push(`<card name="${charName(card)}">\n${about}\n</card>`);
   }
-  const world = [w.settings.length && `## Settings\n${bullets(w.settings, x)}`, w.personae.length && `## Dramatis personae\n${bullets(w.personae, x)}`].filter(Boolean).join('\n\n');
+  const world = [w.settings.length && `## Settings\n${bullets(w.settings, x)}`, w.personae.length && `## Cast\n${bullets(w.personae, x)}`].filter(Boolean).join('\n\n');
   if (world) parts.push(`<world>\n${world}\n</world>`);
   if (lore.length) parts.push(`<lore>\n${lore.join('\n\n')}\n</lore>`);
   if (w.rules.trim()) parts.push(`<rules>\n${x(w.rules)}\n</rules>`);
@@ -306,6 +311,7 @@ Each turn, read the world, the scene and the latest events, then plan:
 - ${dice}
 - Which characters act this turn, in order: at most ${ctx.settings.maxActors}, only ones present in the scene, never ${user}. None is fine when narration is enough.
 - Keep the rules (if any) and apply them consistently; keep track of anything they need in your notes.
+- Anyone you bring into the story who isn't in the Cast yet (a new character, a named creature, someone the player meets) goes in "new_cast" with a short sheet, so they're played the same way from then on.
 
 Reply with only a JSON object, no other text:
 {
@@ -313,6 +319,7 @@ Reply with only a JSON object, no other text:
   "roll": null or {"reason": "what is being attempted", "dice": "1d20", "dc": 12, "modifier": 0},
   "narration": "the Narrator's brief: what to describe this turn",
   "actors": [{"name": "character's name", "direction": "what they do or want this turn, in a few words"}],
+  "new_cast": [{"name": "a newcomer's name", "text": "who they are, how they look, act and talk"}],
   "notes": "your private notes: plans, secrets, timers, and the rules' bookkeeping (items, HP, captured creatures…)"
 }`;
   const parts = [contextBlock(ctx, entries, scene, { notes: true })];
@@ -346,15 +353,15 @@ export function narratorMessages(ctx: AdventureCtx, entries: AdventureEntry[], s
   ];
 }
 
-/** Who a character is: their dramatis personae entry, and the card itself
+/** Who a character is: their Cast entry, and the card itself
  *  for the card's own character. */
 function characterSheet(ctx: AdventureCtx, name: string): string {
   const x = expander(ctx);
   const key = name.trim().toLowerCase();
-  const entry = ctx.world.personae.find((p) => x(p.name).trim().toLowerCase() === key);
+  const entry = ctx.world.personae.find((p) => x(p.name).trim().toLowerCase() === key) ?? ctx.world.personae.find((p) => knownName(name, [x(p.name)]));
   const main = [ctx.card.name, ctx.card.nickname].some((n) => n?.trim().toLowerCase() === key);
   const parts = [entry && x(entry.text), main && x(ctx.card.description), main && ctx.card.personality.trim() && `Personality: ${x(ctx.card.personality)}`].filter(Boolean);
-  return parts.length ? parts.join('\n\n') : `${name} isn't in the dramatis personae: play them as the scene and story so far suggest, and keep them consistent.`;
+  return parts.length ? parts.join('\n\n') : `${name} isn't in the Cast yet: play them as the scene and story so far suggest, and keep them consistent.`;
 }
 
 /** One character's part of the turn. */
@@ -439,6 +446,35 @@ export function parseScout(text: string): Pick<AdventureWorld, 'settings' | 'per
 
 // ─── A turn ──────────────────────────────────────────────────────────────────
 
+const nameKey = (n: string) => n.toLowerCase().replace(/[^\p{L}\p{N} ]+/gu, ' ').replace(/\s+/g, ' ').trim();
+
+/** Whether `name` is someone already known: the same name, or one with a
+ *  title or a surname more or less ("Captain Vex" is Vex). */
+export function knownName(name: string, known: string[]): boolean {
+  const k = nameKey(name);
+  if (!k) return true;
+  return known.some((n) => {
+    const m = nameKey(n);
+    return !!m && (m === k || ` ${m} `.includes(` ${k} `) || ` ${k} `.includes(` ${m} `));
+  });
+}
+
+/** The characters a plan brings in who aren't in the Cast (nor you, nor the
+ *  card's character): the Director's newcomers, and anyone acting this
+ *  turn without a sheet. */
+export function newCastFrom(plan: Pick<DirectorPlan, 'newCast' | 'actors'>, ctx: AdventureCtx, turn: number): WorldEntry[] {
+  const x = expander(ctx);
+  const known = [ctx.userName || 'User', ctx.card.name, ctx.card.nickname ?? '', ...ctx.world.personae.map((p) => x(p.name))];
+  const found: WorldEntry[] = [];
+  const consider = (name: string, text: string) => {
+    if (knownName(name, [...known, ...found.map((f) => f.name)])) return;
+    found.push({ id: uuid(), name: name.trim(), text: text.trim() || `Came into the story in turn ${turn}.` });
+  };
+  for (const c of plan.newCast) consider(c.name, c.text);
+  for (const a of plan.actors) consider(a.name, a.direction ? `Came into the story in turn ${turn}: ${a.direction}.` : '');
+  return found;
+}
+
 export interface ActorResult {
   text: string;
   usage?: CallUsage;
@@ -491,8 +527,17 @@ export function planText(plan: DirectorPlan): string {
  * narration and each acting character's part, adding each to the story as
  * it comes. An error or a stop leaves what was written so far.
  */
-export async function runTurn(input: TurnInput, deps: TurnDeps): Promise<{ entries: AdventureEntry[]; scene: SceneState | undefined; error?: string }> {
-  const { ctx } = input;
+export interface TurnResult {
+  entries: AdventureEntry[];
+  scene: SceneState | undefined;
+  /** Newcomers to the Cast, for the adventure to keep. */
+  newCast: WorldEntry[];
+  error?: string;
+}
+
+export async function runTurn(input: TurnInput, deps: TurnDeps): Promise<TurnResult> {
+  let { ctx } = input;
+  let newCast: WorldEntry[] = [];
   const now = deps.now ?? Date.now;
   let entries = [...input.session.entries];
   let scene = input.session.scene;
@@ -518,12 +563,21 @@ export async function runTurn(input: TurnInput, deps: TurnDeps): Promise<{ entri
   // 1. The Director plans.
   const notes = directorNotes(entries);
   const d = await deps.call('director', '🎬 Director', directorMessages(ctx, entries, scene, { notes, directorNote }));
-  if (stopped()) return { entries, scene };
-  if (d.error || !d.text.trim()) return { entries, scene, error: d.error ?? 'The Director sent nothing back.' };
+  if (stopped()) return { entries, scene, newCast };
+  if (d.error || !d.text.trim()) return { entries, scene, newCast, error: d.error ?? 'The Director sent nothing back.' };
   const plan = parsePlan(d.text, charName(ctx.card));
   if (plan.scene) scene = plan.scene;
   add({ kind: 'director', text: planText(plan) + (plan.parsed ? '' : '\n(The plan wasn\'t JSON: its text went to the Narrator as the brief.)'), sceneBefore: sceneBefore ?? { location: '', present: [], situation: '' }, usage: d.usage });
-  if (stopped()) return { entries, scene };
+  const userKey = user.trim().toLowerCase();
+  const actors = plan.actors.filter((a) => a.name.trim().toLowerCase() !== userKey).slice(0, Math.max(0, ctx.settings.maxActors));
+  if (ctx.settings.autoCast !== false) {
+    newCast = newCastFrom({ newCast: plan.newCast, actors }, ctx, turn);
+    if (newCast.length) {
+      ctx = { ...ctx, world: { ...ctx.world, personae: [...ctx.world.personae, ...newCast] } };
+      add({ kind: 'cast', text: `New in the Cast: ${newCast.map((c) => c.name).join(', ')}` });
+    }
+  }
+  if (stopped()) return { entries, scene, newCast };
 
   // 2. Dice.
   let roll: DiceRoll | undefined;
@@ -538,21 +592,19 @@ export async function runTurn(input: TurnInput, deps: TurnDeps): Promise<{ entri
     const id = add({ kind: 'narration', text: '' });
     const n = await deps.call('narrator', '📜 Narrator', narratorMessages(ctx, entries.filter((e) => e.id !== id), scene, plan.narration, roll), (t) => patch(id, { text: t }));
     patch(id, { text: n.text.trim(), usage: n.usage });
-    if (n.error) return { entries: entries.filter((e) => e.id !== id || e.text), scene, error: n.error };
-    if (stopped()) return { entries, scene };
+    if (n.error) return { entries: entries.filter((e) => e.id !== id || e.text), scene, newCast, error: n.error };
+    if (stopped()) return { entries, scene, newCast };
   }
 
   // 4. The Cast, one character at a time.
-  const userKey = user.trim().toLowerCase();
-  const actors = plan.actors.filter((a) => a.name.trim().toLowerCase() !== userKey).slice(0, Math.max(0, ctx.settings.maxActors));
   for (const a of actors) {
     const id = add({ kind: 'character', speaker: a.name, text: '' });
     const c = await deps.call('cast', `🎭 ${a.name}`, castMessages(ctx, entries.filter((e) => e.id !== id), scene, a), (t) => patch(id, { text: t }));
     patch(id, { text: c.text.trim(), usage: c.usage });
-    if (c.error) return { entries: entries.filter((e) => e.id !== id || e.text), scene, error: c.error };
-    if (stopped()) return { entries, scene };
+    if (c.error) return { entries: entries.filter((e) => e.id !== id || e.text), scene, newCast, error: c.error };
+    if (stopped()) return { entries, scene, newCast };
   }
-  return { entries, scene };
+  return { entries, scene, newCast };
 }
 
 /** The latest turn's entries gone, but for what you did (to play it again),

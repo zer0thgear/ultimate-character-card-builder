@@ -12,6 +12,8 @@ import {
   effectiveWorld,
   extractJson,
   judgeRoll,
+  knownName,
+  newCastFrom,
   mergeWorld,
   narratorMessages,
   openingMessages,
@@ -223,7 +225,7 @@ describe('prompts', () => {
     expect(ann).toContain('A knight, loyal to Bob.');
     expect(ann).toContain('Ann is a knight sworn to Bob.');
     expect(ann).toContain('worried');
-    expect(castMessages(ctx(), story, undefined, { name: 'Stranger', direction: '' })[1].content).toContain("isn't in the dramatis personae");
+    expect(castMessages(ctx(), story, undefined, { name: 'Stranger', direction: '' })[1].content).toContain("isn't in the Cast yet");
   });
 
   it('opens from a greeting and a wish', () => {
@@ -324,5 +326,48 @@ describe('a turn', () => {
 
   it('counts the calls a turn makes', () => {
     expect(callsPerTurn({ maxActors: 2 })).toBe(4);
+  });
+});
+
+describe('newcomers to the Cast', () => {
+  it('matches names loosely', () => {
+    expect(knownName('Captain Vex', ['Vex'])).toBe(true);
+    expect(knownName('vex', ['Captain Vex'])).toBe(true);
+    expect(knownName('Vexa', ['Vex'])).toBe(false);
+    expect(knownName('Mira', ['Ann', 'Grim'])).toBe(false);
+  });
+
+  it("reads the Director's newcomers", () => {
+    const plan = parsePlan(JSON.stringify({ narration: 'n', actors: [], new_cast: [{ name: 'Mira', text: 'A smuggler.' }, 'Tobb', { text: 'nameless' }] }), 'Ann');
+    expect(plan.newCast).toEqual([
+      { name: 'Mira', text: 'A smuggler.' },
+      { name: 'Tobb', text: '' },
+    ]);
+  });
+
+  it('finds who is new: not you, not the card, not the Cast, not twice', () => {
+    const found = newCastFrom({ newCast: [{ name: 'Mira', text: 'A smuggler.' }, { name: 'Grim', text: 'dup' }, { name: 'Bob', text: 'you' }], actors: [{ name: 'Mira', direction: 'x' }, { name: 'Sergeant Tobb', direction: 'barks orders' }, { name: 'Ann', direction: '' }] }, ctx(), 3);
+    expect(found.map((f) => [f.name, f.text])).toEqual([
+      ['Mira', 'A smuggler.'],
+      ['Sergeant Tobb', 'Came into the story in turn 3: barks orders.'],
+    ]);
+  });
+
+  it('adds them during a turn and plays them from their new sheet', async () => {
+    const sheets: string[] = [];
+    const d: TurnDeps = {
+      call: async (actor, _label, messages) => {
+        if (actor === 'cast') sheets.push(messages[1].content);
+        const text = actor === 'director' ? JSON.stringify({ narration: 'n', actors: [{ name: 'Mira', direction: 'haggles' }], new_cast: [{ name: 'Mira', text: 'A smuggler with a scar.' }] }) : 'ok';
+        return { text };
+      },
+      onChange: () => {},
+    };
+    const r = await runTurn({ ctx: ctx(), session: { entries: [] }, action: 'x' }, d);
+    expect(r.newCast.map((c) => c.name)).toEqual(['Mira']);
+    expect(r.entries.find((e) => e.kind === 'cast')?.text).toBe('New in the Cast: Mira');
+    expect(sheets[0]).toContain('<character name="Mira">\nA smuggler with a scar.');
+    const off = await runTurn({ ctx: ctx({ settings: { ...DEFAULT_ADVENTURE_SETTINGS, autoCast: false } }), session: { entries: [] }, action: 'x' }, d);
+    expect(off.newCast).toEqual([]);
   });
 });
