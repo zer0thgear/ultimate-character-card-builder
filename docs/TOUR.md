@@ -43,6 +43,7 @@ Open **🎨 Image**. The prompt is split into parts:
 - **Style**: artist and style tags, put first in every prompt. The assistant never changes this, so the look stays the same while the rest changes.
 - **Scene**: framing, pose and setting.
 - **Characters**: one prompt per character, for their look. On NovelAI V4 and later these are separate character prompts, which can be placed on a grid. With A1111 or ComfyUI they're added to the end of the prompt.
+- **Tidbits**: switchable pieces under any prompt (an outfit, a place), added when they're on. Ones you reuse go in the **Tidbit Library**, which every card shares; a **random** entry there gives each picture one of its lines, written in a prompt as `__Name__`.
 
 You don't have to write tags by hand:
 

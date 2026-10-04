@@ -32,6 +32,8 @@ import { greetingText } from '@/lib/chatPrompt';
 import { saveSessionImage } from '@/lib/imageActions';
 import { TagAutocompleteField } from '@/components/TagAutocompleteField';
 import { TokenMeter } from '@/components/TokenMeter';
+import { hasActiveTidbits } from '@/lib/promptTidbits';
+import { TidbitLibrarySection, TidbitList, UnknownReferences } from '@/components/dock/PromptTidbits';
 import { Button, IconButton, NumberInput, Toggle, cx, inputClass } from '@/components/ui';
 import { ImageViewer } from '@/components/dock/ImageViewer';
 import { openSettings } from '@/components/SettingsDialog';
@@ -149,7 +151,7 @@ function PromptForm() {
     const mask = source.mask ? await blobToBase64(source.mask.full) : undefined;
     return { image, mask, width: source.width, height: source.height, strength, noise, inpaintStrength };
   };
-  const hasPrompt = !!basePrompt?.text.trim() || form.characters.some((c) => c.enabled && c.prompt.trim());
+  const hasPrompt = !!basePrompt?.text.trim() || hasActiveTidbits(basePrompt?.tidbits) || form.characters.some((c) => c.enabled && !c.archived && (c.prompt.trim() || hasActiveTidbits(c.tidbits)));
 
   const run = async () => {
     if (!connection) return openSettings('image');
@@ -342,6 +344,7 @@ function PromptForm() {
         onChange={setBasePrompt}
         model={form.model}
         apiKey={apiKey}
+        tidbits={<TidbitList tidbits={basePrompt?.tidbits} onChange={(tidbits) => set('basePrompts', form.basePrompts.map((p) => (p.id === basePrompt?.id ? { ...p, tidbits } : p)))} model={form.model} apiKey={apiKey} placeholder="cherry blossoms, night" />}
         meter={nai && counts && basePrompt ? <TokenMeter own={counts.base[basePrompt.id] ?? 0} others={counts.characterPromptTotal} budget={counts.budget} othersLabel="Characters" /> : null}
       />
       {/* NovelAI's dataset switches, put first in the prompt; the card's own.
@@ -356,6 +359,7 @@ function PromptForm() {
       <div className="flex flex-col gap-1">
         <span className="text-xs font-semibold tracking-wide text-slate-300 uppercase">Negative prompt</span>
         <TagAutocompleteField value={form.negativePrompt} onChange={(v) => set('negativePrompt', v)} model={form.model} apiKey={apiKey} className={promptClass} rows={3} />
+        <TidbitList tidbits={form.negativeTidbits} onChange={(v) => set('negativeTidbits', v)} model={form.model} apiKey={apiKey} placeholder="tags kept out when on" />
         {nai && counts && <TokenMeter own={counts.negative} others={counts.characterUcTotal} budget={counts.budget} othersLabel="Character negatives" />}
         {form.negativePrompt !== (nai || !connection ? DEFAULT_NEGATIVE : SD_DEFAULT_NEGATIVE) && (
           <button
@@ -368,6 +372,9 @@ function PromptForm() {
           </button>
         )}
       </div>
+
+      <UnknownReferences />
+      <TidbitLibrarySection />
 
       {connection && !nai && <BackendSettings connection={connection} />}
       <div className={cx('grid grid-cols-2 gap-3', !nai && connection && 'hidden')}>
@@ -587,7 +594,7 @@ function StyleSection({ text, onChange, model, apiKey }: { text: string; onChang
   );
 }
 
-function SceneSection({ text, onChange, model, apiKey, meter }: { text: string; onChange: (v: string) => void; model: NovelAIModel; apiKey: string; meter: React.ReactNode }) {
+function SceneSection({ text, onChange, model, apiKey, tidbits, meter }: { text: string; onChange: (v: string) => void; model: NovelAIModel; apiKey: string; tidbits: React.ReactNode; meter: React.ReactNode }) {
   const card = useProjectStore((s) => s.project?.card.data);
   const illustrate = useBridgeStore((s) => s.illustrate);
   const clearIllustrate = useBridgeStore((s) => s.clearIllustrate);
@@ -688,6 +695,7 @@ function SceneSection({ text, onChange, model, apiKey, meter }: { text: string; 
         </div>
       </div>
       <TagAutocompleteField value={text} onChange={onChange} model={model} apiKey={apiKey} className={promptClass} rows={3} placeholder="cowboy shot, smile, looking at viewer, indoors, tavern, warm lighting" />
+      {tidbits}
       {meter}
     </div>
   );
@@ -805,7 +813,13 @@ function CharactersSection({ counts, nai }: { counts: Record<string, { prompt: n
             </IconButton>
           </div>
           <TagAutocompleteField value={c.prompt} onChange={(prompt) => update(c.id, { prompt })} model={model} apiKey={apiKey} className={promptClass} rows={2} placeholder="1girl, long silver hair, red eyes, knight armor" />
-          {(openUc.has(c.id) || c.uc) && <TagAutocompleteField value={c.uc} onChange={(uc) => update(c.id, { uc })} model={model} apiKey={apiKey} className={cx(promptClass, 'min-h-10')} rows={1} placeholder="This character's negative" />}
+          <TidbitList tidbits={c.tidbits} onChange={(tidbits) => update(c.id, { tidbits })} model={model} apiKey={apiKey} placeholder="school uniform, holding sword" />
+          {(openUc.has(c.id) || c.uc || !!c.ucTidbits?.length) && (
+            <>
+              <TagAutocompleteField value={c.uc} onChange={(uc) => update(c.id, { uc })} model={model} apiKey={apiKey} className={cx(promptClass, 'min-h-10')} rows={1} placeholder="This character's negative" />
+              <TidbitList tidbits={c.ucTidbits} onChange={(ucTidbits) => update(c.id, { ucTidbits })} model={model} apiKey={apiKey} placeholder="tags kept off this character when on" />
+            </>
+          )}
           {counts[c.id] && <span className="text-right text-[10px] text-slate-500 tabular-nums">{counts[c.id].prompt} tokens</span>}
         </div>
       ))}

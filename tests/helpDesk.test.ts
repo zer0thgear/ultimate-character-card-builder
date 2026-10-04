@@ -43,6 +43,12 @@ describe('helper docs', () => {
     expect(pickChunks(chunks, 'the and how', 6000)).toEqual([]);
   });
 
+  it('finds prompt tidbits and wildcards', () => {
+    const chunks = chunkDoc('Feature reference', docs.features);
+    expect(pickChunks(chunks, 'How do prompt tidbits work?', 6000).some((c) => /Tidbit Library/.test(c.text))).toBe(true);
+    expect(pickChunks(chunks, 'Can I use wildcards?', 6000).some((c) => /__Name__/.test(c.text))).toBe(true);
+  });
+
   it('outlines the reference by its headings', () => {
     const o = outline(docs.features);
     expect(o).toContain('- Test chat');

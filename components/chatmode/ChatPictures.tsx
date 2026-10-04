@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { hasActiveTidbits } from '@/lib/promptTidbits';
 import { useChatStore } from '@/store/chatStore';
 import { useProjectStore } from '@/store/projectStore';
 import { useSettingsStore, type FormSettings } from '@/store/settingsStore';
@@ -46,7 +47,7 @@ export interface DrawSpec {
 const formCharacters = (): DrawSpec['characters'] =>
   useSettingsStore
     .getState()
-    .characters.filter((c) => c.enabled && !c.archived && c.prompt.trim())
+    .characters.filter((c) => c.enabled && !c.archived && (c.prompt.trim() || hasActiveTidbits(c.tidbits)))
     .map((c) => ({ label: c.label ?? '', prompt: c.prompt }));
 
 /** The chat's latest moment, as the prompt writer reads it. */
@@ -91,7 +92,7 @@ export function useChatPictures() {
     // Into the card's character slots (by name), as the Image tab would, but
     // only for this picture: the Image tab's own prompts aren't changed.
     const merged = cast.characters.length ? mergeCast(form.characters, cast.characters, { scene: true, max: maxCharacters(form.model), cardName: card.name }).characters : form.characters;
-    const characters = merged.filter((c) => c.enabled && !c.archived && c.prompt.trim()).map((c) => ({ label: c.label ?? '', prompt: c.prompt, ...(place && c.center ? { center: c.center } : {}) }));
+    const characters = merged.filter((c) => c.enabled && !c.archived && (c.prompt.trim() || hasActiveTidbits(c.tidbits))).map((c) => ({ label: c.label ?? '', prompt: c.prompt, ...(place && c.center ? { center: c.center } : {}) }));
     return { scene: cast.scene ?? '', characters, nsfw: cast.nsfw, fur: cast.fur };
   };
 
@@ -108,7 +109,13 @@ export function useChatPictures() {
     setPending({ after, replacing: replacing?.id, stage: 'drawing' });
     const form = useSettingsStore.getState();
     const nai = connection.kind === 'novelai';
-    const characters: CharacterPromptEntry[] = spec.characters.map((c, i) => ({ id: `chat-${i}`, label: c.label, prompt: c.prompt, uc: '', center: c.center ?? { x: 0.5, y: 0.5 }, enabled: true }));
+    // A character's own negative and tidbits (an outfit, say) come from the
+    // Image tab's slot of that name, as they would there.
+    const slot = (label: string) => form.characters.find((c) => !c.archived && (c.label ?? '').trim().toLowerCase() === label.trim().toLowerCase());
+    const characters: CharacterPromptEntry[] = spec.characters.map((c, i) => {
+      const own = slot(c.label);
+      return { id: `chat-${i}`, label: c.label, prompt: c.prompt, uc: own?.uc ?? '', tidbits: own?.tidbits, ucTidbits: own?.ucTidbits, center: c.center ?? { x: 0.5, y: 0.5 }, enabled: true };
+    });
     // Other backends have no dataset switches: nsfw goes in as a tag.
     const scene = !nai && spec.nsfw && !/(^|,)\s*nsfw\s*(,|$)/i.test(spec.scene) ? joinPromptParts('nsfw', spec.scene) : spec.scene;
     const f: FormSettings = {
