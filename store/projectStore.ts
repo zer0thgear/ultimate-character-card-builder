@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import type { CardData, CharacterCard } from '@/types/card';
+import type { AdventureWorld } from '@/types/adventure';
 import type { CardProject, CardVersionInfo, KeptImage, ProjectSummary, VersionReason } from '@/types/project';
 import { api } from '@/lib/api';
 import { useSessionStore } from '@/store/sessionStore';
@@ -57,6 +58,8 @@ interface ProjectState {
   /** Keeps a version of the card as it is now (lib/versionHistory.ts). */
   keepVersion: (reason: VersionReason, label?: string) => Promise<CardVersionInfo | null>;
   setNotes: (notes: string) => void;
+  /** The card's world for Adventure mode (not part of card undo). */
+  setAdventureWorld: (world: AdventureWorld) => void;
   undo: () => void;
   redo: () => void;
   setAvatar: (image: Blob) => Promise<void>;
@@ -275,6 +278,13 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       const p = get().project;
       if (!p) return;
       set({ project: { ...p, notes } });
+      schedule();
+    },
+
+    setAdventureWorld: (adventure) => {
+      const p = get().project;
+      if (!p) return;
+      set({ project: { ...p, adventure } });
       schedule();
     },
 

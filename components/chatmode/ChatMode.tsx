@@ -20,6 +20,8 @@ import { chatStatsDetail, sortDetail } from '@/lib/cardSort';
 import { importFromUrl } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
 import type { ProjectSummary } from '@/types/project';
+import { AdventurePanel } from '@/components/adventure/AdventurePanel';
+import { useAdventureStore } from '@/store/adventureStore';
 
 // Chat mode: the app as a chat frontend. Your cards and the ones imported
 // here, a full-width chat, and the card's definitions a click away, with
@@ -218,27 +220,29 @@ function addToBuilderNow(id: string, name: string) {
  *  and Builder (on a phone, "Add to Builder" is in the card drawer). */
 export function ChatCardActions({ phone }: { phone: boolean }) {
   const project = useProjectStore((s) => s.project);
-  const { chatCardOpen, setChatCardOpen, chatView, setChatView } = useUiStore();
+  const { chatCardOpen, setChatCardOpen } = useUiStore();
+  const { view, setView } = useAdventureStore();
   if (!project) return null;
   const name = project.card.data.name || 'Unnamed';
   return (
     <>
-      <div className="flex overflow-hidden rounded-md border border-slate-700 text-xs" role="tablist" aria-label="Chat or story">
+      <div className="flex overflow-hidden rounded-md border border-slate-700 text-xs" role="tablist" aria-label="Chat, story or adventure">
         {(
           [
             { view: 'chat', icon: '🗨', label: 'Chat', title: 'Chat with the character, turn by turn' },
             { view: 'story', icon: '✍', label: 'Story', title: 'Writing mode: write a story together with the model, in one document' },
+            { view: 'adventure', icon: '🎲', label: 'Adventure', title: 'Adventure mode: a roleplay run by a Director, with a narrator, a cast and dice' },
           ] as const
         ).map((m) => (
           <button
             key={m.view}
             type="button"
             role="tab"
-            aria-selected={chatView === m.view}
+            aria-selected={view === m.view}
             title={m.title}
             aria-label={m.label}
-            onClick={() => setChatView(m.view)}
-            className={cx('px-2 py-0.5 whitespace-nowrap', chatView === m.view ? 'bg-violet-600 text-white' : 'text-slate-300 hover:bg-slate-800')}
+            onClick={() => setView(m.view)}
+            className={cx('px-2 py-0.5 whitespace-nowrap', view === m.view ? 'bg-violet-600 text-white' : 'text-slate-300 hover:bg-slate-800')}
           >
             {m.icon}
             {!phone && ` ${m.label}`}
@@ -263,22 +267,26 @@ export function ChatCardActions({ phone }: { phone: boolean }) {
   );
 }
 
-/** A card open in Chat mode: the chat (or the story, in Writing mode), and
- *  its definitions. The card's
+/** A card open in Chat mode: the chat (or the story, or the adventure),
+ *  and its definitions. The card's
  *  picture, name and buttons are in the header, leaving the chat the room. */
 export function ChatScreen({ phone }: { phone: boolean }) {
   const project = useProjectStore((s) => s.project);
-  const { chatCardOpen, setChatCardOpen, chatView } = useUiStore();
+  const { chatCardOpen, setChatCardOpen } = useUiStore();
+  const view = useAdventureStore((s) => s.view);
   if (!project) return null;
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1">
-      {/* Both stay mounted, so a reply or a story part carries on while the
-          other is shown. */}
-      <div className="min-h-0 min-w-0 flex-1" hidden={chatView !== 'chat'}>
+      {/* All stay mounted, so a reply, a story part or a turn carries on
+          while another shows. */}
+      <div className="min-h-0 min-w-0 flex-1" hidden={view !== 'chat'}>
         <ChatPanel wide />
       </div>
-      <div className="min-h-0 min-w-0 flex-1" hidden={chatView !== 'story'}>
+      <div className="min-h-0 min-w-0 flex-1" hidden={view !== 'story'}>
         <StoryPanel />
+      </div>
+      <div className="min-h-0 min-w-0 flex-1" hidden={view !== 'adventure'}>
+        <AdventurePanel phone={phone} />
       </div>
       {chatCardOpen &&
         (phone ? (
