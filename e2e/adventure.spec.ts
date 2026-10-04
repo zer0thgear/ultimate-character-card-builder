@@ -14,7 +14,8 @@ async function mockActors(page: Page) {
     let text = 'Something happens.';
     if (system.includes('character cards')) text = JSON.stringify({ settings: [{ name: 'Iron Gate', text: 'The fort gate.' }], personae: [{ name: 'Keeper', text: 'The gatekeeper.' }, { name: 'Grim', text: 'A grumpy guard.' }], rules: '- Keys open doors.' });
     else if (system.startsWith('You are the Director') && user.includes('I hail the stranger')) text = JSON.stringify({ narration: 'A hooded woman steps out.', actors: [{ name: 'Mira', direction: 'sizes them up' }], new_cast: [{ name: 'Mira', text: 'A hooded smuggler with a scar.' }] });
-    else if (system.startsWith('You are the Director')) text = JSON.stringify({ scene: { location: 'Iron Gate', time: 'dusk', present: ['Rook', 'Keeper', 'Grim'], situation: 'A stranger at the gate.' }, roll: { reason: 'Sneaking past', dice: '1d20', dc: 1 }, narration: 'On success: they slip by.', actors: [{ name: 'Keeper', direction: 'suspicious' }, { name: 'Grim', direction: 'grumbles' }], notes: 'Keeper owes a debt.' });
+    else if (system.startsWith('You are the Director')) text = JSON.stringify({ scene: { location: 'Iron Gate', time: 'dusk', present: ['Rook', 'Keeper', 'Grim'], situation: 'A stranger at the gate.' }, roll: { reason: 'Sneaking past', dice: '1d20', dc: 1 }, beats: [{ narrate: 'On success: they slip by.' }, { actor: 'Keeper', direction: 'suspicious' }, { narrate: 'A torch gutters.' }, { actor: 'Grim', direction: 'answers Keeper' }], notes: 'Keeper owes a debt.' });
+    else if (system.startsWith('You are the Narrator') && system.includes('falls between characters')) text = 'A torch gutters in the wind.';
     else if (system.startsWith('You are the Narrator')) text = 'You slip past the torchlight.';
     else if (system.includes('You are playing Keeper')) text = '"Who goes there?" Keeper squints.';
     else if (system.includes('You are playing Mira')) text = 'Mira lowers her hood. "You\'re not from here."';
@@ -54,8 +55,9 @@ test('an adventure: scan the card, open with the greeting, play a turn', async (
   await page.getByPlaceholder(/What do you do, Rook/).press('Enter');
   await expect(page.getByText('Nobody, that\'s who.', { exact: false })).toBeVisible();
   await expect(page.getByText('You slip past the torchlight.')).toBeVisible();
+  await expect(page.getByText('A torch gutters in the wind.')).toBeVisible();
   await expect(page.getByText(/Sneaking past: 1d20 → \d+ vs 1: success/)).toBeVisible();
-  await expect(page.getByText(/Turn 1 · 4 calls · 400 in \/ 80 out/)).toBeVisible();
+  await expect(page.getByText(/Turn 1 · 5 calls · 500 in \/ 100 out/)).toBeVisible();
   await expect(page.getByText('📍 Iron Gate · dusk')).toBeVisible();
   await page.screenshot({ path: 'test-results/adventure-turn.png', fullPage: true });
 
@@ -63,12 +65,17 @@ test('an adventure: scan the card, open with the greeting, play a turn', async (
   const director = sent.find((s) => s.system.startsWith('You are the Director') && s.user.includes('I sneak past'));
   expect(director?.user).toContain('Grim: A grumpy guard.');
   expect(director?.user).toContain('- Keys open doors.');
-  expect(sent.find((s) => s.system.includes('You are playing Grim'))?.user).toContain('<character name="Grim">\nA grumpy guard.');
+  const grim = sent.find((s) => s.system.includes('You are playing Grim'))?.user;
+  expect(grim).toContain('<character name="Grim">\nA grumpy guard.');
+  // Beats run in order: Grim answers Keeper, after the torch gutters; the first passage leaves both to themselves.
+  expect(grim).toContain('[Keeper] "Who goes there?"');
+  expect(grim).toContain('[Narrator] A torch gutters in the wind.');
+  expect(sent.find((s) => s.system.startsWith('You are the Narrator') && !s.system.includes('falls between'))?.system).toContain('Keeper, Grim act right after this passage');
 
   // Redo plays the turn again from the same action.
   const before = sent.length;
   await page.getByRole('button', { name: /Redo turn/ }).click();
-  await expect.poll(() => sent.length).toBe(before + 4);
+  await expect.poll(() => sent.length).toBe(before + 5);
   await expect(page.getByText('I sneak past the gate.')).toHaveCount(1);
   await expect(page.getByText('You slip past the torchlight.')).toHaveCount(1);
 

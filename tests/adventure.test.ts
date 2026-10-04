@@ -19,6 +19,7 @@ import {
   openingMessages,
   overlayList,
   parsePlan,
+  turnBeats,
   parseScout,
   rollDice,
   runTurn,
@@ -167,8 +168,22 @@ describe("the Director's plan", () => {
 
   it("makes a turn of a reply that isn't JSON", () => {
     const plan = parsePlan('The raiders charge.', 'Ann');
-    expect(plan).toMatchObject({ parsed: false, narration: 'The raiders charge.', actors: [{ name: 'Ann', direction: '' }] });
+    expect(plan).toMatchObject({ parsed: false, beats: [{ narrate: 'The raiders charge.' }, { name: 'Ann', direction: '' }], actors: [{ name: 'Ann', direction: '' }] });
     expect(plan.roll).toBeUndefined();
+  });
+
+  it('reads beats in order, and an older plan as narration then actors', () => {
+    const plan = parsePlan(JSON.stringify({ beats: [{ narrate: 'The gate creaks.' }, { actor: 'Ann', direction: 'warns Bob' }, { narrate: '' }, { narrate: 'A horn sounds.' }, { name: 'Grim', direction: 'answers Ann' }, 'Mira', 42] }), 'Ann');
+    expect(plan.beats).toEqual([{ narrate: 'The gate creaks.' }, { name: 'Ann', direction: 'warns Bob' }, { narrate: 'A horn sounds.' }, { name: 'Grim', direction: 'answers Ann' }, { name: 'Mira', direction: '' }]);
+    expect(plan.actors.map((a) => a.name)).toEqual(['Ann', 'Grim', 'Mira']);
+    expect(parsePlan(JSON.stringify({ narration: 'n', actors: ['Ann'] }), 'Ann').beats).toEqual([{ narrate: 'n' }, { name: 'Ann', direction: '' }]);
+  });
+
+  it('plays only what a turn allows: never you, maxActors characters, narration merged', () => {
+    const beats = turnBeats({ beats: [{ narrate: 'a' }, { narrate: 'b' }, { name: 'Bob', direction: '' }, { name: 'Ann', direction: '' }, { narrate: 'c' }, { name: 'Grim', direction: '' }, { narrate: 'd' }, { name: 'Mira', direction: '' }, { narrate: 'e' }] }, 2, 'Bob');
+    expect(beats).toEqual([{ narrate: 'a\nb' }, { name: 'Ann', direction: '' }, { narrate: 'c' }, { name: 'Grim', direction: '' }, { narrate: 'd\ne' }]);
+    expect(turnBeats({ beats: [] }, 2, 'Bob')).toEqual([{ narrate: '' }]);
+    expect(turnBeats({ beats: [{ name: 'Ann', direction: '' }] }, 2, 'Bob')).toEqual([{ name: 'Ann', direction: '' }]);
   });
 });
 
@@ -206,7 +221,7 @@ describe('prompts', () => {
   it("gives the Director the world, rules, its notes and dice, with macros expanded", () => {
     const [system, user] = directorMessages(ctx(), story, undefined, { notes: 'secret' });
     expect(system.content).toContain('Dice are on');
-    expect(system.content).toContain('at most 2');
+    expect(system.content).toContain('At most 2 character beats');
     expect(user.content).toContain('Ann is a knight sworn to Bob.');
     expect(user.content).toContain('- Bob has 10 HP.');
     expect(user.content).toContain('<your_notes_so_far>\nsecret');
@@ -277,6 +292,29 @@ describe('a turn', () => {
     expect(tallyUsage(r.entries.map((e) => e.usage))).toMatchObject({ calls: 4, input: 40, output: 20, unpriced: 4 });
   });
 
+  it('plays the beats in order: narration between characters, each seeing what came before', async () => {
+    const narratorSeen: string[] = [];
+    const castSeen: string[] = [];
+    const { d, calls } = deps({
+      director: plan({ roll: { reason: 'Climb', dice: '1d20', dc: 10 }, beats: [{ narrate: 'the climb' }, { actor: 'Ann', direction: 'teases Bob' }, { narrate: 'a horn sounds' }, { actor: 'Grim', direction: 'answers Ann' }] }),
+      narrator: (m) => (narratorSeen.push(m[0].content + m[1].content), narratorSeen.length === 1 ? 'You climb.' : 'A horn.'),
+      cast: (m) => (castSeen.push(m[1].content), m[1].content.includes('<character name="Ann">') ? 'Ann laughs.' : 'Grim snaps back.'),
+    });
+    const r = await runTurn({ ctx: ctx(), session: { entries: [] }, action: 'I climb the wall.' }, d);
+    expect(calls.map((c) => c.label)).toEqual(['🎬 Director', '📜 Narrator', '🎭 Ann', '📜 Narrator', '🎭 Grim']);
+    expect(r.entries.map((e) => e.kind)).toEqual(['action', 'director', 'roll', 'narration', 'character', 'narration', 'character']);
+    // The first passage knows who's next and leaves them be; it alone narrates the roll.
+    expect(narratorSeen[0]).toContain("Ann, Grim act right after this passage: don't write what they say or do");
+    expect(narratorSeen[0]).toContain('Narrate the success');
+    expect(narratorSeen[1]).toContain('Grim acts right after');
+    expect(narratorSeen[1]).toContain('falls between characters');
+    expect(narratorSeen[1]).not.toContain('Narrate the success');
+    // Grim hears Ann, and the horn.
+    expect(castSeen[1]).toContain('[Ann] Ann laughs.');
+    expect(castSeen[1]).toContain('[Narrator] A horn.');
+    expect(castSeen[1]).toContain('answers Ann');
+  });
+
   it('skips the roll with dice off', async () => {
     const { d } = deps({ director: plan({ roll: { reason: 'Climb', dice: '1d20', dc: 10 } }), narrator: 'ok' });
     const r = await runTurn({ ctx: ctx({ dice: false }), session: { entries: [] }, action: 'x' }, d);
@@ -325,7 +363,7 @@ describe('a turn', () => {
   });
 
   it('counts the calls a turn makes', () => {
-    expect(callsPerTurn({ maxActors: 2 })).toBe(4);
+    expect(callsPerTurn({ maxActors: 2 })).toBe(6);
   });
 });
 

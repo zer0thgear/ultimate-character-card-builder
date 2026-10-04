@@ -139,10 +139,18 @@ export function describeRoll(r: DiceRoll): string {
 
 // ─── The Director's plan ─────────────────────────────────────────────────────
 
+/** One step of a turn, in order: a passage of narration, or one
+ *  character's part. */
+export type Beat = { narrate: string } | { name: string; direction: string };
+
+export const isNarration = (b: Beat): b is { narrate: string } => 'narrate' in b;
+
 export interface DirectorPlan {
   scene?: SceneState;
   roll?: { reason: string; dice: string; dc?: number; modifier?: number } | null;
-  narration: string;
+  /** The turn in order: narration and characters, interleaved. */
+  beats: Beat[];
+  /** The characters who act, in order (from the beats). */
   actors: { name: string; direction: string }[];
   /** Characters the Director brought into the story this turn. */
   newCast: { name: string; text: string }[];
@@ -176,12 +184,43 @@ export function extractJson(text: string): unknown {
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : typeof v === 'number' ? String(v) : '');
 
+const actorsOf = (beats: Beat[]) => beats.filter((b): b is { name: string; direction: string } => !isNarration(b));
+
+function toActor(a: unknown): { name: string; direction: string } | null {
+  if (typeof a === 'string') return a.trim() ? { name: a.trim(), direction: '' } : null;
+  if (!a || typeof a !== 'object') return null;
+  const o = a as Record<string, unknown>;
+  const name = str(o.actor ?? o.name ?? o.character);
+  return name ? { name, direction: str(o.direction ?? o.does ?? o.brief) } : null;
+}
+
+/** The plan's beats: "beats" in order, or (an older plan) "narration" and
+ *  then "actors". */
+function parseBeats(raw: Record<string, unknown>): Beat[] {
+  if (Array.isArray(raw.beats)) {
+    const beats: Beat[] = [];
+    for (const b of raw.beats) {
+      const o = b && typeof b === 'object' ? (b as Record<string, unknown>) : null;
+      const brief = o ? str(o.narrate ?? o.narration ?? o.narrator) : '';
+      if (brief) beats.push({ narrate: brief });
+      else {
+        const a = toActor(b);
+        if (a) beats.push(a);
+      }
+    }
+    return beats;
+  }
+  const actors = (Array.isArray(raw.actors) ? raw.actors : []).map(toActor).filter((a): a is { name: string; direction: string } => !!a);
+  return [...(str(raw.narration) ? [{ narrate: str(raw.narration) }] : []), ...actors];
+}
+
 /** The Director's reply as a plan. One that isn't JSON still makes a turn:
  *  its text becomes the Narrator's brief, and the card's character acts. */
 export function parsePlan(text: string, fallbackActor: string): DirectorPlan & { parsed: boolean } {
   const raw = extractJson(text) as Record<string, unknown> | null;
   if (!raw || typeof raw !== 'object') {
-    return { narration: text.trim(), actors: fallbackActor ? [{ name: fallbackActor, direction: '' }] : [], newCast: [], notes: '', parsed: false };
+    const beats: Beat[] = [{ narrate: text.trim() }, ...(fallbackActor ? [{ name: fallbackActor, direction: '' }] : [])];
+    return { beats, actors: actorsOf(beats), newCast: [], notes: '', parsed: false };
   }
   const s = raw.scene as Record<string, unknown> | undefined;
   const scene: SceneState | undefined =
@@ -200,13 +239,11 @@ export function parsePlan(text: string, fallbackActor: string): DirectorPlan & {
     r && typeof r === 'object' && (str(r.reason) || str(r.dice))
       ? { reason: str(r.reason), dice: str(r.dice) || '1d20', ...(Number.isFinite(dc) ? { dc } : {}), ...(Number.isFinite(mod) && mod ? { modifier: mod } : {}) }
       : null;
-  const actors = (Array.isArray(raw.actors) ? raw.actors : [])
-    .map((a) => (typeof a === 'string' ? { name: a.trim(), direction: '' } : a && typeof a === 'object' ? { name: str((a as Record<string, unknown>).name), direction: str((a as Record<string, unknown>).direction) } : null))
-    .filter((a): a is { name: string; direction: string } => !!a?.name);
+  const beats = parseBeats(raw);
   const newCast = (Array.isArray(raw.new_cast) ? raw.new_cast : Array.isArray(raw.newCast) ? raw.newCast : [])
     .map((c) => (typeof c === 'string' ? { name: c.trim(), text: '' } : c && typeof c === 'object' ? { name: str((c as Record<string, unknown>).name), text: str((c as Record<string, unknown>).text ?? (c as Record<string, unknown>).description) } : null))
     .filter((c): c is { name: string; text: string } => !!c?.name);
-  return { scene, roll, narration: str(raw.narration), actors, newCast, notes: str(raw.notes), parsed: true };
+  return { scene, roll, beats, actors: actorsOf(beats), newCast, notes: str(raw.notes), parsed: true };
 }
 
 // ─── Prompts ─────────────────────────────────────────────────────────────────
@@ -302,14 +339,16 @@ const styleLine = (ctx: AdventureCtx) => (ctx.settings.style.trim() ? `\nStyle: 
 export function directorMessages(ctx: AdventureCtx, entries: AdventureEntry[], scene: SceneState | undefined, opts: { notes?: string; directorNote?: string } = {}): LlmMessage[] {
   const user = ctx.userName || 'User';
   const dice = ctx.dice
-    ? `Dice are on: when the outcome of what ${user} attempts is uncertain and matters, ask for a roll and the app rolls real dice. Don't roll for trivial things. Write the narration brief for both results ("On success: … On failure: …").`
+    ? `Dice are on: when the outcome of what ${user} attempts is uncertain and matters, ask for a roll and the app rolls real dice. Don't roll for trivial things. Write the first narration brief for both results ("On success: … On failure: …").`
     : 'Dice are off: decide outcomes yourself, fairly, and set "roll" to null.';
   const system = `You are the Director, the game master of an interactive roleplay adventure. ${user} is the player character, controlled only by the human player. You don't write the story's prose: each turn you decide what happens and brief the actors who write it. The Narrator describes the scene and events; the Cast plays the other characters, one at a time.
 
 Each turn, read the world, the scene and the latest events, then plan:
 - How the world responds to ${user}'s latest action (or, if they did nothing, what happens next). Keep the story moving, give the other characters goals of their own, and keep it fair and consistent.
 - ${dice}
-- Which characters act this turn, in order: at most ${ctx.settings.maxActors}, only ones present in the scene, never ${user}. None is fine when narration is enough.
+- The turn as beats, in the order things happen. A "narrate" beat is a brief for the Narrator; an "actor" beat gives one character their part. Usually start with narration of what came of ${user}'s action.
+- Only characters with something to add get a beat: a reply, a reaction, a move that matters. Being present isn't enough; often one does, sometimes none. At most ${ctx.settings.maxActors} character beats, only characters present, never ${user}.
+- Let things happen in sequence: a character can answer what another just said or did, and a short narration beat can fall between characters when the scene moves on (not every time). Don't have the Narrator describe what a character will do on their own beat.
 - Keep the rules (if any) and apply them consistently; keep track of anything they need in your notes.
 - Anyone you bring into the story who isn't in the Cast yet (a new character, a named creature, someone the player meets) goes in "new_cast" with a short sheet, so they're played the same way from then on.
 
@@ -317,8 +356,12 @@ Reply with only a JSON object, no other text:
 {
   "scene": {"location": "where", "time": "when", "present": ["everyone present, ${user} included"], "situation": "one or two sentences on what's going on now"},
   "roll": null or {"reason": "what is being attempted", "dice": "1d20", "dc": 12, "modifier": 0},
-  "narration": "the Narrator's brief: what to describe this turn",
-  "actors": [{"name": "character's name", "direction": "what they do or want this turn, in a few words"}],
+  "beats": [
+    {"narrate": "the Narrator's brief: what happens, and what came of ${user}'s action"},
+    {"actor": "a character's name", "direction": "what they do or want, in a few words"},
+    {"narrate": "optional: what happens next, between characters"},
+    {"actor": "another character", "direction": "e.g. answers the first one"}
+  ],
   "new_cast": [{"name": "a newcomer's name", "text": "who they are, how they look, act and talk"}],
   "notes": "your private notes: plans, secrets, timers, and the rules' bookkeeping (items, HP, captured creatures…)"
 }`;
@@ -339,13 +382,24 @@ Reply with only a JSON object, no other text:
   ];
 }
 
+/** Where a beat falls in its turn: who acts later, and whether the turn's
+ *  already under way. */
+export interface BeatPlace {
+  /** Characters with a beat later this turn. */
+  upcoming?: string[];
+  /** A beat after one of the characters'. */
+  midTurn?: boolean;
+}
+
 /** The Narrator's request: the next passage, from the Director's brief. */
-export function narratorMessages(ctx: AdventureCtx, entries: AdventureEntry[], scene: SceneState | undefined, brief: string, roll?: DiceRoll): LlmMessage[] {
+export function narratorMessages(ctx: AdventureCtx, entries: AdventureEntry[], scene: SceneState | undefined, brief: string, roll?: DiceRoll, place: BeatPlace = {}): LlmMessage[] {
   const user = ctx.userName || 'User';
+  const upcoming = [...new Set(place.upcoming ?? [])];
   const system = `You are the Narrator of an interactive roleplay adventure. Write the next passage of the story: the setting, what happens and what came of ${user}'s latest action, following the Director's brief. ${povLine(ctx)}
 - Never write ${user}'s dialogue, thoughts or choices beyond what the player wrote.
-- Leave the other characters' dialogue to them (the Cast speaks next); a gesture or a line of what they do is fine.
-- One to three paragraphs. Prose only: no headings, labels or notes.${styleLine(ctx)}`;
+- The other characters speak and act for themselves, each on their own turn. ${upcoming.length ? `${upcoming.join(', ')} ${upcoming.length > 1 ? 'act' : 'acts'} right after this passage: don't write what they say or do, leave it to them.` : 'Keep to events and the world; give the characters at most a glance or a gesture.'}
+- Don't retell what the story already shows; carry on from the latest moment.
+- ${place.midTurn ? 'This passage falls between characters: keep it short, a few sentences on what happens next.' : 'One to three paragraphs.'} Prose only: no headings, labels or notes.${styleLine(ctx)}`;
   const rolled = roll ? `\n\nThe dice: ${describeRoll(roll)}. Narrate the ${roll.outcome ?? 'result'}${roll.critical ? ', and make it dramatic' : ''}.` : '';
   return [
     { role: 'system', content: system },
@@ -369,6 +423,7 @@ export function castMessages(ctx: AdventureCtx, entries: AdventureEntry[], scene
   const user = ctx.userName || 'User';
   const system = `You are playing ${actor.name} in an interactive roleplay adventure. Write only ${actor.name}'s part of this turn: their dialogue, actions and body language, in character, reacting to what just happened. ${ctx.settings.pov === 'second' ? `Address ${user} as "you" in narration.` : `Write in third person.`}
 - Never speak, act or decide for ${user}, and don't play the other characters.
+- Carry on from the latest moment: answer what was just said or done, by anyone. If the story already shows ${actor.name} doing something, don't do it again.
 - One to three short paragraphs. No headings, and don't start with your name.${styleLine(ctx)}`;
   const direction = actor.direction ? `\n\nThe Director's direction for ${actor.name} this turn: ${actor.direction}` : '';
   return [
@@ -515,18 +570,37 @@ export function directorNotes(entries: AdventureEntry[]): string {
 
 /** How a plan reads, folded under the turn. */
 export function planText(plan: DirectorPlan): string {
-  const lines = [`Narration: ${plan.narration || '(none)'}`];
-  if (plan.actors.length) lines.push(`Acting: ${plan.actors.map((a) => (a.direction ? `${a.name} (${a.direction})` : a.name)).join('; ')}`);
+  const lines = plan.beats.length ? plan.beats.map((b, i) => `${i + 1}. ${isNarration(b) ? `Narrator: ${b.narrate}` : b.direction ? `${b.name}: ${b.direction}` : b.name}`) : ['(no beats)'];
   if (plan.roll) lines.push(`Roll: ${plan.roll.reason || 'yes'} (${plan.roll.dice}${plan.roll.dc !== undefined ? ` vs ${plan.roll.dc}` : ''})`);
   if (plan.notes) lines.push(`Notes: ${plan.notes}`);
   return lines.join('\n');
 }
 
-/**
- * Plays one turn: your action (if any), the Director's plan, a roll, the
- * narration and each acting character's part, adding each to the story as
- * it comes. An error or a stop leaves what was written so far.
- */
+/** The beats a turn plays: never you, at most `maxActors` characters and one
+ *  more narration than that (back-to-back narration runs as one), and a
+ *  passage of narration when the plan has nothing at all. */
+export function turnBeats(plan: Pick<DirectorPlan, 'beats'>, maxActors: number, userName: string): Beat[] {
+  const userKey = userName.trim().toLowerCase();
+  const max = Math.max(0, maxActors);
+  const out: Beat[] = [];
+  let acting = 0;
+  let narrating = 0;
+  for (const b of plan.beats) {
+    if (isNarration(b)) {
+      const last = out.at(-1);
+      if (last && isNarration(last)) out[out.length - 1] = { narrate: `${last.narrate}\n${b.narrate}` };
+      else if (narrating < max + 1) {
+        out.push(b);
+        narrating++;
+      }
+    } else if (b.name.trim().toLowerCase() !== userKey && acting < max) {
+      out.push(b);
+      acting++;
+    }
+  }
+  return out.length ? out : [{ narrate: '' }];
+}
+
 export interface TurnResult {
   entries: AdventureEntry[];
   scene: SceneState | undefined;
@@ -535,6 +609,11 @@ export interface TurnResult {
   error?: string;
 }
 
+/**
+ * Plays one turn: your action (if any), the Director's plan, a roll, then
+ * the beats in order (narration and characters, interleaved), adding each
+ * to the story as it comes. An error or a stop leaves what was written so far.
+ */
 export async function runTurn(input: TurnInput, deps: TurnDeps): Promise<TurnResult> {
   let { ctx } = input;
   let newCast: WorldEntry[] = [];
@@ -568,8 +647,8 @@ export async function runTurn(input: TurnInput, deps: TurnDeps): Promise<TurnRes
   const plan = parsePlan(d.text, charName(ctx.card));
   if (plan.scene) scene = plan.scene;
   add({ kind: 'director', text: planText(plan) + (plan.parsed ? '' : '\n(The plan wasn\'t JSON: its text went to the Narrator as the brief.)'), sceneBefore: sceneBefore ?? { location: '', present: [], situation: '' }, usage: d.usage });
-  const userKey = user.trim().toLowerCase();
-  const actors = plan.actors.filter((a) => a.name.trim().toLowerCase() !== userKey).slice(0, Math.max(0, ctx.settings.maxActors));
+  const beats = turnBeats(plan, ctx.settings.maxActors, user);
+  const actors = actorsOf(beats);
   if (ctx.settings.autoCast !== false) {
     newCast = newCastFrom({ newCast: plan.newCast, actors }, ctx, turn);
     if (newCast.length) {
@@ -587,21 +666,22 @@ export async function runTurn(input: TurnInput, deps: TurnDeps): Promise<TurnRes
     add({ kind: 'roll', speaker: user, text: describeRoll(roll), roll });
   }
 
-  // 3. The Narrator.
-  if (plan.narration || !plan.actors.length) {
-    const id = add({ kind: 'narration', text: '' });
-    const n = await deps.call('narrator', '📜 Narrator', narratorMessages(ctx, entries.filter((e) => e.id !== id), scene, plan.narration, roll), (t) => patch(id, { text: t }));
-    patch(id, { text: n.text.trim(), usage: n.usage });
-    if (n.error) return { entries: entries.filter((e) => e.id !== id || e.text), scene, newCast, error: n.error };
-    if (stopped()) return { entries, scene, newCast };
-  }
-
-  // 4. The Cast, one character at a time.
-  for (const a of actors) {
-    const id = add({ kind: 'character', speaker: a.name, text: '' });
-    const c = await deps.call('cast', `🎭 ${a.name}`, castMessages(ctx, entries.filter((e) => e.id !== id), scene, a), (t) => patch(id, { text: t }));
-    patch(id, { text: c.text.trim(), usage: c.usage });
-    if (c.error) return { entries: entries.filter((e) => e.id !== id || e.text), scene, newCast, error: c.error };
+  // 3. The beats in order: narration and each character, one call each,
+  // every one seeing what came before it this turn.
+  let rolled = false;
+  for (let i = 0; i < beats.length; i++) {
+    const b = beats[i];
+    const later = beats.slice(i + 1).filter((x) => !isNarration(x)).map((x) => (x as { name: string }).name);
+    const midTurn = beats.slice(0, i).some((x) => !isNarration(x));
+    const narrating = isNarration(b);
+    const id = add(narrating ? { kind: 'narration', text: '' } : { kind: 'character', speaker: b.name, text: '' });
+    const before = entries.filter((e) => e.id !== id);
+    const r = narrating
+      ? await deps.call('narrator', '📜 Narrator', narratorMessages(ctx, before, scene, b.narrate, rolled ? undefined : roll, { upcoming: later, midTurn }), (t) => patch(id, { text: t }))
+      : await deps.call('cast', `🎭 ${b.name}`, castMessages(ctx, before, scene, b), (t) => patch(id, { text: t }));
+    if (narrating) rolled = true;
+    patch(id, { text: r.text.trim(), usage: r.usage });
+    if (r.error) return { entries: entries.filter((e) => e.id !== id || e.text), scene, newCast, error: r.error };
     if (stopped()) return { entries, scene, newCast };
   }
   return { entries, scene, newCast };
@@ -649,4 +729,6 @@ export function tallyUsage(usages: (CallUsage | undefined)[]): UsageTally {
 
 /** How many calls a turn makes, at most: the Director, the Narrator, and one
  *  per acting character. */
-export const callsPerTurn = (s: Pick<AdventureSettings, 'maxActors'>) => 2 + Math.max(0, s.maxActors);
+/** The most calls a turn makes: the Director, each character and a passage
+ *  of narration around each. */
+export const callsPerTurn = (s: Pick<AdventureSettings, 'maxActors'>) => 2 + 2 * Math.max(0, s.maxActors);
