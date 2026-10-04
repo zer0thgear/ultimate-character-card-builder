@@ -19,6 +19,8 @@ const ROUTES: [string, () => Promise<RouteModule>][] = [
   ['/api/trash/:entry', () => import('@/app/api/trash/[entry]/route')],
   ['/api/projects/:id/avatar', () => import('@/app/api/projects/[id]/avatar/route')],
   ['/api/projects/:id/kept/:file', () => import('@/app/api/projects/[id]/kept/[file]/route')],
+  ['/api/projects/:id/library-gens', () => import('@/app/api/projects/[id]/library-gens/route')],
+  ['/api/library/images', () => import('@/app/api/library/images/route')],
   ['/api/projects/:id/chats', () => import('@/app/api/projects/[id]/chats/route')],
   ['/api/projects/:id/chats/:chatId', () => import('@/app/api/projects/[id]/chats/[chatId]/route')],
   ['/api/projects/:id/stories', () => import('@/app/api/projects/[id]/stories/route')],

@@ -65,6 +65,8 @@ interface ProjectState {
   setAvatar: (image: Blob) => Promise<void>;
   clearAvatar: () => Promise<void>;
   keep: (image: Blob, meta: Omit<KeptImage, 'file'>) => Promise<KeptImage>;
+  /** Keeps gen-library images with the card; ones it already has are skipped. */
+  keepFromLibrary: (ids: string[]) => Promise<{ added: KeptImage[]; already: number }>;
   unkeep: (file: string) => Promise<void>;
   updateKept: (file: string, patch: Partial<KeptImage>) => void;
   /** Saves now, if anything is waiting. */
@@ -329,8 +331,18 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       if (!p) throw new Error('No card open.');
       const kept = await api.keep(p.id, image, meta);
       const cur = get().project;
-      if (cur?.id === p.id) set({ project: { ...cur, kept: [...cur.kept.filter((k) => k.file !== kept.file), kept] } });
+      // An already kept picture comes back as its existing copy, in place.
+      if (cur?.id === p.id) set({ project: { ...cur, kept: cur.kept.some((k) => k.file === kept.file) ? cur.kept.map((k) => (k.file === kept.file ? kept : k)) : [...cur.kept, kept] } });
       return kept;
+    },
+
+    keepFromLibrary: async (ids) => {
+      const p = get().project;
+      if (!p) throw new Error('No card open.');
+      const r = await api.keepFromLibrary(p.id, ids);
+      const cur = get().project;
+      if (cur?.id === p.id) set({ project: { ...cur, kept: [...cur.kept.filter((k) => !r.added.some((a) => a.file === k.file)), ...r.added] } });
+      return r;
     },
 
     unkeep: async (file) => {

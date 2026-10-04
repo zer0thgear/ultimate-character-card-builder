@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Library gens in a card's gallery**: from 📚 Library, ☆ Add to gallery keeps an image (or several, with ☑ select) with the open card, so it shows in the card's 🖼 Gallery. ★ marks library images the card already has, and the same picture is never kept twice, whether it comes from the library or the generator.
 - **✍ Writing mode** in Chat mode: write a story together with the model in one document, as NovelAI's story mode does, with memory, an author's note, Dramatis Personae (a cast read like lorebook entries), the card's lorebook, versions of each part, and an optional proofreading pass for chat connections.
 - **🎲 Adventure mode** in Chat mode: a roleplay run like a tabletop game. A Director plans each turn and briefs a Narrator and a cast (one call per acting character), the app rolls real dice for uncertain actions, and the story can open from a greeting or a bespoke scenario. Each card gets a 🌍 World of dramatis personae, settings and rules, listed by a Scout from its definitions and lorebook, changeable per adventure. Each actor can use its own connection, and every turn shows what its calls took and cost.
 - **🛎 Helper** on the home screen: ask how anything in UCCB works (buttons, settings, macros, setup) and it answers from the app's own guide, in a personality of your choice (dry wit, teasing brat, mommy, bored, tsundere, hype, villain, or your own).
