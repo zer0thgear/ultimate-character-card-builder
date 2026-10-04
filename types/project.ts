@@ -175,7 +175,7 @@ export interface ChatSession {
 
 // ─── Stories (Writing mode) ──────────────────────────────────────────────────
 
-/** Someone in a story's Dramatis Personae: read like a lorebook entry, so
+/** Someone in a story's Cast: read like a lorebook entry, so
  *  their description goes into the prompt when their name (or another of
  *  their names) is in the recent text, or always. */
 export interface StoryPersona {

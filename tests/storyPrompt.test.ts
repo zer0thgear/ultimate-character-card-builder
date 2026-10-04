@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { newCard } from '@/lib/cardSpec';
 import {
   buildStoryRequest,
+  castNames,
+  castScanMessages,
   cleanContinuation,
   currentTake,
   fitStory,
   insertNote,
   joinContinuation,
   normalizeStory,
+  parseCastSuggestions,
   personaFields,
   proofreadMessages,
   storyLore,
@@ -27,7 +30,7 @@ const persona = (over: Partial<StoryPersona>): StoryPersona => ({ id: over.name 
 const story = (over: Partial<StorySession> = {}): StorySession => normalizeStory({ id: 's', ...over });
 const count = (t: string) => t.length;
 
-describe('Dramatis Personae', () => {
+describe('the Cast', () => {
   it('reads linked personae live from the card and the persona', () => {
     expect(personaFields(persona({ link: 'char' }), ctx())).toEqual({ name: 'Mira', description: 'Mira is a smuggler who owes Sam money.\nPersonality: Wry' });
     expect(personaFields(persona({ link: 'user' }), ctx())).toEqual({ name: 'Sam', description: 'A tired captain.' });
@@ -95,7 +98,7 @@ describe('the request', () => {
     expect(r.messages.map((m) => m.role)).toEqual(['system', 'user']);
     expect(r.messages[0].content).toContain('Write about 150 words.');
     expect(r.messages[0].content).toContain('## Memory\nA noir tale about Mira.');
-    expect(r.messages[0].content).toContain('## Dramatis Personae\nMira: Mira is a smuggler');
+    expect(r.messages[0].content).toContain('## Cast\nMira: Mira is a smuggler');
     expect(r.messages[1].content).toBe("<story>\nMira counted the coins.\n</story>\n\nAuthor's note (keep this in mind): Keep it tense.\n\nContinue the story from exactly where it stops.");
   });
 
@@ -148,5 +151,29 @@ describe('the latest take', () => {
     expect(currentTake({ text: 'Begin later!', last })).toBeNull();
     expect(currentTake({ text: 'Begin', last })).toBeNull();
     expect(currentTake({ text: 'Begin later' })).toBeNull();
+  });
+});
+
+describe('scanning the story for new Cast members', () => {
+  const personae = [persona({ link: 'char' }), persona({ name: 'Oren', aliases: ['the kid'], description: 'A dockhand.' })];
+
+  it('knows the Cast by every name', () => {
+    expect([...castNames(personae, ctx())]).toEqual(['mira', 'oren', 'the kid']);
+  });
+
+  it('sends the story and who is in the Cast already', () => {
+    const m = castScanMessages(story({ text: 'Vex boarded.', personae }), ctx());
+    expect(m[0].content).toContain('{"cast": [');
+    expect(m[1].content).toBe('Already in the cast: Mira, Oren\n\n<story>\nVex boarded.\n</story>');
+  });
+
+  it('keeps only new people, once each', () => {
+    const reply = '```json\n{"cast": [{"name": "Vex", "aliases": ["the Rival", "vex"], "description": "A rival smuggler."}, {"name": "The Kid", "description": "Oren again"}, {"name": "vex"}, {"name": "Captain Ash", "aliases": ["Ash"]}, {"description": "no name"}]}\n```';
+    expect(parseCastSuggestions(reply, castNames(personae, ctx()))).toEqual([
+      { name: 'Vex', aliases: ['the Rival'], description: 'A rival smuggler.' },
+      { name: 'Captain Ash', aliases: ['Ash'], description: '' },
+    ]);
+    expect(parseCastSuggestions('{"cast": []}', new Set())).toEqual([]);
+    expect(parseCastSuggestions('Sorry, I cannot.', new Set())).toBeNull();
   });
 });

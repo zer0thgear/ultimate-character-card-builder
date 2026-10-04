@@ -84,7 +84,7 @@ Open **💬 Test chat** and start a chat. It builds the prompt the way SillyTave
 
 Switch the header to **💬 Chat**. Pick one of your cards or import one (cards imported here stay out of Builder until you add them), and the chat fills the window. **📝 Card** shows the card's definitions and lorebook to read or change, and **🎨 Picture** draws the current moment right into the chat (the model never sees it). **🛠 Builder** takes you back.
 
-Rather write a story than chat? **✍ Story** (in the header's 🗨 Chat | ✍ Story | 🎲 Adventure switch) turns it into one document you and the model write together: type, press **✍ Continue**, and it writes on from where you stop. **📖 Story settings** holds the story's memory, author's note and Dramatis Personae (the cast, brought in when the story mentions them), next to the card's lorebook.
+Rather write a story than chat? **✍ Story** (in the header's 🗨 Chat | ✍ Story | 🎲 Adventure switch) turns it into one document you and the model write together: type, press **✍ Continue**, and it writes on from where you stop. **📖 Story settings** holds the story's memory, author's note and Cast (the characters, brought in when the story mentions them; **🔍 Scan the story** suggests new ones), next to the card's lorebook.
 
 For something more like a tabletop game, press **🎲 Adventure**: a Director plans each turn, a Narrator tells it, each character answers with a call of their own, and real dice decide uncertain actions. **🌍 World** holds the card's characters, places and rules (🔍 the Scout can list them from the card and lorebook).
 
