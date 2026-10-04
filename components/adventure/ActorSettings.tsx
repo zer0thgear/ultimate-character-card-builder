@@ -69,6 +69,12 @@ export function ActorSettingsDialog({ open, onClose }: { open: boolean; onClose:
             <span className="text-slate-500">characters (about {Math.round(s.historyBudget / 4 / 100) / 10}k tokens)</span>
           </span>
         </div>
+        <Toggle
+          checked={s.autoCast !== false}
+          onChange={(autoCast) => set({ autoCast })}
+          label="Add newcomers to the Cast"
+          title="When the Director brings someone new into the story, they join the adventure's Cast (🌍 World) with a short sheet, so they're played the same way from then on"
+        />
         <Toggle checked={s.diceDefault} onChange={(diceDefault) => set({ diceDefault })} label="New adventures roll dice" title="Each adventure has its own 🎲 switch too" />
         <label className="flex flex-col gap-1 text-xs">
           Style notes for the Narrator and the Cast

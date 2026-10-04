@@ -11,7 +11,7 @@ import { uuid } from '@/lib/uuid';
 import { callActor } from '@/components/adventure/actorCall';
 import { usageLine } from '@/components/adventure/usageLine';
 
-// 🌍 World: the card's settings, dramatis personae and rules, which every
+// 🌍 World: the card's Cast, settings and rules, which every
 // adventure with it plays in, and the open adventure's own changes to them.
 
 type Tab = WorldList | 'rules';
@@ -80,6 +80,13 @@ export function WorldDrawer({ onClose }: { onClose: () => void }) {
     // An entry added here goes; a card's entry is left out of this adventure.
     update((a) => ({ ...a, overrides: withOverride(a.overrides, list, e.id, e.origin === 'added' ? undefined : null) }));
   };
+  /** An entry added in this adventure joins the card's world, for every adventure. */
+  const promote = (list: WorldList, e: ShownEntry) => {
+    const { origin: _origin, ...entry } = e;
+    void _origin;
+    setWorld({ ...world, [list]: [...world[list], entry] });
+    update((a) => ({ ...a, overrides: withOverride(a.overrides, list, e.id, undefined) }));
+  };
   const revert = (list: WorldList, e: ShownEntry) => update((a) => ({ ...a, overrides: withOverride(a.overrides, list, e.id, undefined) }));
 
   const rules = here ? (over?.rules ?? world.rules) : world.rules;
@@ -128,7 +135,7 @@ export function WorldDrawer({ onClose }: { onClose: () => void }) {
         onChange={setTab}
         className="flex-shrink-0 px-2"
         tabs={[
-          { value: 'personae', label: 'Dramatis personae', badge: listFor('personae').filter((e) => e.origin !== 'removed').length },
+          { value: 'personae', label: 'Cast', badge: listFor('personae').filter((e) => e.origin !== 'removed').length },
           { value: 'settings', label: 'Settings', badge: listFor('settings').filter((e) => e.origin !== 'removed').length },
           { value: 'rules', label: 'Rules' },
         ]}
@@ -156,11 +163,11 @@ export function WorldDrawer({ onClose }: { onClose: () => void }) {
           <div className="flex flex-col gap-2">
             <p className="text-xs text-slate-400">
               {tab === 'personae'
-                ? 'Everyone who can appear. The Cast plays each from their entry (the card\'s own character also from its description).'
+                ? `Everyone who can appear (the dramatis personae). Each is played from their entry, the card's own character also from its description.${here ? ' Newcomers the Director brings in during play are added here, marked "added here".' : ''}`
                 : 'Places, factions, items and facts the Director and Narrator keep to.'}
             </p>
             {listFor(tab).map((e) => (
-              <EntryEditor key={e.id} entry={e} here={here} onChange={(x) => save(tab, x)} onRemove={() => remove(tab, e)} onRevert={() => revert(tab, e)} />
+              <EntryEditor key={e.id} entry={e} here={here} onChange={(x) => save(tab, x)} onRemove={() => remove(tab, e)} onRevert={() => revert(tab, e)} onPromote={() => promote(tab, e)} />
             ))}
             {!listFor(tab).length && <p className="text-xs text-slate-500">None yet. 🔍 Scan the card to have them listed, or add them yourself.</p>}
             <Button size="sm" className="self-start" onClick={() => add(tab)}>
@@ -173,7 +180,7 @@ export function WorldDrawer({ onClose }: { onClose: () => void }) {
   );
 }
 
-function EntryEditor({ entry, here, onChange, onRemove, onRevert }: { entry: ShownEntry; here: boolean; onChange: (e: WorldEntry) => void; onRemove: () => void; onRevert: () => void }) {
+function EntryEditor({ entry, here, onChange, onRemove, onRevert, onPromote }: { entry: ShownEntry; here: boolean; onChange: (e: WorldEntry) => void; onRemove: () => void; onRevert: () => void; onPromote: () => void }) {
   const { origin, ...e } = entry;
   const removed = origin === 'removed';
   return (
@@ -181,6 +188,11 @@ function EntryEditor({ entry, here, onChange, onRemove, onRevert }: { entry: Sho
       <div className="flex items-center gap-1.5">
         <input value={e.name} disabled={removed} onChange={(ev) => onChange({ ...e, name: ev.target.value })} placeholder="Name" className={cx(inputClass, 'min-w-0 flex-1 py-1 text-sm font-medium')} />
         {here && origin !== 'card' && <span className="text-[10px] text-amber-300">{{ changed: 'changed here', added: 'added here', removed: 'left out here' }[origin]}</span>}
+        {here && origin === 'added' && (
+          <IconButton title="Add to the card's world, for every adventure" onClick={onPromote}>
+            ⇪
+          </IconButton>
+        )}
         {here && (origin === 'changed' || origin === 'removed') && (
           <IconButton title="Back to the card's" onClick={onRevert}>
             ↺

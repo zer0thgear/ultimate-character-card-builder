@@ -52,6 +52,9 @@ export const api = {
       headers: { 'x-kept': encodeURIComponent(JSON.stringify(meta)) },
     }),
   patchKept: (id: string, file: string, patch: Partial<KeptImage>) => call<KeptImage>(`/api/projects/${id}/kept/${file}`, json('PATCH', patch)),
+  /** Library images kept with the card (their library ids), and keeping more. */
+  libraryGensInGallery: (id: string) => call<{ ids: string[] }>(`/api/projects/${id}/library-gens`),
+  keepFromLibrary: (id: string, ids: string[]) => call<{ added: KeptImage[]; already: number }>(`/api/projects/${id}/library-gens`, json('POST', { ids })),
   unkeep: (id: string, file: string) => call<{ ok: true }>(`/api/projects/${id}/kept/${file}`, { method: 'DELETE' }),
 
   recentGens: () => call<Record<string, unknown>[]>('/api/recent-gens'),

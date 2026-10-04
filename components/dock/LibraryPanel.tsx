@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useConfigStore, toast } from '@/store/uiStore';
 import { api } from '@/lib/api';
 import type { LibraryItem } from '@/lib/librarySearch';
-import { newCardFromImage, setAsAvatar, reusePrompt, saveToFolder } from '@/lib/imageActions';
+import { newCardFromImage, setAsAvatar, reusePrompt, saveToFolder, keepLibraryImages } from '@/lib/imageActions';
 import { Button, Empty, IconButton, Modal, cx, inputClass } from '@/components/ui';
 import { sendToImg2Img } from '@/components/dock/ImageViewer';
 import { openSettings } from '@/components/SettingsDialog';
@@ -16,7 +16,9 @@ import { ExtensionImageActions } from '@/components/ExtensionSlots';
 
 // Older gens, from any folders set in Settings (an old gens folder, a
 // downloads folder…), searchable by prompt: for
-// inspiration, reusing a prompt, or picking an existing picture.
+// inspiration, reusing a prompt, or picking an existing picture. With a
+// card open, images can be added to its gallery (★ marks the ones already
+// there; the same picture is never added twice).
 
 const PAGE = 120;
 
@@ -45,6 +47,14 @@ export function LibraryPanel() {
   const [showFolders, setShowFolders] = useState(false);
   const [help, setHelp] = useState(false);
   const request = useRef(0);
+  const projectId = useProjectStore((s) => s.project?.id);
+  const keptCount = useProjectStore((s) => s.project?.kept.length ?? 0);
+  // Which library images are in the open card's gallery (by content), for
+  // the ★ badges; asked again whenever the gallery changes.
+  const [inGallery, setInGallery] = useState<{ projectId: string; ids: Set<string> } | null>(null);
+  const galleryIds = inGallery && inGallery.projectId === projectId ? inGallery.ids : null;
+  const [picking, setPicking] = useState<Set<string> | null>(null);
+  const [adding, setAdding] = useState(false);
   const key = JSON.stringify([query, sort, scope, config.libraryFolders]);
   const loading = busy || (config.libraryFolders.length > 0 && shownFor !== key);
 
@@ -75,6 +85,25 @@ export function LibraryPanel() {
       .catch((err: Error) => id === request.current && setError(err.message))
       .finally(() => id === request.current && setShownFor(key));
   }, [params, show, key, config.libraryFolders.length]);
+
+  useEffect(() => {
+    if (!projectId || !config.libraryFolders.length) return;
+    let live = true;
+    api
+      .libraryGensInGallery(projectId)
+      .then((r) => live && setInGallery({ projectId, ids: new Set(r.ids) }))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [projectId, keptCount, config.libraryFolders.length, scan?.scanning]);
+
+  const addPicked = async () => {
+    if (!picking?.size) return;
+    setAdding(true);
+    if (await keepLibraryImages([...picking])) setPicking(null);
+    setAdding(false);
+  };
 
   // While the server is indexing, refresh what's shown every couple of
   // seconds (as many images as are loaded now), so results fill in.
@@ -178,7 +207,23 @@ export function LibraryPanel() {
           <IconButton title="Rescan the folders for new, changed or removed files" onClick={() => void load(0, true)}>
             ⟳
           </IconButton>
+          {projectId && (
+            <IconButton title={picking ? 'Stop selecting' : "Select images to add to this card's gallery"} tone={picking ? 'accent' : 'default'} onClick={() => setPicking(picking ? null : new Set())}>
+              ☑
+            </IconButton>
+          )}
         </div>
+        {picking && projectId && (
+          <div className="flex flex-shrink-0 items-center gap-2 border-b border-slate-800 bg-violet-500/10 px-2 py-1.5 text-xs text-slate-300">
+            <span className="mr-auto">{picking.size ? `${picking.size} selected` : "Tap images to add to this card's gallery"}</span>
+            <Button size="sm" variant="ghost" onClick={() => setPicking(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" variant="primary" disabled={adding || !picking.size} onClick={() => void addPicked()}>
+              {adding ? 'Adding…' : '☆ Add to gallery'}
+            </Button>
+          </div>
+        )}
         <div className="flex-shrink-0 px-2 py-1 text-[11px] text-slate-500">{scan?.scanning
             ? `${total.toLocaleString()} images so far · indexing ${scan.done.toLocaleString()} of ${scan.total.toLocaleString()} new or changed files…`
             : loading && !items.length
@@ -187,12 +232,35 @@ export function LibraryPanel() {
         {error && <div className="mx-2 rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>}
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-1.5">
-            {items.map((item, i) => (
-              <button key={item.id} type="button" onClick={() => setOpen(i)} className="relative overflow-hidden rounded border border-slate-800 bg-slate-900 hover:border-violet-500" style={{ aspectRatio: `${item.width || 2} / ${item.height || 3}` }} title={item.info.prompt?.slice(0, 300) ?? item.name}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={api.libraryThumb(item.id)} alt="" className="h-full w-full object-cover" loading="lazy" />
-              </button>
-            ))}
+            {items.map((item, i) => {
+              const picked = !!picking?.has(item.id);
+              const kept = !!galleryIds?.has(item.id);
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    if (!picking) return setOpen(i);
+                    const next = new Set(picking);
+                    if (picked) next.delete(item.id);
+                    else next.add(item.id);
+                    setPicking(next);
+                  }}
+                  className={cx('relative overflow-hidden rounded border bg-slate-900', picked ? 'border-violet-500 ring-2 ring-violet-500' : 'border-slate-800 hover:border-violet-500')}
+                  style={{ aspectRatio: `${item.width || 2} / ${item.height || 3}` }}
+                  title={item.info.prompt?.slice(0, 300) ?? item.name}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={api.libraryThumb(item.id)} alt="" className={cx('h-full w-full object-cover', picked && 'opacity-80')} loading="lazy" />
+                  {kept && (
+                    <span className="pointer-events-none absolute top-0.5 right-0.5 rounded bg-black/60 px-1 text-[9px] text-amber-300" title="In this card's gallery">
+                      ★
+                    </span>
+                  )}
+                  {picked && <span className="pointer-events-none absolute top-0.5 left-0.5 rounded bg-violet-500 px-1 text-[9px] text-white">✓</span>}
+                </button>
+              );
+            })}
           </div>
           {items.length < total && (
             <div className="py-3 text-center">
@@ -203,13 +271,13 @@ export function LibraryPanel() {
           )}
         </div>
       </div>
-      {open !== null && items[open] && <LibraryViewer item={items[open]} onFullscreen={() => openLightbox(items.map((it) => api.libraryFile(it.id)), open, setOpen)} onClose={() => setOpen(null)} onStep={(d) => setOpen((o) => (o === null ? o : Math.max(0, Math.min(items.length - 1, o + d))))} onSearch={(t) => setQ(t)} />}
+      {open !== null && items[open] && <LibraryViewer item={items[open]} inGallery={!!galleryIds?.has(items[open].id)} onFullscreen={() => openLightbox(items.map((it) => api.libraryFile(it.id)), open, setOpen)} onClose={() => setOpen(null)} onStep={(d) => setOpen((o) => (o === null ? o : Math.max(0, Math.min(items.length - 1, o + d))))} onSearch={(t) => setQ(t)} />}
       {help && <SearchHelp onClose={() => setHelp(false)} />}
     </div>
   );
 }
 
-function LibraryViewer({ item, onClose, onStep, onSearch, onFullscreen }: { item: LibraryItem; onClose: () => void; onStep: (d: number) => void; onSearch: (text: string) => void; onFullscreen: () => void }) {
+function LibraryViewer({ item, inGallery, onClose, onStep, onSearch, onFullscreen }: { item: LibraryItem; inGallery: boolean; onClose: () => void; onStep: (d: number) => void; onSearch: (text: string) => void; onFullscreen: () => void }) {
   const hasProject = useProjectStore((s) => !!s.project);
   const blob = async () => (await fetch(api.libraryFile(item.id))).blob();
   useEffect(() => {
@@ -245,6 +313,11 @@ function LibraryViewer({ item, onClose, onStep, onSearch, onFullscreen }: { item
           )}
           {hasProject && <Button onClick={async () => { sendToImg2Img(await blob()); onClose(); }}>Img2Img base</Button>}
           {hasProject && <Button onClick={async () => openVisionWrite(await blob())} title="A physical description, a greeting, or ask about it (vision model)">✨ Write from image</Button>}
+          {hasProject && (
+            <Button disabled={inGallery} onClick={() => void keepLibraryImages([item.id])} title={inGallery ? "Already in this card's gallery" : "Keep it with the card (a copy is saved in the project, shown in Gallery)"}>
+              {inGallery ? '★ In gallery' : '☆ Add to gallery'}
+            </Button>
+          )}
           <ExtensionImageActions image={{ name: item.name, source: 'library', blob, projectId: useProjectStore.getState().project?.id }} />
           <Button onClick={async () => void saveToFolder(await blob(), item.name)}>Copy to output</Button>
           {hasProject ? (

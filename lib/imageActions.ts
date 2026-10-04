@@ -43,10 +43,28 @@ export async function keepImage(img: SessionImage, label?: string, quiet = false
       label,
     });
     useSessionStore.getState().updateImages([img.id], { keptFile: kept.file, pinned: true });
-    if (!quiet) toast(`Kept with ${p.card.data.name || 'the card'}.`, 'success');
+    if (!quiet) toast(kept.id === id ? `Kept with ${p.card.data.name || 'the card'}.` : 'Already kept with this card.', 'success');
     return true;
   } catch (err) {
     toast(`Couldn't keep it: ${(err as Error).message}`, 'error');
+    return false;
+  }
+}
+
+/** Keeps gen-library images with the open card (they show in its
+ *  gallery); pictures it already has are skipped. */
+export async function keepLibraryImages(ids: string[]): Promise<boolean> {
+  const p = useProjectStore.getState().project;
+  if (!p || !ids.length) return false;
+  try {
+    const { added, already } = await useProjectStore.getState().keepFromLibrary(ids);
+    const name = p.card.data.name || 'the card';
+    const n = (k: number) => `${k} image${k === 1 ? '' : 's'}`;
+    if (!added.length) toast(already === 1 ? `Already in ${name}'s gallery.` : `All ${already} are already in ${name}'s gallery.`, 'info');
+    else toast(`Added ${n(added.length)} to ${name}'s gallery${already ? ` (${already} already there)` : ''}.`, 'success');
+    return true;
+  } catch (err) {
+    toast(`Couldn't add to the gallery: ${(err as Error).message}`, 'error');
     return false;
   }
 }

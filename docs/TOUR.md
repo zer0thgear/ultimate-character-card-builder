@@ -86,7 +86,7 @@ Switch the header to **💬 Chat**. Pick one of your cards or import one (cards 
 
 Rather write a story than chat? **✍ Story** (in the header's 🗨 Chat | ✍ Story | 🎲 Adventure switch) turns it into one document you and the model write together: type, press **✍ Continue**, and it writes on from where you stop. **📖 Story settings** holds the story's memory, author's note and Cast (the characters, brought in when the story mentions them; **🔍 Scan the story** suggests new ones), next to the card's lorebook.
 
-For something more like a tabletop game, press **🎲 Adventure**: a Director plans each turn, a Narrator tells it, each character answers with a call of their own, and real dice decide uncertain actions. **🌍 World** holds the card's characters, places and rules (🔍 the Scout can list them from the card and lorebook).
+For something more like a tabletop game, press **🎲 Adventure**: a Director plans each turn, a Narrator tells it, each character answers with a call of their own, and real dice decide uncertain actions. **🌍 World** holds the card's Cast, places and rules (🔍 the Scout can list them from the card and lorebook).
 
 ## Old gens
 
