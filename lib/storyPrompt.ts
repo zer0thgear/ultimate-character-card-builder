@@ -3,10 +3,11 @@ import type { LlmMessage } from '@/types/llm';
 import type { StoryPersona, StorySession } from '@/types/project';
 import { expandMacros } from '@/lib/macros';
 import { describeEntry, scanLorebook, type ActivatedEntry } from '@/lib/lorebookScan';
+import { extractJson } from '@/lib/adventure';
 
 // Writing mode: a story written together with the model, as one flat
 // document (NovelAI's story mode). What goes in front of the story is the
-// memory, the Dramatis Personae whose names are in the recent text (read
+// memory, the Cast members whose names are in the recent text (read
 // like lorebook entries), and the card's lorebook entries the text brings
 // in. A text-completion connection gets it all as one raw prompt and simply
 // writes on; a chat connection is asked for the next part, which a second
@@ -65,7 +66,7 @@ export function normalizeStory(s: Partial<StorySession> & Pick<StorySession, 'id
   };
 }
 
-/** The Dramatis Personae a new story starts with: the card's character and
+/** The Cast a new story starts with: the card's character and
  *  you, both read live from the card and your persona. */
 export function defaultPersonae(newId: () => string): StoryPersona[] {
   return [
@@ -90,7 +91,7 @@ export function personaFields(p: StoryPersona, ctx: StoryContext): { name: strin
  *  lorebook keys are looked for in. */
 export const storyParagraphs = (text: string) => text.split(/\n+/).filter((l) => l.trim());
 
-/** The Dramatis Personae as a lorebook, so they're read the way lorebook
+/** The Cast as a lorebook, so they're read the way lorebook
  *  entries are: a name (or alias) in the recent text brings one in. */
 export function personaeBook(personae: StoryPersona[], ctx: StoryContext): Lorebook {
   const entries: LorebookEntry[] = personae.map((p, i) => {
@@ -110,13 +111,13 @@ export function personaeBook(personae: StoryPersona[], ctx: StoryContext): Loreb
 }
 
 export interface StoryLore {
-  /** The personae going in, each as "Name: description". */
+  /** The Cast members going in, each as "Name: description". */
   personae: { name: string; text: string; reason: string }[];
   /** The card's lorebook entries the story brings in. */
   lore: ActivatedEntry[];
 }
 
-/** Which personae and lorebook entries the end of the story brings in. */
+/** Which Cast members and lorebook entries the end of the story brings in. */
 export function storyLore(story: Pick<StorySession, 'text' | 'personae' | 'useLorebook' | 'scanDepth'>, ctx: StoryContext, opts: { count?: (t: string) => number; random?: () => number } = {}): StoryLore {
   const paragraphs = storyParagraphs(story.text);
   const scanDepth = Math.max(1, story.scanDepth || DEFAULT_STORY_SCAN_DEPTH);
@@ -212,7 +213,7 @@ export function buildStoryRequest(story: StorySession, ctx: StoryContext, opts: 
   const instructions = (opts.instructions?.trim() || DEFAULT_STORY_INSTRUCTIONS).replace(/\{\{words\}\}/gi, words);
   const sections = [
     memory && `## Memory\n${memory}`,
-    lore.personae.length && `## Dramatis Personae\n${lore.personae.map((p) => p.text.trim()).join('\n\n')}`,
+    lore.personae.length && `## Cast\n${lore.personae.map((p) => p.text.trim()).join('\n\n')}`,
     lore.lore.length && `## World\n${lore.lore.map((a) => a.entry.content.trim()).filter(Boolean).join('\n\n')}`,
   ].filter(Boolean);
   const system = [instructions, ...sections].join('\n\n');
@@ -291,3 +292,57 @@ export const storyWordCount = (text: string) => (text.match(/\S+/g) ?? []).lengt
 
 /** The story as a plain text file. */
 export const storyFileName = (name: string) => `${(name.trim() || 'Story').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 80)}.txt`;
+
+// ─── Scanning the story for new Cast members ─────────────────────────────────
+
+/** How much of the story's end the scan reads, in characters. */
+const SCAN_TAIL = 24000;
+
+export interface CastSuggestion {
+  name: string;
+  aliases: string[];
+  description: string;
+}
+
+/** Everyone already in the Cast, by every name, lowercased. */
+export function castNames(personae: StoryPersona[], ctx: StoryContext): Set<string> {
+  const names = new Set<string>();
+  for (const p of personae) for (const n of [personaFields(p, ctx).name, ...p.aliases]) if (n.trim()) names.add(n.trim().toLowerCase());
+  return names;
+}
+
+/** The scan: the story (its end, if it's long) and who's in the Cast already. */
+export function castScanMessages(story: Pick<StorySession, 'text' | 'personae'>, ctx: StoryContext): LlmMessage[] {
+  const known = story.personae.map((p) => personaFields(p, ctx).name).filter(Boolean);
+  const text = story.text.length > SCAN_TAIL ? story.text.slice(-SCAN_TAIL).replace(/^\S*\s/, '') : story.text;
+  return [
+    {
+      role: 'system',
+      content: `You read a story and list the named characters in it who aren't in its cast list yet, so the writer can add them. For each one, give their name, any other names or titles the story calls them by, and a short description (two or three sentences) drawn only from what the story says: who they are, how they look and act, how they relate to the others. Leave out anyone already in the cast (by any of their names), unnamed extras, and people only mentioned in passing.
+
+Reply with JSON only, in this shape: {"cast": [{"name": "…", "aliases": ["…"], "description": "…"}]}. If there's no one to add, reply {"cast": []}.`,
+    },
+    { role: 'user', content: `Already in the cast: ${known.length ? known.join(', ') : '(no one)'}\n\n<story>\n${text}\n</story>` },
+  ];
+}
+
+/** The scan's reply as new Cast members: each with a name, none already in
+ *  the Cast (by any name) or listed twice. */
+export function parseCastSuggestions(text: string, known: Set<string>): CastSuggestion[] | null {
+  const raw = extractJson(text) as { cast?: unknown } | unknown[] | null;
+  const list = Array.isArray(raw) ? raw : raw && typeof raw === 'object' && Array.isArray((raw as { cast?: unknown }).cast) ? ((raw as { cast: unknown[] }).cast) : null;
+  if (!list) return null;
+  const seen = new Set(known);
+  const out: CastSuggestion[] = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const r = item as Record<string, unknown>;
+    const name = typeof r.name === 'string' ? r.name.trim() : '';
+    if (!name) continue;
+    const aliases = (Array.isArray(r.aliases) ? r.aliases : []).filter((a): a is string => typeof a === 'string').map((a) => a.trim()).filter((a) => a && a.toLowerCase() !== name.toLowerCase());
+    if ([name, ...aliases].some((n) => seen.has(n.toLowerCase()))) continue;
+    for (const n of [name, ...aliases]) seen.add(n.toLowerCase());
+    out.push({ name, aliases, description: typeof r.description === 'string' ? r.description.trim() : '' });
+  }
+  return out;
+}

@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 // Writing mode: a story started from the greeting, continued by a chat
 // connection with the proofreading pass on, a part written again and
-// stepped back to, and the Dramatis Personae in the prompt.
+// stepped back to, and the Cast in the prompt.
 
 test('writing a story with a chat connection and proofreading', async ({ page, request }) => {
   const connection = { id: 'cc', name: 'Chatty', kind: 'openai', baseUrl: 'http://127.0.0.1:9/v1', apiKey: '', model: 'm', params: { max_tokens: 200 } };
@@ -15,6 +15,10 @@ test('writing a story with a chat connection and proofreading', async ({ page, r
     const system: string = body.messages[0].content;
     // The writer repeats the story's last words and adds a note; the
     // proofreader hands back a clean part.
+    if (system.startsWith('You read a story and list')) {
+      const cast = JSON.stringify({ cast: [{ name: 'Oren', aliases: ['the kid'], description: 'A dockhand who rows out to the lighthouse.' }, { name: 'Keeper', description: 'Already in.' }] });
+      return route.fulfill({ contentType: 'application/x-ndjson', body: `${JSON.stringify({ type: 'text', text: cast })}\n${JSON.stringify({ type: 'done', stopReason: 'stop' })}\n` });
+    }
     const text = system.startsWith('You proofread') ? `The lamp went out (take ${sent.length}).` : `The lighthouse stood dark. <continuation>The lamp went out.</continuation>`;
     await route.fulfill({ contentType: 'application/x-ndjson', body: `${JSON.stringify({ type: 'text', text })}\n${JSON.stringify({ type: 'done', stopReason: 'stop' })}\n` });
   });
@@ -38,7 +42,7 @@ test('writing a story with a chat connection and proofreading', async ({ page, r
   await page.getByRole('button', { name: '✍ Continue' }).click();
   await expect(doc).toHaveValue('Keeper watched the sea. The lighthouse stood dark. The lamp went out (take 2).');
   expect(sent).toHaveLength(2);
-  expect(sent[0].messages[0].content).toContain('## Dramatis Personae\nKeeper: Keeper keeps the lighthouse.');
+  expect(sent[0].messages[0].content).toContain('## Cast\nKeeper: Keeper keeps the lighthouse.');
   expect(sent[0].messages[1].content).toContain('<story>\nKeeper watched the sea. The lighthouse stood dark.\n</story>');
   expect(sent[1].messages[1].content).toContain('<continuation>\nThe lamp went out.\n</continuation>');
 
@@ -55,6 +59,13 @@ test('writing a story with a chat connection and proofreading', async ({ page, r
   await page.waitForTimeout(1000);
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'The story' })).toHaveValue(/take 4\)\.$/);
+
+  // Scanning the story suggests Oren (Keeper's in the Cast already); added, he's in the Cast.
+  await page.getByRole('button', { name: '🔍 Scan the story' }).click();
+  await expect(page.getByText('A dockhand who rows out to the lighthouse.')).toBeVisible();
+  await expect(page.getByText('Already in.')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(page.getByRole('button', { name: /▸ Oren/ })).toBeVisible();
 });
 
 test('a text-completion connection gets one raw prompt and writes on', async ({ page, request }) => {

@@ -20,15 +20,19 @@ import {
   DEFAULT_PROOFREAD_PROMPT,
   DEFAULT_STORY_INSTRUCTIONS,
   buildStoryRequest,
+  castNames,
+  castScanMessages,
   cleanContinuation,
   currentTake,
   joinContinuation,
   loreLabels,
+  parseCastSuggestions,
   personaFields,
   proofreadMessages,
   storyFileName,
   storyLore,
   storyWordCount,
+  type CastSuggestion,
   type StoryContext,
 } from '@/lib/storyPrompt';
 import type { LlmConnection, LlmMessage } from '@/types/llm';
@@ -38,7 +42,7 @@ import type { StoryPersona, StorySession } from '@/types/project';
 // together in one document. Type into it, press Continue, and the model
 // writes on from where the text stops; ↻ writes that part again, ‹ › step
 // between the versions, ↶ ↷ undo and redo. Beside it: the memory, the
-// author's note, the Dramatis Personae and the lorebook (see
+// author's note, the Cast and the lorebook (see
 // lib/storyPrompt.ts for how they make up the prompt).
 
 /** The names and descriptions the story's prompt reads, live. */
@@ -213,7 +217,7 @@ export function StoryPanel() {
           <span className="ml-auto text-[11px] whitespace-nowrap text-slate-500" title="Words in the story, and its tokens (estimated)">
             {words} words · {formatTokens(countTextNow(shown))} tokens
           </span>
-          <Button size="sm" variant={settingsOpen ? 'primary' : 'secondary'} onClick={() => setSettingsOpen(!settingsOpen)} title="Memory, author's note, Dramatis Personae, lorebook and the model" aria-label="Story settings">
+          <Button size="sm" variant={settingsOpen ? 'primary' : 'secondary'} onClick={() => setSettingsOpen(!settingsOpen)} title="Memory, author's note, Cast, lorebook and the model" aria-label="Story settings">
             📖{!phone && ' Story settings'}
           </Button>
         </div>
@@ -316,7 +320,7 @@ function StoryStart({ starting, setStarting }: { starting: boolean; setStarting:
       <div className="max-w-md text-center">
         <h2 className="text-lg font-semibold text-slate-100">Write a story together</h2>
         <p className="mt-2 text-sm text-slate-400">
-          One document that you and the model both write: type, press Continue, and it writes on from where you stop. The card&apos;s character, you, and anyone else you add to the Dramatis Personae come in when the story mentions them, and so does the card&apos;s lorebook.
+          One document that you and the model both write: type, press Continue, and it writes on from where you stop. The card&apos;s character, you, and anyone else in the Cast come in when the story mentions them, and so does the card&apos;s lorebook.
         </p>
         <Button variant="primary" className="mt-4" onClick={() => setStarting(true)}>
           Start a story…
@@ -371,7 +375,7 @@ function NewStoryDialog({ open, onClose, ctx }: { open: boolean; onClose: () => 
         </label>
         {picked && <p className="line-clamp-4 text-xs whitespace-pre-wrap text-slate-500">{x(picked.text)}</p>}
         {card.scenario.trim() && <Toggle checked={memory} onChange={setMemory} label="Put the card's scenario in the story's memory" />}
-        <p className="text-xs text-slate-500">The card&apos;s character and your persona start in the Dramatis Personae. Change any of it in 📖 Story settings.</p>
+        <p className="text-xs text-slate-500">The card&apos;s character and your persona start in the Cast. Change any of it in 📖 Story settings.</p>
       </div>
     </Modal>
   );
@@ -389,7 +393,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-/** The story's memory, author's note, Dramatis Personae, lorebook and model. */
+/** The story's memory, author's note, Cast, lorebook and model. */
 function StorySettings({ story, ctx, rawText, onClose }: { story: StorySession; ctx: StoryContext; rawText: boolean; onClose: () => void }) {
   const update = useStoryStore((s) => s.update);
   const { chatConnectionId, storyPrompts, setStoryPrompts } = useLlmStore();
@@ -415,7 +419,7 @@ function StorySettings({ story, ctx, rawText, onClose }: { story: StorySession; 
           <AutoTextarea value={story.authorsNote} onChange={(e) => update({ authorsNote: e.target.value })} minRows={2} maxRows={8} placeholder="Tone, pacing, what should happen soon. {{char}} and {{user}} work." className="text-sm" aria-label="Author's note" />
         </Field>
 
-        <Field label="Dramatis Personae" hint="come in when their name is in the recent text">
+        <Field label="Cast" hint="come in when their name is in the recent text">
           <div className="flex flex-col gap-2">
             {story.personae.map((p) => (
               <PersonaRow key={p.id} persona={p} ctx={ctx} active={lore.personae.some((a) => a.name === personaFields(p, ctx).name)} onChange={(patch) => setPersona(p.id, patch)} onRemove={() => update({ personae: story.personae.filter((x) => x.id !== p.id) })} />
@@ -423,6 +427,7 @@ function StorySettings({ story, ctx, rawText, onClose }: { story: StorySession; 
             <Button size="sm" className="self-start" onClick={() => update({ personae: [...story.personae, { id: uuid(), name: '', aliases: [], description: '', always: false, enabled: true }] })}>
               + Add someone
             </Button>
+            <CastScan story={story} ctx={ctx} />
           </div>
         </Field>
 
@@ -448,7 +453,7 @@ function StorySettings({ story, ctx, rawText, onClose }: { story: StorySession; 
                 ))}
               </>
             ) : (
-              'Nothing from the personae or the lorebook is in the prompt right now.'
+              'Nothing from the Cast or the lorebook is in the prompt right now.'
             )}
           </div>
         </Field>
@@ -456,7 +461,7 @@ function StorySettings({ story, ctx, rawText, onClose }: { story: StorySession; 
         <Field label="Model">
           <ConnectionPicker value={story.connectionId ?? chatConnectionId} onChange={(id) => update({ connectionId: id })} label="Writes with" />
           {rawText ? (
-            <p className="text-[11px] text-slate-500">A text-completion connection: the model gets the memory, personae, lore and story as one plain text and simply writes on, as NovelAI does.</p>
+            <p className="text-[11px] text-slate-500">A text-completion connection: the model gets the memory, Cast, lore and story as one plain text and simply writes on, as NovelAI does.</p>
           ) : (
             <>
               <label className="flex items-center gap-2 text-xs text-slate-400">
@@ -482,6 +487,95 @@ function StorySettings({ story, ctx, rawText, onClose }: { story: StorySession; 
         </Field>
       </div>
     </>
+  );
+}
+
+/** 🔍 Scan the story: the model lists named characters the Cast doesn't
+ *  have yet, each to add or skip. */
+function CastScan({ story, ctx }: { story: StorySession; ctx: StoryContext }) {
+  const update = useStoryStore((s) => s.update);
+  const { connections, chatConnectionId } = useLlmStore();
+  const stream = useLlmStream();
+  const [found, setFound] = useState<CastSuggestion[] | null>(null);
+  const [runId, setRunId] = useState<string | null>(null);
+  const connection = connections.find((c) => c.id === (story.connectionId ?? chatConnectionId)) ?? null;
+
+  const scan = async () => {
+    if (!connection) return toast('Add an LLM connection in Settings first.', 'error');
+    if (!story.text.trim()) return toast('There’s no story to scan yet.', 'error');
+    setFound(null);
+    const messages = castScanMessages(story, ctx);
+    const id = logRun('Story: scan for Cast', connection, messages);
+    setRunId(id);
+    const r = await stream.run(connection, messages);
+    useAssistLog.getState().update(id, { running: false, text: r.text, reasoning: r.reasoning, error: r.error });
+    if (r.error) return toast(r.error, 'error');
+    // Checked against the Cast as it is now, which may have changed meanwhile.
+    const now = useStoryStore.getState().story ?? story;
+    const list = parseCastSuggestions(r.text, castNames(now.personae, ctx));
+    if (!list) return toast('The scan’s reply wasn’t a list of characters. 🔍 shows what came back.', 'error');
+    setFound(list);
+  };
+
+  const add = (picked: CastSuggestion[]) => {
+    const now = useStoryStore.getState().story;
+    if (!now) return;
+    update({ personae: [...now.personae, ...picked.map((c) => ({ id: uuid(), name: c.name, aliases: c.aliases, description: c.description, always: false, enabled: true }))] });
+    setFound((f) => (f ? f.filter((c) => !picked.includes(c)) : f));
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-1.5">
+        {stream.running ? (
+          <Button size="sm" variant="danger" onClick={stream.stop}>
+            ■ Stop scanning
+          </Button>
+        ) : (
+          <Button size="sm" onClick={() => void scan()} title="The model reads the story and suggests named characters who aren't in the Cast yet, for you to add or skip">
+            🔍 Scan the story
+          </Button>
+        )}
+        {runId && !stream.running && (
+          <IconButton title="See what the scan was asked and what came back" onClick={() => inspectAssistRun(runId)}>
+            🔍
+          </IconButton>
+        )}
+      </div>
+      {found && found.length === 0 && <p className="text-[11px] text-slate-500">No one new: everyone named in the story is in the Cast.</p>}
+      {found && found.length > 0 && (
+        <div className="flex flex-col gap-1.5 rounded-md border border-violet-500/30 p-2">
+          <div className="flex items-center text-xs text-slate-300">
+            <span className="flex-1">New in the story:</span>
+            {found.length > 1 && (
+              <Button size="sm" variant="ghost" onClick={() => add(found)}>
+                Add all
+              </Button>
+            )}
+            <IconButton title="Skip them all" onClick={() => setFound(null)}>
+              ✕
+            </IconButton>
+          </div>
+          {found.map((c) => (
+            <div key={c.name} className="flex items-start gap-2 text-xs">
+              <div className="min-w-0 flex-1">
+                <div className="text-slate-200">
+                  {c.name}
+                  {c.aliases.length > 0 && <span className="text-slate-500"> ({c.aliases.join(', ')})</span>}
+                </div>
+                {c.description && <p className="text-slate-500">{c.description}</p>}
+              </div>
+              <Button size="sm" onClick={() => add([c])}>
+                Add
+              </Button>
+              <IconButton title="Skip" onClick={() => setFound((f) => (f ? f.filter((x) => x !== c) : f))}>
+                ✕
+              </IconButton>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
