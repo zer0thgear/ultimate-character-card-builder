@@ -43,6 +43,10 @@ export interface KeptImage {
   parameters?: Partial<NovelAIParameters>;
   /** A short label, e.g. "happy" for an expression. */
   label?: string;
+  /** Hash and byte size of the file it came from (the PNG, or a library
+   *  image before conversion): how the same picture isn't kept twice. */
+  hash?: string;
+  size?: number;
 }
 
 export interface AvatarInfo {

@@ -174,8 +174,9 @@ describe('card project routes', { timeout: 30_000 }, () => {
       const p = await create();
       const kept = (n: number): KeptImage => ({ id: `g${n}`, file: `g${n}.png`, width: 1, height: 1, createdAt: n });
       await Promise.all([
+        // Each a different picture (the same one is only kept once).
         ...[1, 2, 3, 4].map((n) =>
-          routeFetch(`/api/projects/${p.id}/kept/g${n}.png`, { method: 'PUT', body: new Uint8Array(PNG_SIG), headers: { 'x-kept': encodeURIComponent(JSON.stringify(kept(n))) } }),
+          routeFetch(`/api/projects/${p.id}/kept/g${n}.png`, { method: 'PUT', body: new Uint8Array([...PNG_SIG, n]), headers: { 'x-kept': encodeURIComponent(JSON.stringify(kept(n))) } }),
         ),
         routeFetch(`/api/projects/${p.id}`, json('PUT', { ...p, notes: 'edited meanwhile' })),
       ]);
@@ -229,7 +230,8 @@ describe('card project routes', { timeout: 30_000 }, () => {
       const res = await put(p.id, 'a.png', { id: 'a', width: 832, height: 1216, createdAt: 5, prompt: '1girl, ☆ smile', file: 'ignored.png' });
       expect(await res.json()).toMatchObject({ id: 'a', file: 'a.png', prompt: '1girl, ☆ smile' });
       expect([...readFileSync(path.join(dir, 'projects', p.id, 'gallery', 'a.png'))]).toEqual(PNG_SIG);
-      expect(onDisk(p.id).kept).toEqual([{ id: 'a', file: 'a.png', width: 832, height: 1216, createdAt: 5, prompt: '1girl, ☆ smile' }]);
+      // With the file's hash and size, worked out on the server.
+      expect(onDisk(p.id).kept).toEqual([{ id: 'a', file: 'a.png', width: 832, height: 1216, createdAt: 5, prompt: '1girl, ☆ smile', hash: expect.stringMatching(/^[0-9a-f]{32}$/), size: 8 }]);
       const got = await routeFetch(`/api/projects/${p.id}/kept/a.png`);
       expect(got.headers.get('cache-control')).toContain('immutable');
     });
@@ -252,7 +254,7 @@ describe('card project routes', { timeout: 30_000 }, () => {
     it('unkeeps: the file and its entry both go', async () => {
       const p = await create();
       await put(p.id, 'a.png', { id: 'a', width: 1, height: 1, createdAt: 1 });
-      await put(p.id, 'b.png', { id: 'b', width: 1, height: 1, createdAt: 2 });
+      await put(p.id, 'b.png', { id: 'b', width: 1, height: 1, createdAt: 2 }, new Uint8Array([...PNG_SIG, 2]));
       await routeFetch(`/api/projects/${p.id}/kept/a.png`, { method: 'DELETE' });
       expect(onDisk(p.id).kept.map((k) => k.file)).toEqual(['b.png']);
       expect(readdirSync(path.join(dir, 'projects', p.id, 'gallery'))).toEqual(['b.png']);

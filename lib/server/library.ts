@@ -24,8 +24,9 @@ const MAX_STEALTH_PIXELS = 0x1000000;
 
 interface IndexFile {
   version: 1;
-  /** Absolute path → item (root index is filled in at read time). */
-  items: Record<string, Omit<LibraryItem, 'root' | 'rel' | 'folder'>>;
+  /** Absolute path → item (root index is filled in at read time). `hash`
+   *  (of the whole file) is only worked out when something asks for it. */
+  items: Record<string, Omit<LibraryItem, 'root' | 'rel' | 'folder'> & { hash?: string }>;
 }
 
 let index: IndexFile | null = null;
@@ -35,6 +36,9 @@ let lastScan = 0;
 let lastScanFolders = '';
 
 const idFor = (abs: string) => createHash('sha1').update(abs.toLowerCase()).digest('hex').slice(0, 16);
+/** A whole file's hash: how a kept gen and a library image are known to
+ *  be the same picture (lib/server/keptGens). */
+export const contentHash = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex').slice(0, 32);
 const toSlash = (p: string) => p.split(path.sep).join('/');
 
 async function loadIndex(): Promise<IndexFile> {
@@ -183,6 +187,12 @@ export async function scanLibrary(maxAgeMs = 0): Promise<void> {
   return scanning;
 }
 
+function withoutHash(item: IndexFile['items'][string]): Omit<LibraryItem, 'root' | 'rel' | 'folder'> {
+  const out = { ...item };
+  delete out.hash;
+  return out;
+}
+
 export async function libraryItems(): Promise<LibraryItem[]> {
   const cfg = await getConfig();
   const idx = await loadIndex();
@@ -193,7 +203,7 @@ export async function libraryItems(): Promise<LibraryItem[]> {
     if (root < 0) continue;
     const rel = toSlash(path.relative(roots[root], abs));
     const folder = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
-    items.push({ ...item, root, rel, folder });
+    items.push({ ...withoutHash(item), root, rel, folder });
   }
   return items;
 }
@@ -208,6 +218,42 @@ export async function resolveItem(id: string): Promise<string> {
     if (item.id === id && roots.some((r) => abs.toLowerCase().startsWith(r))) return abs;
   }
   throw new BadRequestError(`No library image ${id}`);
+}
+
+/** A library image's file and what the index knows about it. */
+export async function libraryItemFile(id: string): Promise<{ item: Omit<LibraryItem, 'root' | 'rel' | 'folder'>; bytes: Uint8Array }> {
+  const abs = await resolveItem(id);
+  const idx = await loadIndex();
+  const bytes = new Uint8Array(await fs.readFile(abs));
+  return { item: withoutHash(idx.items[abs]), bytes };
+}
+
+/**
+ * The library images whose file is one of these (by content hash, as
+ * lib/server/keptGens makes it). Only files of a matching size are read,
+ * and each one's hash is remembered in the index.
+ */
+export async function libraryIdsWithContent(files: { hash: string; size: number }[]): Promise<string[]> {
+  if (!files.length) return [];
+  const sizes = new Set(files.map((f) => f.size));
+  const hashes = new Set(files.map((f) => f.hash));
+  const idx = await loadIndex();
+  const cfg = await getConfig();
+  const roots = cfg.libraryFolders.map((r) => path.resolve(r).toLowerCase() + path.sep);
+  const ids: string[] = [];
+  let changed = false;
+  for (const [abs, item] of Object.entries(idx.items)) {
+    if (!sizes.has(item.size) || !roots.some((r) => abs.toLowerCase().startsWith(r))) continue;
+    if (!item.hash) {
+      const bytes = await fs.readFile(abs).catch(() => null);
+      if (!bytes) continue;
+      item.hash = contentHash(bytes);
+      changed = true;
+    }
+    if (hashes.has(item.hash)) ids.push(item.id);
+  }
+  if (changed) await writeFileAtomic(INDEX_FILE, JSON.stringify(idx), { backup: false });
+  return ids;
 }
 
 export async function thumbnail(id: string): Promise<Buffer> {
