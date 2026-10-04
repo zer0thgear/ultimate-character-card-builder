@@ -4,6 +4,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { AppConfig, CardProject, ChatSession, ChatSummary, Persona, ProjectSummary, TrashedProject } from '@/types/project';
 import { DEFAULT_CONFIG } from '@/types/project';
+import type { AdventureSession, AdventureSummary } from '@/types/adventure';
 import { newCard } from '@/lib/cardSpec';
 import { normalizeCard } from '@/lib/cardSpec';
 import { notesSnippet } from '@/lib/cardSummary';
@@ -245,7 +246,7 @@ export async function duplicateProject(id: string, { chats = false }: { chats?: 
   const newId = randomUUID();
   const to = projectDir(newId);
   await fs.mkdir(to, { recursive: true });
-  for (const sub of ['avatar.png', 'gallery', ...(chats ? ['chats', 'chat-images'] : [])]) {
+  for (const sub of ['avatar.png', 'gallery', ...(chats ? ['chats', 'chat-images', 'adventures'] : [])]) {
     await fs.cp(path.join(projectDir(id), sub), path.join(to, sub), { recursive: true }).catch((err: NodeJS.ErrnoException) => {
       if (err.code !== 'ENOENT') throw err;
     });
@@ -409,6 +410,38 @@ export async function deleteChat(projectId: string, chatId: string) {
   const dir = path.join(projectDir(projectId), 'chat-images');
   const files = await fs.readdir(dir).catch(() => [] as string[]);
   await Promise.all(files.filter((f) => f.startsWith(`${checkId(chatId)}-`)).map((f) => fs.rm(path.join(dir, f), { force: true })));
+}
+
+// ─── Adventures ──────────────────────────────────────────────────────────────
+//   data/projects/<id>/adventures/<adventureId>.json   AdventureSession
+
+const adventurePath = (projectId: string, adventureId: string) => path.join(projectDir(projectId), 'adventures', `${checkId(adventureId)}.json`);
+
+export async function listAdventures(projectId: string): Promise<AdventureSummary[]> {
+  const dir = path.join(projectDir(projectId), 'adventures');
+  const files = (await fs.readdir(dir).catch(() => [] as string[])).filter((f) => f.endsWith('.json'));
+  const all = await Promise.all(files.map((f) => readJson<AdventureSession>(path.join(dir, f)).catch(() => null)));
+  return all
+    .filter((a): a is AdventureSession => !!a)
+    .map((a) => ({ id: a.id, name: a.name, createdAt: a.createdAt, updatedAt: a.updatedAt, turns: (Array.isArray(a.entries) ? a.entries : []).reduce((n, e) => Math.max(n, e.turn ?? 0), 0) }))
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export async function getAdventure(projectId: string, adventureId: string): Promise<AdventureSession> {
+  const a = await readJson<AdventureSession>(adventurePath(projectId, adventureId));
+  if (!a) throw new NotFoundError(`No adventure ${adventureId}`);
+  return a;
+}
+
+export async function saveAdventure(projectId: string, adventure: AdventureSession): Promise<AdventureSession> {
+  if (!Array.isArray(adventure.entries)) throw new BadRequestError('An adventure needs its entries.');
+  const saved = { ...adventure, updatedAt: Date.now() };
+  await writeFileAtomic(adventurePath(projectId, adventure.id), JSON.stringify(saved));
+  return saved;
+}
+
+export async function deleteAdventure(projectId: string, adventureId: string) {
+  await removeJson(adventurePath(projectId, adventureId));
 }
 
 // ─── Personas ────────────────────────────────────────────────────────────────

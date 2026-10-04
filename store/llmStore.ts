@@ -11,6 +11,7 @@ import { serverStorage } from '@/lib/serverSettings';
 import { uuid } from '@/lib/uuid';
 import { setTemplateOverrides } from '@/lib/assist';
 import type { PriceUnit } from '@/lib/modelPricing';
+import { DEFAULT_ADVENTURE_SETTINGS, type AdventureSettings } from '@/types/adventure';
 import { BUILTIN_CONTEXT, BUILTIN_INSTRUCT, type ContextTemplate, type InstructTemplate } from '@/lib/textCompletion';
 
 // LLM connections (keys included, on the server like the NovelAI key),
@@ -59,6 +60,9 @@ interface LlmState {
   setPriceUnit: (unit: PriceUnit) => void;
   chatSettings: ChatPromptSettings;
   assistSettings: AssistSettings;
+  /** Adventure mode: each actor's connection, dice, and the rest. */
+  adventureSettings: AdventureSettings;
+  setAdventureSettings: (patch: Partial<AdventureSettings>) => void;
   setAssistSettings: (patch: Partial<AssistSettings>) => void;
   /** Imported SillyTavern chat-completion presets. */
   presets: ChatPreset[];
@@ -88,6 +92,8 @@ export const useLlmStore = create<LlmState>()(
       chatSettings: DEFAULT_CHAT_SETTINGS,
       assistSettings: DEFAULT_ASSIST_SETTINGS,
       setAssistSettings: (patch) => set((s) => ({ assistSettings: { ...s.assistSettings, ...patch } })),
+      adventureSettings: DEFAULT_ADVENTURE_SETTINGS,
+      setAdventureSettings: (patch) => set((s) => ({ adventureSettings: { ...s.adventureSettings, ...patch } })),
       presets: [],
       addPreset: (preset) => set((s) => ({ presets: [...s.presets, preset], chatSettings: { ...s.chatSettings, presetId: preset.id } })),
       updatePreset: (id, patch) => set((s) => ({ presets: s.presets.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
@@ -133,6 +139,10 @@ export const useLlmStore = create<LlmState>()(
             chatConnectionId: s.chatConnectionId === id ? fallback : s.chatConnectionId,
             assistConnectionId: s.assistConnectionId === id ? fallback : s.assistConnectionId,
             visionConnectionId: s.visionConnectionId === id ? null : s.visionConnectionId,
+            adventureSettings: {
+              ...s.adventureSettings,
+              connections: Object.fromEntries(Object.entries(s.adventureSettings.connections).filter(([, c]) => c !== id)),
+            },
           };
         }),
       setChatConnection: (id) => set({ chatConnectionId: id }),
@@ -156,6 +166,7 @@ export const useLlmStore = create<LlmState>()(
           ...p,
           chatSettings: { ...DEFAULT_CHAT_SETTINGS, ...(p.chatSettings ?? {}) },
           assistSettings: { ...DEFAULT_ASSIST_SETTINGS, ...(p.assistSettings ?? {}) },
+          adventureSettings: { ...DEFAULT_ADVENTURE_SETTINGS, ...(p.adventureSettings ?? {}) },
         };
       },
     },

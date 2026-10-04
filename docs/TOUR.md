@@ -84,6 +84,8 @@ Open **💬 Test chat** and start a chat. It builds the prompt the way SillyTave
 
 Switch the header to **💬 Chat**. Pick one of your cards or import one (cards imported here stay out of Builder until you add them), and the chat fills the window. **📝 Card** shows the card's definitions and lorebook to read or change, and **🎨 Picture** draws the current moment right into the chat (the model never sees it). **🛠 Builder** takes you back.
 
+For something more like a tabletop game, press **🎲 Adventure**: a Director plans each turn, a Narrator tells it, each character answers with a call of their own, and real dice decide uncertain actions. **🌍 World** holds the card's characters, places and rules (🔍 the Scout can list them from the card and lorebook).
+
 ## Old gens
 
 **📚 Library** browses folders of pictures you've made before (set them in Settings → Folders), and reads the prompt and settings saved in each one. Search by tag (`long hair, -hat`), character count, model or seed. From a picture you can reuse its prompt, set it as the avatar, or start a new card from it (from the home screen).

@@ -1,6 +1,7 @@
 import type { ChatTally } from '@/lib/chatStats';
 import type { ContinueNode } from '@/lib/continueTree';
 import type { CharacterCard } from '@/types/card';
+import type { AdventureWorld } from '@/types/adventure';
 import type { BasePrompt, CharacterPromptEntry, NovelAIModel, NovelAIParameters, PromptTidbit } from '@/types/novelai';
 
 // A card project: the card being written plus everything UCCB keeps
@@ -61,6 +62,9 @@ export interface CardProject {
   notes: string;
   /** Imported in Chat mode: shown there only, until it's added to Builder. */
   chatOnly?: boolean;
+  /** Its world for Adventure mode: settings, dramatis personae and rules
+   *  (lib/adventure.ts). Not part of the exported card. */
+  adventure?: AdventureWorld;
   createdAt: number;
   updatedAt: number;
 }

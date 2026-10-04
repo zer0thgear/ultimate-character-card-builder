@@ -38,3 +38,11 @@ export function usePriceLabel(connection: LlmConnection | null | undefined, mode
   const p = model ? prices?.[model] : undefined;
   return isOpenRouter(connection) && p ? priceLabel(p, unit) : '';
 }
+
+/** An OpenRouter model's price as already loaded (loading it for next
+ *  time if it isn't), outside a component. */
+export function priceNow(connection: LlmConnection | null | undefined): ModelPrice | undefined {
+  if (!isOpenRouter(connection)) return undefined;
+  load();
+  return usePrices.getState().prices?.[connection!.model];
+}

@@ -156,6 +156,33 @@ The **🛠 Builder | 💬 Chat** switch in the header (at the top of the ☰ dra
 
   Pictures use the image connection and the Image tab's model, size and style, without changing the Image tab. They stay in the chat after the message they illustrate (and go if it's deleted), but they're never sent to the model, numbered or exported. On each one, ↻ draws it again with a new seed, ✎ changes its prompt, ★ keeps it with the card (Builder's Gallery), and 🗑 removes it.
 
+## Adventure mode
+
+**🎲 Adventure** (in Chat mode's header, beside 📝 Card) turns the open card into a roleplay run like a tabletop game, with several model calls a turn instead of one. Press it again to go back to the chat; a turn or a reply keeps running while the other one shows. Each card keeps its adventures beside its chats.
+
+- **The actors**: the **🎬 Director** (the game master) plans each turn: what happens, who acts, and whether to roll. The **📜 Narrator** describes the scene and what came of your action. The **🎭 Cast** plays each character who acts that turn, one call per character, from that character's entry. The **🔍 Scout** reads the card and lists its world.
+- **A turn**: type what you do (or say) and press Send, or send nothing to **⏭ Let it unfold** and see what happens next. The Director's plan is shown folded under your action (its brief, who acts, the roll, and its private notes, which it reads again next turn to keep track of plans, secrets and the rules' bookkeeping). **📍** above the story shows where the scene is, when, and who's there, as the Director last set it.
+- **🎬 To the Director**: say something out of character (a twist, a time skip, bring someone in) and the Director plans the next turn with it. It's kept in the story, marked, but only the Director reads it.
+- **🎲 Dice**: with dice on, the Director asks for a roll when an outcome is uncertain, naming the dice and the difficulty. The app rolls real dice (not the model), shows the result (green for a success, red for a failure; a natural 20 or 1 on a d20 always succeeds or fails) and the Narrator follows it. Each adventure has its own switch; new ones start the way ⚙ sets.
+- **↻ Redo turn** plays the latest turn again from your same action: new plan, new roll, new words, with the scene put back as it was. On any part of the story, ✎ edits it, 🗑 deletes it, and 🔍 shows exactly what that actor was sent (for calls made since the page was opened). ⏹ Stop ends the turn where it is, keeping what's been written.
+- **Starting one** (**+ New**): open with one of the card's greetings, or have the Director write a bespoke opening, from the world alone or built on a greeting, with an optional note on what you'd like ("a heist gone wrong").
+- **What it costs**: a turn is up to 2 + (characters per turn) calls, 4 by default. Each turn ends with a line of its calls and tokens, and the bar shows the adventure's total (Σ). Tokens come from the provider where it reports them (marked ~ where they're estimated), and dollars are shown for OpenRouter connections, whose prices are known.
+
+### 🌍 World
+
+Each card has a world for its adventures, kept with the card (not in the exported card file): **Dramatis personae** (everyone who can appear; the Cast plays each from their entry, and the card's own character also from its description), **Settings** (places, factions, items, facts) and **Rules**.
+
+- **🔍 Scan the card**: the Scout reads the card's description, personality, scenario, first message, example dialogue and lorebook, and lists its settings and characters, plus any rules the card describes (one call). Scanning again offers to add only the new ones (yours stay as you have them) or to replace the lot.
+- **Changes go to the card or this adventure**: with an adventure open, edits can be for every adventure with the card, or for this one only. An entry changed or added here is marked, ↺ takes it back to the card's, and 🗑 leaves a card's entry out of this adventure alone. The Rules can be this adventure's own too.
+- **Rules** are for the Director to keep and apply, like a game's: creature catching, hit points, survival, reputation. **Start from** adds an example to change. {{user}} and {{char}} work in the world and rules.
+- The card's **lorebook** is still scanned against the story each call, when the chat settings use it, and the entries it calls up are sent alongside the world.
+
+### ⚙ Actors
+
+⚙ beside 🌍 World sets how adventures run, for every card: a **connection per actor** (each falls back to the chat's, so a smart Director and a cheap, fast Cast is one choice), **characters per turn** at most (each is a call), whether the story calls you **"you" or by name**, how much of the **story so far** each call is sent, **style notes** for the Narrator and the Cast, and whether new adventures roll dice.
+
+Your persona is the player character; the Director and the actors never act or speak for you. SillyTavern presets and text-completion templates aren't applied to adventure calls yet (a text-completion connection still gets its instruct template).
+
 ## Brainstorm
 
 **✨ Brainstorm** is a free-form chat with the writing assistant, which always sees the card as it is right now. Replies can be copied or added to the card's Notes.
