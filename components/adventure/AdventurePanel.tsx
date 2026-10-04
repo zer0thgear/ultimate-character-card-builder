@@ -127,7 +127,7 @@ export function AdventurePanel({ phone }: { phone: boolean }) {
             <Button size="sm" variant={worldOpen ? 'primary' : 'secondary'} onClick={() => setWorldOpen(!worldOpen)} title="The world: the Cast, settings and rules, the card's and this adventure's">
               🌍{!phone && ' World'}
             </Button>
-            <IconButton title="Actors: each one's connection, characters per turn, style" onClick={() => setActorsOpen(true)}>
+            <IconButton title="Actors: each one's connection and prompt, characters per turn, style, your own actors" onClick={() => setActorsOpen(true)}>
               ⚙
             </IconButton>
             {adventure && !creating && !phone && (
@@ -593,6 +593,20 @@ function EntryView({ entry: e, userName, avatar, busy, update }: { entry: Advent
           </div>
           {body}
         </div>
+      </div>
+    );
+  if (e.kind === 'extra')
+    return (
+      <div className="group rounded-md border border-sky-500/25 bg-sky-500/5 px-3 py-2">
+        <div className="mb-0.5 flex items-center gap-2 text-[11px] text-sky-300/90">
+          <span className="flex-1" title={e.private ? 'Only you and the Director see this; the Narrator and the Cast are not sent it' : undefined}>
+            {e.icon ?? '✦'} {e.speaker}
+            {e.private && <span className="ml-1 text-slate-500">· private</span>}
+          </span>
+          {tools}
+        </div>
+        {body}
+        {!e.text && editing === null && <span className="animate-pulse text-xs text-slate-500">…</span>}
       </div>
     );
   if (e.kind === 'character')

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { AdventureWorld, WorldEntry } from '@/types/adventure';
 import { useProjectStore } from '@/store/projectStore';
+import { useLlmStore } from '@/store/llmStore';
 import { useAdventureStore } from '@/store/adventureStore';
 import { toast } from '@/store/uiStore';
 import { RULE_EXAMPLES, emptyWorld, mergeWorld, overlayList, parseScout, scoutMessages, tallyUsage, withOverride, type ShownEntry, type WorldList } from '@/lib/adventure';
@@ -22,7 +23,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 export async function scanCard(): Promise<boolean> {
   const project = useProjectStore.getState().project;
   if (!project) return false;
-  const r = await callActor('scout', '🔍 Scout', scoutMessages(project.card.data));
+  const r = await callActor('scout', '🔍 Scout', scoutMessages(project.card.data, useLlmStore.getState().adventureSettings.prompts));
   if (r.error) {
     toast(`The Scout couldn't read the card: ${r.error}`, 'error');
     return false;

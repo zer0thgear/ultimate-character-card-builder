@@ -4,8 +4,33 @@
 // character who acts this turn is played by a call of its own. Dice are
 // rolled by the app, not the model. See lib/adventure.ts.
 
-/** The model calls an adventure makes, each with its own connection. */
-export type ActorId = 'director' | 'narrator' | 'cast' | 'scout';
+/** The model calls an adventure makes, each with its own connection: the
+ *  built-in actors, and yours (`custom:<id>`). */
+export type ActorId = 'director' | 'narrator' | 'cast' | 'scout' | `custom:${string}`;
+
+/** An actor of your own: a call with your prompt, run each turn or when the
+ *  Director briefs it in a field of its plan. */
+export interface CustomActor {
+  id: string;
+  name: string;
+  /** An emoji shown on its part of the story. */
+  icon: string;
+  /** What it is, for the Director. */
+  about: string;
+  /** Its system prompt (macros work). */
+  prompt: string;
+  /** What the Director puts in its field of the plan; it runs only on turns
+   *  the Director fills it. Empty: no field, and it runs every turn. */
+  brief: string;
+  /** Before the turn's beats (after any roll), or after them. */
+  when: 'before' | 'after';
+  /** Its part is left out of what the Narrator and the Cast are sent (the
+   *  Director and you still see it). */
+  private?: boolean;
+  enabled: boolean;
+}
+
+export const customActorId = (a: Pick<CustomActor, 'id'>): ActorId => `custom:${a.id}`;
 
 export const ACTORS: { id: ActorId; label: string; icon: string; blurb: string }[] = [
   { id: 'director', label: 'Director', icon: '🎬', blurb: 'Plans each turn: what happens, who acts, whether to roll. Also writes bespoke openings.' },
@@ -87,9 +112,14 @@ export interface DiceRoll {
 export interface AdventureEntry {
   id: string;
   turn: number;
-  kind: 'action' | 'note' | 'director' | 'roll' | 'narration' | 'character' | 'cast';
-  /** Who: the character's name (character), or {{user}}'s (action). */
+  kind: 'action' | 'note' | 'director' | 'roll' | 'narration' | 'character' | 'cast' | 'extra';
+  /** Who: the character's name (character), {{user}}'s (action), or your
+   *  actor's (extra). */
   speaker?: string;
+  /** Extra entries: your actor's emoji, and whether only the Director sees
+   *  it besides you. */
+  icon?: string;
+  private?: boolean;
   text: string;
   createdAt: number;
   roll?: DiceRoll;
@@ -120,6 +150,10 @@ export type AdventureSummary = Pick<AdventureSession, 'id' | 'name' | 'createdAt
 export interface AdventureSettings {
   /** Each actor's connection; unset uses the chat's. */
   connections: Partial<Record<ActorId, string>>;
+  /** Your edits to the actors' prompts, by ADVENTURE_TEMPLATES key. */
+  prompts?: Record<string, string>;
+  /** Actors of your own. */
+  customActors?: CustomActor[];
   /** The most characters who act in one turn (each is a call). */
   maxActors: number;
   /** New adventures start with dice on. */

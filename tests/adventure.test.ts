@@ -19,6 +19,9 @@ import {
   openingMessages,
   overlayList,
   parsePlan,
+  ADVENTURE_TEMPLATES,
+  ADVENTURE_DEFAULT_PROMPTS,
+  customActorMessages,
   turnBeats,
   parseScout,
   rollDice,
@@ -407,5 +410,81 @@ describe('newcomers to the Cast', () => {
     expect(sheets[0]).toContain('<character name="Mira">\nA smuggler with a scar.');
     const off = await runTurn({ ctx: ctx({ settings: { ...DEFAULT_ADVENTURE_SETTINGS, autoCast: false } }), session: { entries: [] }, action: 'x' }, d);
     expect(off.newCast).toEqual([]);
+  });
+});
+
+describe('editable prompts and your own actors', () => {
+  const weather = { id: 'w', name: 'Weather', icon: '🌦', about: 'Reports the weather.', prompt: 'You report the weather near {{char}} for {{user}}.', brief: 'how the weather turns, if it does', when: 'after' as const, enabled: true };
+
+  it('has a default for every prompt, filled and with macros expanded', () => {
+    for (const t of ADVENTURE_TEMPLATES) expect(ADVENTURE_DEFAULT_PROMPTS[t.key]?.trim()).toBeTruthy();
+    const system = directorMessages(ctx(), [], undefined)[0].content;
+    expect(system).toContain('Bob is the player character');
+    expect(system).toContain('"beats": [');
+    expect(system).not.toMatch(/\{\{\w+\}\}/);
+    expect(system).not.toContain('Other actors take part');
+    const narrator = narratorMessages(ctx(), [], undefined, 'b')[0].content;
+    expect(narrator).not.toContain('Style:');
+    expect(narratorMessages(ctx({ settings: { ...DEFAULT_ADVENTURE_SETTINGS, style: 'Terse.' } }), [], undefined, 'b')[0].content).toContain('Style: Terse.');
+    expect(scoutMessages(card())[0].content).toContain('Use {{user}} for the player');
+  });
+
+  it('uses your edits to a prompt', () => {
+    const settings = { ...DEFAULT_ADVENTURE_SETTINGS, prompts: { narrator: 'Narrate grimly for {{user}}. {{upcoming}}', scout: 'Find stuff.' } };
+    expect(narratorMessages(ctx({ settings }), [], undefined, 'b', undefined, { upcoming: ['Ann'] })[0].content).toBe("Narrate grimly for Bob. Ann acts right after this passage: don't write what they say or do, leave it to them.");
+    expect(scoutMessages(card(), settings.prompts)[0].content).toBe('Find stuff.');
+  });
+
+  it('tells the Director about your actors and gives each a field', () => {
+    const always = { ...weather, id: 'm', name: 'Inner Voice', icon: '💭', brief: '', about: '' };
+    const system = directorMessages(ctx({ settings: { ...DEFAULT_ADVENTURE_SETTINGS, customActors: [weather, always, { ...weather, id: 'off', name: 'Off', enabled: false }] } }), [], undefined)[0].content;
+    expect(system).toContain('- 🌦 Weather: Reports the weather. Brief it in "weather"');
+    expect(system).toContain('- 💭 Inner Voice. It runs every turn.');
+    expect(system).toContain('"weather": null or "how the weather turns, if it does",');
+    expect(system).not.toContain('"inner_voice"');
+    expect(system).not.toContain('Off');
+    expect(callsPerTurn({ maxActors: 2, customActors: [weather, always] })).toBe(8);
+  });
+
+  it("runs your actor when the Director briefs it, in its place, keeping a private one from the others", async () => {
+    const seen: Record<string, string> = {};
+    const settings = { ...DEFAULT_ADVENTURE_SETTINGS, customActors: [weather, { ...weather, id: 'v', name: 'Voice', icon: '💭', brief: '', when: 'before' as const, private: true, prompt: 'Whisper.' }] };
+    const call: TurnDeps['call'] = async (actor, label, messages, onText) => {
+      seen[label] = messages.map((m) => m.content).join('\n');
+      const text = actor === 'director' ? JSON.stringify({ beats: [{ narrate: 'n' }, { actor: 'Ann' }], weather: 'Rain starts.' }) : actor === 'custom:v' ? 'You feel watched.' : actor === 'custom:w' ? 'It rains.' : 'ok';
+      onText?.(text);
+      return { text };
+    };
+    const r = await runTurn({ ctx: ctx({ settings }), session: { entries: [] }, action: 'x' }, { call, onChange: () => {}, now: () => 1 });
+    expect(r.entries.map((e) => [e.kind, e.speaker ?? ''])).toEqual([
+      ['action', 'Bob'],
+      ['director', ''],
+      ['extra', 'Voice'],
+      ['narration', ''],
+      ['character', 'Ann'],
+      ['extra', 'Weather'],
+    ]);
+    expect(r.entries[5]).toMatchObject({ icon: '🌦', text: 'It rains.' });
+    expect(r.entries[2].private).toBe(true);
+    expect(seen['🌦 Weather']).toContain('You report the weather near Ann for Bob.');
+    expect(seen['🌦 Weather']).toContain("The Director's brief for you this turn:\nRain starts.");
+    expect(seen['🌦 Weather']).not.toContain('You feel watched.');
+    expect(seen['📜 Narrator']).not.toContain('You feel watched.');
+    expect(r.entries[1].text).toContain('weather: Rain starts.');
+  });
+
+  it('skips a briefed actor the Director leaves out', async () => {
+    const settings = { ...DEFAULT_ADVENTURE_SETTINGS, customActors: [weather] };
+    const labels: string[] = [];
+    const call: TurnDeps['call'] = async (actor, label) => (labels.push(label), { text: actor === 'director' ? JSON.stringify({ beats: [{ narrate: 'n' }], weather: null }) : 'ok' });
+    await runTurn({ ctx: ctx({ settings }), session: { entries: [] }, action: 'x' }, { call, onChange: () => {} });
+    expect(labels).toEqual(['🎬 Director', '📜 Narrator']);
+  });
+
+  it('sends your actor its prompt with macros, the story and its brief', () => {
+    const m = customActorMessages(ctx(), [entry({ kind: 'narration', text: 'Clouds gather.' })], undefined, weather, 'Rain.');
+    expect(m[0].content).toBe('You report the weather near Ann for Bob.');
+    expect(m[1].content).toContain('Clouds gather.');
+    expect(m[1].content).toMatch(/Rain\.\n\nWrite Weather's part of this turn now\.$/);
   });
 });

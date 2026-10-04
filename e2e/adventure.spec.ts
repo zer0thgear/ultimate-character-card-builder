@@ -13,6 +13,9 @@ async function mockActors(page: Page) {
     sent.push({ system, user });
     let text = 'Something happens.';
     if (system.includes('character cards')) text = JSON.stringify({ settings: [{ name: 'Iron Gate', text: 'The fort gate.' }], personae: [{ name: 'Keeper', text: 'The gatekeeper.' }, { name: 'Grim', text: 'A grumpy guard.' }], rules: '- Keys open doors.' });
+    else if (system.startsWith('You are the Director') && user.includes('I check my notes')) text = JSON.stringify({ beats: [{ narrate: 'Rook reads.' }], quest_log: 'A key to find.' });
+    else if (system.startsWith('You keep the quest log')) text = '- Find the gate key (new)';
+    else if (system.startsWith('Narrate tersely.')) text = 'Notes, read.';
     else if (system.startsWith('You are the Director') && user.includes('I hail the stranger')) text = JSON.stringify({ narration: 'A hooded woman steps out.', actors: [{ name: 'Mira', direction: 'sizes them up' }], new_cast: [{ name: 'Mira', text: 'A hooded smuggler with a scar.' }] });
     else if (system.startsWith('You are the Director')) text = JSON.stringify({ scene: { location: 'Iron Gate', time: 'dusk', present: ['Rook', 'Keeper', 'Grim'], situation: 'A stranger at the gate.' }, roll: { reason: 'Sneaking past', dice: '1d20', dc: 1 }, beats: [{ narrate: 'On success: they slip by.' }, { actor: 'Keeper', direction: 'suspicious' }, { narrate: 'A torch gutters.' }, { actor: 'Grim', direction: 'answers Keeper' }], notes: 'Keeper owes a debt.' });
     else if (system.startsWith('You are the Narrator') && system.includes('falls between characters')) text = 'A torch gutters in the wind.';
@@ -94,4 +97,24 @@ test('an adventure: scan the card, open with the greeting, play a turn', async (
   await page.getByRole('button', { name: "Add to the card's world, for every adventure" }).click();
   await page.getByRole('tab', { name: 'The card' }).click();
   await expect(page.locator('input[value="Mira"]')).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).last().click();
+
+  // ⚙: an actor of your own from an example, and an edited Narrator prompt.
+  await page.getByRole('button', { name: /^Actors:/ }).click();
+  await page.getByRole('button', { name: '📒 Quest Log' }).click();
+  await expect(page.locator('input[value="Quest Log"]')).toBeVisible();
+  await expect(page.getByText('"quest_log"')).toBeVisible();
+  await page.locator('summary', { hasText: '📜 Narrator' }).click();
+  await page.getByLabel('📜 Narrator: Writes each passage').fill('Narrate tersely. {{upcoming}}');
+  await expect(page.getByText('1 edited', { exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/adventure-actors.png', fullPage: true });
+  await page.getByRole('button', { name: 'Close' }).last().click();
+
+  await page.getByPlaceholder(/What do you do, Rook/).fill('I check my notes.');
+  await page.getByPlaceholder(/What do you do, Rook/).press('Enter');
+  await expect(page.getByText('Find the gate key (new)')).toBeVisible();
+  await expect(page.getByText('Notes, read.')).toBeVisible();
+  const director2 = sent.find((s) => s.user.includes('I check my notes') && s.system.startsWith('You are the Director'));
+  expect(director2?.system).toContain('"quest_log": null or');
+  expect(sent.find((s) => s.system.startsWith('You keep the quest log'))?.user).toContain("The Director's brief for you this turn:\nA key to find.");
 });
