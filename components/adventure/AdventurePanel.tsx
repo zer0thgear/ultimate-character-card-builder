@@ -252,7 +252,7 @@ function NewAdventure({ ctx, onCancel, onStarted, onOpenWorld }: { ctx: Adventur
         <div>
           <h2 className="text-lg font-semibold text-slate-100">🎲 A new adventure with {card.name || 'this character'}</h2>
           <p className="mt-1 text-xs text-slate-400">
-            A roleplay run like a tabletop game. Each turn you say what you do; the 🎬 Director decides what happens and who acts, the app rolls the dice, the 📜 Narrator tells it, and each character in the scene answers with a call of their own. That&apos;s up to {callsPerTurn({ maxActors })} calls a turn, so it costs more than a chat.
+            A roleplay run like a tabletop game. Each turn you say what you do; the 🎬 Director decides what happens and who has something to add, the app rolls the dice, and the 📜 Narrator and those characters take it in turns, each with a call of their own. That&apos;s up to {callsPerTurn({ maxActors })} calls a turn, so it costs more than a chat.
           </p>
         </div>
         {worldEmpty && (

@@ -26,7 +26,7 @@ export function ActorSettingsDialog({ open, onClose }: { open: boolean; onClose:
     <Modal open={open} onClose={onClose} title="🎲 Adventure: actors and turns">
       <div className="flex flex-col gap-4 text-sm text-slate-300">
         <p className="text-xs text-slate-400">
-          Each turn is up to {callsPerTurn(s)} calls: the Director&apos;s plan, the Narrator, and one per acting character. Give the Director a smart model and the Cast a cheap or fast one, or the other way round, to taste.
+          Each turn is up to {callsPerTurn(s)} calls: the Director&apos;s plan, one per character with something to add, and a passage of narration around each (usually fewer). Give the Director a smart model and the Cast a cheap or fast one, or the other way round, to taste.
           {connections.length === 0 && (
             <>
               {' '}
