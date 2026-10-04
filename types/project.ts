@@ -169,6 +169,65 @@ export interface ChatSession {
   updatedAt: number;
 }
 
+// ─── Stories (Writing mode) ──────────────────────────────────────────────────
+
+/** Someone in a story's Dramatis Personae: read like a lorebook entry, so
+ *  their description goes into the prompt when their name (or another of
+ *  their names) is in the recent text, or always. */
+export interface StoryPersona {
+  id: string;
+  name: string;
+  /** Other names that bring them in (nicknames, titles). */
+  aliases: string[];
+  description: string;
+  /** In every prompt, mentioned or not. */
+  always: boolean;
+  enabled: boolean;
+  /** Read live from the card's character or from your persona, rather than
+   *  a copy (the description here is then unused). */
+  link?: 'char' | 'user';
+}
+
+/** The latest generation, while it's still the end of the story: where it
+ *  starts in the text, and every version of it (for ↻ Retry and ‹ ›). */
+export interface StoryTake {
+  start: number;
+  outputs: string[];
+  index: number;
+}
+
+/** A story written together with the model: one flat document that you and
+ *  the model both add to, as NovelAI's story mode keeps one. Saved in
+ *  data/projects/<id>/stories/<id>.json. */
+export interface StorySession {
+  id: string;
+  name: string;
+  text: string;
+  /** Always at the top of the prompt: the premise, setting, style. */
+  memory: string;
+  /** Put a few lines from the end of the story, to steer what comes next. */
+  authorsNote: string;
+  personae: StoryPersona[];
+  /** Read the card's lorebook against the story. */
+  useLorebook: boolean;
+  /** How many paragraphs back names and lorebook keys are looked for. */
+  scanDepth: number;
+  /** Chat-completion connections: after each continuation, a second call
+   *  smooths the seam (repeats, commentary, a broken first sentence). */
+  proofread: boolean;
+  /** About how many words each continuation aims for (chat completion). */
+  words: number;
+  /** The connection it's written with (unset: the chat's), and the one
+   *  that proofreads (unset: the same). */
+  connectionId?: string;
+  proofreadConnectionId?: string;
+  last?: StoryTake;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type StorySummary = Pick<StorySession, 'id' | 'name' | 'createdAt' | 'updatedAt'> & { words: number };
+
 /** Why a version of a card was kept: the start of an editing session, a
  *  change to many fields at once, a restore, or by hand. */
 export type VersionReason = 'session' | 'overwrite' | 'macro' | 'assistant' | 'restore' | 'manual';

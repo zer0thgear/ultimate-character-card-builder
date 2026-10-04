@@ -23,6 +23,9 @@ interface UiState {
   /** Chat mode: the card's definitions beside the chat. */
   chatCardOpen: boolean;
   setChatCardOpen: (open: boolean) => void;
+  /** Chat mode, with a card open: its chats, or its stories (Writing mode). */
+  chatView: 'chat' | 'story';
+  setChatView: (v: 'chat' | 'story') => void;
   theme: 'dark' | 'light';
   setTheme: (t: 'dark' | 'light') => void;
   editorTab: EditorTab;
@@ -87,6 +90,8 @@ export const useUiStore = create<UiState>()(
       setAppMode: (appMode) => set({ appMode }),
       chatCardOpen: false,
       setChatCardOpen: (chatCardOpen) => set({ chatCardOpen }),
+      chatView: 'chat',
+      setChatView: (chatView) => set({ chatView }),
       theme: 'dark',
       setTheme: (theme) => {
         document.documentElement.dataset.theme = theme;

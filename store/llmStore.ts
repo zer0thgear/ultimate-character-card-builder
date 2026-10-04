@@ -77,6 +77,14 @@ interface LlmState {
   setChatConnection: (id: string | null) => void;
   setAssistConnection: (id: string | null) => void;
   setChatSettings: (patch: Partial<ChatPromptSettings>) => void;
+  /** Writing mode's prompts, in your wording (unset: lib/storyPrompt's). */
+  storyPrompts: StoryPrompts;
+  setStoryPrompts: (patch: Partial<StoryPrompts>) => void;
+}
+
+export interface StoryPrompts {
+  instructions?: string;
+  proofread?: string;
 }
 
 export const useLlmStore = create<LlmState>()(
@@ -142,6 +150,8 @@ export const useLlmStore = create<LlmState>()(
       priceUnit: '1M',
       setPriceUnit: (priceUnit) => set({ priceUnit }),
       setChatSettings: (patch) => set((s) => ({ chatSettings: { ...s.chatSettings, ...patch } })),
+      storyPrompts: {},
+      setStoryPrompts: (patch) => set((s) => ({ storyPrompts: { ...s.storyPrompts, ...patch } })),
     }),
     {
       // On the server, so every device shares connections, presets and
@@ -156,6 +166,7 @@ export const useLlmStore = create<LlmState>()(
           ...p,
           chatSettings: { ...DEFAULT_CHAT_SETTINGS, ...(p.chatSettings ?? {}) },
           assistSettings: { ...DEFAULT_ASSIST_SETTINGS, ...(p.assistSettings ?? {}) },
+          storyPrompts: p.storyPrompts ?? {},
         };
       },
     },

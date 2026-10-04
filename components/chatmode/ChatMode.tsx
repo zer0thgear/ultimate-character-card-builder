@@ -6,6 +6,7 @@ import { toast, useUiStore, type AppMode } from '@/store/uiStore';
 import { api } from '@/lib/api';
 import { Button, IconButton, Tabs, confirmDialog, cx, inputClass } from '@/components/ui';
 import { ChatPanel } from '@/components/dock/ChatPanel';
+import { StoryPanel } from '@/components/chatmode/StoryMode';
 import { BasicsPanel } from '@/components/editor/BasicsPanel';
 import { GreetingsPanel } from '@/components/editor/GreetingsPanel';
 import { LorebookPanel } from '@/components/editor/LorebookPanel';
@@ -217,11 +218,33 @@ function addToBuilderNow(id: string, name: string) {
  *  and Builder (on a phone, "Add to Builder" is in the card drawer). */
 export function ChatCardActions({ phone }: { phone: boolean }) {
   const project = useProjectStore((s) => s.project);
-  const { chatCardOpen, setChatCardOpen } = useUiStore();
+  const { chatCardOpen, setChatCardOpen, chatView, setChatView } = useUiStore();
   if (!project) return null;
   const name = project.card.data.name || 'Unnamed';
   return (
     <>
+      <div className="flex overflow-hidden rounded-md border border-slate-700 text-xs" role="tablist" aria-label="Chat or story">
+        {(
+          [
+            { view: 'chat', icon: '🗨', label: 'Chat', title: 'Chat with the character, turn by turn' },
+            { view: 'story', icon: '✍', label: 'Story', title: 'Writing mode: write a story together with the model, in one document' },
+          ] as const
+        ).map((m) => (
+          <button
+            key={m.view}
+            type="button"
+            role="tab"
+            aria-selected={chatView === m.view}
+            title={m.title}
+            aria-label={m.label}
+            onClick={() => setChatView(m.view)}
+            className={cx('px-2 py-0.5 whitespace-nowrap', chatView === m.view ? 'bg-violet-600 text-white' : 'text-slate-300 hover:bg-slate-800')}
+          >
+            {m.icon}
+            {!phone && ` ${m.label}`}
+          </button>
+        ))}
+      </div>
       {!phone &&
         (project.chatOnly ? (
           <Button size="sm" variant="ghost" title="Put this card in Builder too, to work on it there (its chats come along)" onClick={() => addToBuilderNow(project.id, name)}>
@@ -240,16 +263,22 @@ export function ChatCardActions({ phone }: { phone: boolean }) {
   );
 }
 
-/** A card open in Chat mode: the chat, and its definitions. The card's
+/** A card open in Chat mode: the chat (or the story, in Writing mode), and
+ *  its definitions. The card's
  *  picture, name and buttons are in the header, leaving the chat the room. */
 export function ChatScreen({ phone }: { phone: boolean }) {
   const project = useProjectStore((s) => s.project);
-  const { chatCardOpen, setChatCardOpen } = useUiStore();
+  const { chatCardOpen, setChatCardOpen, chatView } = useUiStore();
   if (!project) return null;
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1">
-      <div className="min-h-0 min-w-0 flex-1">
+      {/* Both stay mounted, so a reply or a story part carries on while the
+          other is shown. */}
+      <div className="min-h-0 min-w-0 flex-1" hidden={chatView !== 'chat'}>
         <ChatPanel wide />
+      </div>
+      <div className="min-h-0 min-w-0 flex-1" hidden={chatView !== 'story'}>
+        <StoryPanel />
       </div>
       {chatCardOpen &&
         (phone ? (

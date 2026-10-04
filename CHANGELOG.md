@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **✍ Writing mode** in Chat mode: write a story together with the model in one document, as NovelAI's story mode does, with memory, an author's note, Dramatis Personae (a cast read like lorebook entries), the card's lorebook, versions of each part, and an optional proofreading pass for chat connections.
 - **🛎 Helper** on the home screen: ask how anything in UCCB works (buttons, settings, macros, setup) and it answers from the app's own guide, in a personality of your choice (dry wit, teasing brat, mommy, bored, tsundere, hype, villain, or your own).
 
 ## 1.0.0 (2026-10-03)
