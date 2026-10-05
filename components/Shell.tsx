@@ -31,6 +31,7 @@ import { importFromUrl, overwriteCard } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
 import { TrashDialog, duplicateCard, openTrash } from '@/components/TrashDialog';
 import { LorebooksDialog, openLorebooks } from '@/components/LorebookBank';
+import { LoreWizardHost } from '@/components/loreWizard/LoreWizard';
 import { VersionsDialog, openVersions } from '@/components/VersionsDialog';
 import { TitleStatus } from '@/components/TitleStatus';
 import { FirstRunChecklist } from '@/components/FirstRun';
@@ -185,6 +186,7 @@ export function Shell() {
       <ConfirmHost />
       <TrashDialog />
       <LorebooksDialog />
+      <LoreWizardHost />
       <VersionsDialog />
       <TitleStatus />
       <ShortcutsDialog />

@@ -13,6 +13,7 @@ import { bankName, copyFromCard, hasCardLore } from '@/lib/lorebookBank';
 import { lorebookFile, newLorebook } from '@/lib/cardSpec';
 import { importLorebookFile } from '@/lib/cardFile';
 import { LorebookEditor } from '@/components/editor/LorebookPanel';
+import { WizardButton } from '@/components/loreWizard/LoreWizard';
 import { Button, Empty, IconButton, Modal, Toggle, choiceDialog, confirmDialog, cx, downloadBlob, fileBytes, inputClass, pickFiles, textDialog } from '@/components/ui';
 
 // 📖 Lorebooks: the bank of lorebooks, as SillyTavern's World Info list
@@ -351,6 +352,7 @@ function BookPage({ book: b, onDeleted }: { book: BankLorebook; onDeleted: () =>
         setBook={(book) => setBook(b.id, book)}
         actions={
           <>
+            <WizardButton size="sm" bankId={b.id} />
             <Button size="sm" onClick={() => exportBook(b)}>
               Export
             </Button>

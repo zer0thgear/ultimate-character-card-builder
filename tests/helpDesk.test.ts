@@ -49,6 +49,11 @@ describe('helper docs', () => {
     expect(pickChunks(chunks, 'Can I use wildcards?', 6000).some((c) => /__Name__/.test(c.text))).toBe(true);
   });
 
+  it('finds the lorebook wizard', () => {
+    const chunks = chunkDoc('Feature reference', docs.features);
+    expect(pickChunks(chunks, 'Can the assistant write a whole lorebook for me?', 6000).some((c) => c.title.includes('Lorebook wizard'))).toBe(true);
+  });
+
   it('outlines the reference by its headings', () => {
     const o = outline(docs.features);
     expect(o).toContain('- Test chat');

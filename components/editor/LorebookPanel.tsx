@@ -23,6 +23,7 @@ import { withReferences } from '@/lib/references';
 import { useLorebookStore } from '@/store/lorebookStore';
 import { openLorebooks, pickBankLorebook } from '@/components/LorebookBank';
 import { copyFromCard, hasCardLore } from '@/lib/lorebookBank';
+import { WizardButton } from '@/components/loreWizard/LoreWizard';
 
 /** Editing a lorebook of the bank (components/LorebookBank.tsx) rather than
  *  the open card's: content is edited in place, without the card's ✨ tools. */
@@ -33,6 +34,8 @@ export function LorebookPanel() {
   const card = useProjectStore((s) => s.project?.card);
   const updateCard = useProjectStore((s) => s.updateCard);
   const projectId = useProjectStore((s) => s.project?.id);
+  // Builder only, as the other ✨ tools (Chat mode's card drawer leaves it out).
+  const writingTools = useWritingTools();
 
   const setBook = (b: Lorebook | undefined, key?: string) =>
     updateCard((d) => {
@@ -108,6 +111,7 @@ export function LorebookPanel() {
             <Button onClick={() => void fromBank()} title="Copy one of your lorebooks (📖 Lorebooks) into this card">
               📖 From Lorebooks…
             </Button>
+            {writingTools && <WizardButton />}
           </div>
         </Empty>
       </div>
@@ -120,6 +124,7 @@ export function LorebookPanel() {
       setBook={setBook}
       actions={
         <>
+          {writingTools && <WizardButton size="sm" />}
           <Button size="sm" onClick={() => void importBook()}>
             Import…
           </Button>

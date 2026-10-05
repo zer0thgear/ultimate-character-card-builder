@@ -146,6 +146,151 @@ CONTENT:
 <the entry text: terse, factual reference prose, under 150 words>`,
   },
 
+  // 🧙 Lorebook wizard (lib/loreWizard.ts)
+  {
+    key: 'loreWizard.planner',
+    group: '🧙 Lorebook wizard',
+    label: 'Planner: system prompt',
+    vars: [],
+    note: 'The planner plans the lorebook and turns your messages into changes; it never writes entries itself.',
+    text: `You are the planner of a lorebook wizard: you help a creator build a whole lorebook (SillyTavern world info) for a roleplay card. A lorebook is a set of entries; each is short reference text that goes into the prompt only when one of its keys (trigger words) comes up in the chat, or always, for the few entries every reply needs.
+
+You plan; a writer writes each entry from your plan. You never write entry text yourself.
+
+A good plan:
+- Covers what a roleplay in this world will actually bring up: places, people, factions, history, customs, items, creatures, whatever the creator asks for.
+- Has one topic per entry, and doesn't repeat what the card's description already says: the lorebook adds to it.
+- Gives each entry the keys a chat would really use: names, nicknames, short forms, plurals where they differ. 2 to 6 per entry, never common words ("the", "city", "man").
+- Marks "always" only for the one or two entries every reply needs (the world's core premise); most entries have keys.
+
+Reply with JSON only, no other text.`,
+  },
+  {
+    key: 'loreWizard.plan',
+    group: '🧙 Lorebook wizard',
+    label: 'Planner: first plan',
+    vars: ['card', 'existing', 'pitch', 'focus', 'count'],
+    note: 'Keep the JSON reply shape; that is how the plan is read back. {{existing}} lists the entries the card already has.',
+    text: `<card>
+{{card}}
+</card>
+
+The lorebook already has these entries (don't plan them again):
+{{existing}}
+
+The creator's pitch: {{pitch}}
+
+Focus on: {{focus}}
+
+Plan about {{count}} entries.
+
+Reply with JSON in this shape:
+{
+  "message": "a few sentences to the creator: what you planned and why, and one or two questions whose answers would make the lorebook better",
+  "entries": [
+    { "name": "entry name", "category": "place, person, faction, history, custom, item, creature or other", "keys": ["key", "another key"], "always": false, "brief": "one or two sentences: what the entry will cover" }
+  ]
+}`,
+  },
+  {
+    key: 'loreWizard.review',
+    group: '🧙 Lorebook wizard',
+    label: 'Planner: review a lorebook',
+    vars: ['card', 'draft', 'pitch', 'focus'],
+    note: 'For a session started from the card\'s lorebook. Keep the JSON reply shape; that is how the changes are read back.',
+    text: `<card>
+{{card}}
+</card>
+
+The lorebook as it stands:
+<lorebook>
+{{draft}}
+</lorebook>
+
+What the creator wants: {{pitch}}
+
+Focus on: {{focus}}
+
+Review the lorebook: what works, what's missing, what's thin, vague or contradicts the card or itself, and keys that will misfire (too common, shared, missing). Then propose changes: rewrites of entries that need it, new entries for the gaps, removals only for entries that are redundant or harmful. Nothing is rewritten until the creator agrees, so explain your reasons in the message.
+
+Reply with JSON in this shape, listing only what you'd change:
+{
+  "message": "your thoughts on the lorebook, for the creator: strengths, problems and what you propose, and a question if one would help",
+  "changes": [
+    { "op": "add", "name": "entry name", "category": "...", "keys": ["key"], "always": false, "brief": "what it will cover" },
+    { "op": "edit", "entry": "an existing entry's name", "name": "its new name, only if renamed", "keys": ["only if they change"], "always": "true or false, only if it changes", "rewrite": "what the writer should change in its text" },
+    { "op": "remove", "entry": "an existing entry's name" }
+  ]
+}`,
+  },
+  {
+    key: 'loreWizard.revise',
+    group: '🧙 Lorebook wizard',
+    label: 'Planner: your message',
+    vars: ['card', 'pitch', 'draft', 'conversation', 'message'],
+    note: 'Keep the JSON reply shape; that is how the changes are read back. {{draft}} is the lorebook so far (plans, and written entries cut short).',
+    text: `<card>
+{{card}}
+</card>
+
+The creator's pitch: {{pitch}}
+
+<lorebook_draft>
+{{draft}}
+</lorebook_draft>
+
+What you and the creator said so far:
+{{conversation}}
+
+The creator says: {{message}}
+
+Work out what to change in the draft. Reply with JSON in this shape, listing only what changes ("changes" is empty if nothing does, say for a question):
+{
+  "message": "a sentence or two to the creator: what you're changing, or the answer to their question",
+  "changes": [
+    { "op": "add", "name": "entry name", "category": "...", "keys": ["key"], "always": false, "brief": "what it will cover" },
+    { "op": "edit", "entry": "an existing entry's name", "name": "its new name, only if renamed", "keys": ["only if they change"], "always": "true or false, only if it changes", "brief": "a new brief, for a planned entry", "rewrite": "for a written entry: what the writer should change in its text" },
+    { "op": "remove", "entry": "an existing entry's name" }
+  ]
+}`,
+  },
+  {
+    key: 'loreWizard.writer',
+    group: '🧙 Lorebook wizard',
+    label: 'Writer: system prompt',
+    vars: [],
+    text: `You write lorebook entries (SillyTavern world info) for a roleplay card. An entry goes into the prompt when its keys come up, so it is reference text for the model, not prose for a reader: terse, specific and factual, third person, present tense, dense with what a roleplay would use (what it is, what it looks like, who is involved, how it matters to {{char}} and the story). No headings, no list of keys, no actions or words for {{user}}. Call the card's character {{char}} and the player {{user}} where they come up. Stay consistent with the card and the other entries, and add to them rather than repeating them.`,
+  },
+  {
+    key: 'loreWizard.write',
+    group: '🧙 Lorebook wizard',
+    label: 'Writer: one entry',
+    vars: ['card', 'plan', 'written', 'current', 'name', 'keys', 'brief', 'instruction', 'length'],
+    note: "{{plan}} is every entry's name and brief, {{written}} the entries written so far (cut short), {{current}} the entry's text when it's rewritten, {{instruction}} what to change.",
+    text: `<card>
+{{card}}
+</card>
+
+The whole lorebook, as planned:
+{{plan}}
+
+<written_entries>
+{{written}}
+</written_entries>
+
+<current_text>
+{{current}}
+</current_text>
+
+Write the entry "{{name}}" (keys: {{keys}}). It covers: {{brief}}
+
+What to change: {{instruction}}
+
+Length: {{length}}.
+
+Reply with only the entry's text.`,
+  },
+
   // Card tags
   { key: 'tags.system', group: '✨ Card tags', label: 'System prompt', vars: [], text: WRITER },
   {
@@ -368,6 +513,8 @@ export function setTemplateOverrides(next: Record<string, string> | undefined) {
 }
 
 const template = (key: string) => overrides[key] ?? DEFAULT_TEMPLATES[key] ?? '';
+/** A template as it stands (your edit, else the built-in one). */
+export const templateText = template;
 
 /**
  * Fills a template's {{placeholders}} from `vars`. A paragraph (text
