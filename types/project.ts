@@ -69,6 +69,9 @@ export interface CardProject {
   /** Its world for Adventure mode: settings, dramatis personae and rules
    *  (lib/adventure.ts). Not part of the exported card. */
   adventure?: AdventureWorld;
+  /** Keep the card's lorebook and its copy in the Lorebooks bank in step
+   *  (lib/lorebookSync); unset follows the chat settings' syncCardLorebooks. */
+  lorebookSync?: boolean;
   createdAt: number;
   updatedAt: number;
 }

@@ -276,12 +276,18 @@ function BankList({ onEdit }: { onEdit: (id: string) => void }) {
           Import…
         </Button>
         {books.length > 6 && <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search lorebooks…" className={cx(inputClass, 'w-48 py-1 text-xs')} />}
-        <span className="ml-auto">
+        <span className="ml-auto flex flex-col items-end gap-1">
           <Toggle
             checked={chatSettings.askLorebookImport !== false}
             onChange={(v) => setChatSettings({ askLorebookImport: v })}
             label={<span className="text-xs">Offer a card&apos;s lorebook when importing it</span>}
             title="As SillyTavern does: importing a card with a lorebook asks whether to add the lorebook here too"
+          />
+          <Toggle
+            checked={chatSettings.syncCardLorebooks === true}
+            onChange={(v) => setChatSettings({ syncCardLorebooks: v })}
+            label={<span className="text-xs">Keep cards&apos; lorebooks in sync with their copies here</span>}
+            title="An edit to a card's lorebook changes its copy here, and an edit to the copy changes the card, both ways. A card can say otherwise on its Lorebook tab."
           />
         </span>
       </div>
@@ -339,11 +345,16 @@ function BookPage({ book: b, onDeleted }: { book: BankLorebook; onDeleted: () =>
   const setBook = useLorebookStore((s) => s.setBook);
   const books = useLorebookStore((s) => s.books);
   const fromCardStill = b.fromCard && copyFromCard(books, b.fromCard.projectId)?.id === b.id;
+  const syncDefault = useLlmStore((s) => s.chatSettings.syncCardLorebooks === true);
   return (
     <div className="flex flex-col gap-3">
       {fromCardStill && (
         <p className="rounded-md bg-slate-800/60 px-3 py-2 text-xs text-slate-400">
-          A copy of {b.fromCard!.name}&apos;s lorebook. Changes here don&apos;t touch the card, and that card&apos;s own chats use the card&apos;s lorebook instead of this copy.
+          A copy of {b.fromCard!.name}&apos;s lorebook.{' '}
+          {syncDefault
+            ? 'Cards are kept in sync with their copies, so changes here go to the card too (unless the card is set not to sync, on its Lorebook tab).'
+            : "Changes here don't touch the card, unless the card is set to sync on its Lorebook tab (or syncing is turned on for every card in the list)."}{' '}
+          That card&apos;s own chats use the card&apos;s lorebook instead of this copy.
         </p>
       )}
       <LorebookEditor

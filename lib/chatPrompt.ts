@@ -42,6 +42,9 @@ export interface ChatPromptSettings {
   /** Ask, when a card with a lorebook is imported, whether to add the
    *  lorebook to the bank, as SillyTavern asks (off: never ask). */
   askLorebookImport?: boolean;
+  /** Keep cards' lorebooks and their copies in the Lorebooks bank in step,
+   *  both ways, unless a card says otherwise (CardProject.lorebookSync). */
+  syncCardLorebooks?: boolean;
   /** The active persona (see store/personaStore.ts); null uses userName
    *  and persona above. */
   personaId: string | null;

@@ -103,3 +103,16 @@ export function withAttachedLore(card: CardData, attached: AttachedLorebook[]): 
   const book = combineLorebooks(card.character_book, attached);
   return book ? { ...card, character_book: book } : card;
 }
+
+/** Whether a card's lorebook and its bank copy are kept in step: the card's
+ *  own choice, else the global setting (off unless turned on). */
+export const syncsLorebook = (project: { lorebookSync?: boolean } | null | undefined, syncByDefault: boolean | undefined) => project?.lorebookSync ?? syncByDefault === true;
+
+/** The card's lorebook as its bank copy takes it: the same entries and
+ *  settings, keeping the copy's name when the card's book has none. */
+export function cardBookForBank(cardBook: Lorebook, bankBook: Lorebook): Lorebook {
+  return { ...structuredClone(cardBook), name: cardBook.name?.trim() ? cardBook.name : bankBook.name };
+}
+
+/** The same lorebook but for its name (each side of a sync keeps its own). */
+export const sameLore = (a: Lorebook, b: Lorebook) => JSON.stringify({ ...a, name: '' }) === JSON.stringify({ ...b, name: '' });
