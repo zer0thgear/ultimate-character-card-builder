@@ -42,6 +42,9 @@ export interface StoryContext {
   card: CardData;
   userName: string;
   userDescription: string;
+  /** The card's lorebook with the bank's global and persona lorebooks in it
+   *  (lib/lorebookBank.ts); the card's own when unset. */
+  loreBook?: Lorebook;
 }
 
 const x = (text: string, ctx: StoryContext) => expandMacros(text, { char: ctx.card.name || 'Character', user: ctx.userName || 'User' });
@@ -125,7 +128,7 @@ export function storyLore(story: Pick<StorySession, 'text' | 'personae' | 'useLo
   const personae = cast.active
     .sort((a, b) => a.index - b.index)
     .map((a) => ({ name: a.entry.name ?? '', text: a.entry.content, reason: a.reason }));
-  const book = story.useLorebook ? ctx.card.character_book : undefined;
+  const book = story.useLorebook ? (ctx.loreBook ?? ctx.card.character_book) : undefined;
   const lore = book ? scanLorebook(book, paragraphs, { scanDepth, count: opts.count, random: opts.random }).active : [];
   return { personae, lore: lore.map((a) => ({ ...a, entry: { ...a.entry, content: x(a.entry.content, ctx) } })) };
 }

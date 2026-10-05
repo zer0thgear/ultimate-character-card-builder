@@ -1,6 +1,6 @@
 import type { ChatTally } from '@/lib/chatStats';
 import type { ContinueNode } from '@/lib/continueTree';
-import type { CharacterCard } from '@/types/card';
+import type { CharacterCard, Lorebook } from '@/types/card';
 import type { AdventureWorld } from '@/types/adventure';
 import type { BasePrompt, CharacterPromptEntry, NovelAIModel, NovelAIParameters, PromptTidbit } from '@/types/novelai';
 
@@ -166,6 +166,9 @@ export interface ChatSession {
   messages: ChatMessage[];
   /** A persona locked to this chat, used instead of the active one. */
   personaId?: string;
+  /** The chat's own lorebook from the Lorebooks bank (SillyTavern's "chat
+   *  lorebook": one per chat), scanned alongside the card's. */
+  lorebookId?: string;
   /** Pictures drawn in the chat (Chat mode's 🎨), each after a message. */
   images?: ChatImage[];
   /** This chat's author's note (lib/authorsNote.ts), as SillyTavern keeps
@@ -277,6 +280,22 @@ export interface Persona {
   name: string;
   description: string;
   avatar?: AvatarInfo;
+  /** A lorebook from the Lorebooks bank that comes along with this persona
+   *  in chats (SillyTavern's persona lorebook: one per persona). */
+  lorebookId?: string;
+}
+
+/** A lorebook in the Lorebooks bank (data/lorebooks/<id>.json), as
+ *  SillyTavern keeps its World Info files: standalone, and attachable to
+ *  chats, personas, or everything (global). Its name is `book.name`. */
+export interface BankLorebook {
+  id: string;
+  book: Lorebook;
+  /** The card it was imported from, if it came out of one. That card's
+   *  own chats skip it, since they already have the card's lorebook. */
+  fromCard?: { projectId: string; name: string };
+  createdAt: number;
+  updatedAt: number;
 }
 
 export type ChatSummary = Pick<ChatSession, 'id' | 'name' | 'createdAt' | 'updatedAt'> & { messageCount: number } & ChatTally;

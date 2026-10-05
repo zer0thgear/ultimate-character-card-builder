@@ -5,6 +5,8 @@ import { useProjectStore } from '@/store/projectStore';
 import { useStoryStore } from '@/store/storyStore';
 import { textTemplates, useLlmStore } from '@/store/llmStore';
 import { resolvePersona, usePersonaStore } from '@/store/personaStore';
+import { ensureLorebooks, useLorebookStore } from '@/store/lorebookStore';
+import { combineLorebooks, lorebooksInPlay } from '@/lib/lorebookBank';
 import { useAssistLog } from '@/store/assistLog';
 import { toast } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
@@ -50,11 +52,16 @@ function useStoryContext(): StoryContext | null {
   const card = useProjectStore((s) => s.project?.card.data);
   const personas = usePersonaStore((s) => s.personas);
   const chatSettings = useLlmStore((s) => s.chatSettings);
+  const projectId = useProjectStore((s) => s.project?.id);
+  const bank = useLorebookStore((s) => s.books);
+  useEffect(ensureLorebooks, []);
   return useMemo(() => {
     if (!card) return null;
     const me = resolvePersona(personas, chatSettings);
-    return { card, userName: me.name, userDescription: me.description };
-  }, [card, personas, chatSettings]);
+    // The bank's global and persona lorebooks come along, as in chats.
+    const attached = lorebooksInPlay(bank, { projectId, personaLorebookId: me.persona?.lorebookId, globalIds: chatSettings.globalLorebooks });
+    return { card, userName: me.name, userDescription: me.description, loreBook: combineLorebooks(card.character_book, attached) };
+  }, [card, personas, chatSettings, bank, projectId]);
 }
 
 /** Logs a story request to the assistant's log, so 🔍 can show it. */
@@ -401,6 +408,7 @@ function StorySettings({ story, ctx, rawText, onClose }: { story: StorySession; 
   const lore = useMemo(() => storyLore(story, ctx, { count: countTextNow, random: () => 0 }), [story, ctx]);
   const inPrompt = loreLabels(lore);
   const bookSize = ctx.card.character_book?.entries.length ?? 0;
+  const extraSize = (ctx.loreBook?.entries.length ?? bookSize) - bookSize;
   const setPersona = (id: string, patch: Partial<StoryPersona>) => update({ personae: story.personae.map((p) => (p.id === id ? { ...p, ...patch } : p)) });
 
   return (
@@ -432,7 +440,7 @@ function StorySettings({ story, ctx, rawText, onClose }: { story: StorySession; 
         </Field>
 
         <Field label="Lorebook">
-          <Toggle checked={story.useLorebook} onChange={(useLorebook) => update({ useLorebook })} label={bookSize ? `Use the card's lorebook (${bookSize} entries)` : "Use the card's lorebook (it has none yet)"} />
+          <Toggle checked={story.useLorebook} onChange={(useLorebook) => update({ useLorebook })} label={`${bookSize ? `Use the card's lorebook (${bookSize} entries)` : "Use the card's lorebook (it has none yet)"}${extraSize > 0 ? `, with ${extraSize} from your global and persona lorebooks` : ''}`} />
           <label className="flex items-center gap-2 text-xs text-slate-400" title="Names, aliases and lorebook keys are looked for in this many paragraphs from the end of the story">
             Look back
             <span className="w-16 flex-shrink-0">

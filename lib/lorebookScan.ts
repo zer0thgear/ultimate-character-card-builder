@@ -1,5 +1,6 @@
 import type { Lorebook, LorebookEntry } from '@/types/card';
 import { entryName } from '@/lib/cardSpec';
+import { entryBook } from '@/lib/lorebookBank';
 
 // Which lorebook entries a chat turn activates, as SillyTavern reads them:
 // an entry fires when one of its keys appears in the last `scan_depth`
@@ -387,4 +388,10 @@ function scanOnce(book: Lorebook, history: string[], opts: ScanOptions, timers: 
   return { active: kept, dropped, skipped: [...skipped.values()] };
 }
 
-export const describeEntry = (a: Pick<ActivatedEntry, 'entry' | 'index'>) => entryName(a.entry) || `Entry ${a.index + 1}`;
+/** An entry's name for the inspector, with the lorebook it came from when
+ *  that isn't the card's own (lib/lorebookBank.ts). */
+export const describeEntry = (a: Pick<ActivatedEntry, 'entry' | 'index'>) => {
+  const name = entryName(a.entry) || `Entry ${a.index + 1}`;
+  const book = entryBook(a.entry);
+  return book ? `${name} [${book}]` : name;
+};

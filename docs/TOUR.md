@@ -28,7 +28,7 @@ The **Character** tab has the core fields: name, description, personality, scena
 A few other things worth knowing:
 
 - **Greetings**: the first message and any alternates. Drag them into order, or **promote** one to be the first message. **✨ New** writes a new alternate greeting, from a situation you describe if you like. Each greeting has **💬** to start a test chat with it and **🎨** to illustrate it.
-- **Lorebook**: entries that are added to the prompt when their keywords come up. **✨ Write one** drafts an entry from a topic, and **Try the keys** shows which entries a message would set off, and why.
+- **Lorebook**: entries that are added to the prompt when their keywords come up. **✨ Write one** drafts an entry from a topic, and **Try the keys** shows which entries a message would set off, and why. Lorebooks that aren't tied to one card live in **📖 Lorebooks** on the home screen, where one can be on in every chat, a chat's own, or a persona's.
 - **Notes**: your own notes, never exported. **✨ Review the card** asks the assistant for contradictions, gaps and things likely to go wrong in play.
 - **Tools**: find and replace across the card, and cleanups like turning the character's name into `{{char}}`. Each shows what it will change first.
 

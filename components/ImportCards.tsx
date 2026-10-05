@@ -6,6 +6,8 @@ import { importAsProject } from '@/lib/cardExport';
 import { CardImportError } from '@/lib/cardFile';
 import { pickFiles } from '@/components/ui';
 import type { CardProject } from '@/types/project';
+import type { CardData } from '@/types/card';
+import { offerCardLore } from '@/components/LorebookBank';
 
 // Importing card files from disk: any number at once (picked, or dropped),
 // each a new card; the last one stays open. `init` marks them chat-only in
@@ -18,9 +20,11 @@ export async function importCards(init: Partial<CardProject> = {}, given?: File[
   const { create, setAvatar } = useProjectStore.getState();
   const names: string[] = [];
   const failed: string[] = [];
+  const lore: { projectId: string; card: CardData }[] = [];
   for (const file of files) {
     try {
       const imported = await importAsProject(file, create, setAvatar, init);
+      lore.push({ projectId: imported.project.id, card: imported.card.data });
       names.push(`${imported.card.data.name || file.name}${imported.source === 'chara' ? ' (V2 card)' : ''}`);
     } catch (err) {
       failed.push(`${file.name}: ${err instanceof CardImportError ? err.message : (err as Error).message}`);
@@ -29,5 +33,7 @@ export async function importCards(init: Partial<CardProject> = {}, given?: File[
   const where = !init.chatOnly ? '' : names.length === 1 ? ` It's in Chat mode only; "Add to Builder" puts it in Builder too.` : ` They're in Chat mode only; "Add to Builder" on a card puts it in Builder too.`;
   if (names.length) toast(names.length === 1 ? `Imported ${names[0]}.${where}` : `Imported ${names.length} cards: ${names.join(', ')}.${where}`, 'success');
   if (failed.length) toast(`Couldn't import ${failed.length === 1 ? failed[0] : `${failed.length} files: ${failed.join('; ')}`}`, 'error');
+  // As SillyTavern does: a card with a lorebook asks whether to add it to the bank.
+  await offerCardLore(lore);
   return names.length;
 }

@@ -19,6 +19,7 @@ import { CardSortControl, TagFilter, TagFilterNote, useSortedCards } from '@/com
 import { chatStatsDetail, sortDetail } from '@/lib/cardSort';
 import { importFromUrl } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
+import { openLorebooks } from '@/components/LorebookBank';
 import type { ProjectSummary } from '@/types/project';
 import { AdventurePanel } from '@/components/adventure/AdventurePanel';
 import { useAdventureStore } from '@/store/adventureStore';
@@ -152,6 +153,9 @@ export function ChatHome({ loading }: { loading: boolean }) {
           </Button>
           <Button onClick={() => void importFromUrl({ chatOnly: true })} title="A Chub or Cardbox character link">
             🔗 Import from a URL…
+          </Button>
+          <Button onClick={() => openLorebooks()} title="Your lorebooks, as SillyTavern's World Info: use one in every chat, in one chat, or with a persona">
+            📖 Lorebooks
           </Button>
           <Button variant="ghost" onClick={() => void switchAppMode('builder')}>
             🛠 Switch to Builder

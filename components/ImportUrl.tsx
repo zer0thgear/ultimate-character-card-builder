@@ -4,6 +4,7 @@ import { useProjectStore } from '@/store/projectStore';
 import { toast } from '@/store/uiStore';
 import { api } from '@/lib/api';
 import { importCardFile } from '@/lib/cardFile';
+import { offerCardLore } from '@/components/LorebookBank';
 import { fromBase64 } from '@/lib/requestImage';
 import { choiceDialog, confirmDialog, pickFiles, textDialog } from '@/components/ui';
 import type { CardProject } from '@/types/project';
@@ -51,9 +52,10 @@ export async function importFromUrl(init: Partial<CardProject> = {}) {
   if (!got) return;
   try {
     const { create, setAvatar } = useProjectStore.getState();
-    await create({ ...init, card: got.card });
+    const project = await create({ ...init, card: got.card });
     if (got.avatar) await setAvatar(got.avatar);
     toast(`Imported ${got.card.data.name || 'the card'} from ${got.from}${got.avatar ? '' : ' (no picture)'}.`, 'success');
+    await offerCardLore([{ projectId: project.id, card: got.card.data }]);
   } catch (err) {
     toast((err as Error).message, 'error');
   }

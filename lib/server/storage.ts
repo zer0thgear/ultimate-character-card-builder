@@ -2,11 +2,11 @@ import 'server-only';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { AppConfig, CardProject, ChatSession, ChatSummary, Persona, ProjectSummary, StorySession, StorySummary, TrashedProject } from '@/types/project';
+import type { AppConfig, BankLorebook, CardProject, ChatSession, ChatSummary, Persona, ProjectSummary, StorySession, StorySummary, TrashedProject } from '@/types/project';
 import { DEFAULT_CONFIG } from '@/types/project';
 import type { AdventureSession, AdventureSummary } from '@/types/adventure';
 import { newCard } from '@/lib/cardSpec';
-import { normalizeCard } from '@/lib/cardSpec';
+import { normalizeCard, normalizeLorebook } from '@/lib/cardSpec';
 import { notesSnippet } from '@/lib/cardSummary';
 import { countTokens } from 'gpt-tokenizer';
 import { sumTallies, tallyChat, type ChatTally } from '@/lib/chatStats';
@@ -489,7 +489,9 @@ export async function listPersonas(): Promise<Persona[]> {
 }
 
 export async function savePersonas(list: Persona[]): Promise<Persona[]> {
-  const clean = list.filter((p) => ID_RE.test(p.id)).map((p) => ({ id: p.id, name: String(p.name ?? ''), description: String(p.description ?? ''), avatar: p.avatar }));
+  const clean = list
+    .filter((p) => ID_RE.test(p.id))
+    .map((p) => ({ id: p.id, name: String(p.name ?? ''), description: String(p.description ?? ''), avatar: p.avatar, ...(typeof p.lorebookId === 'string' && p.lorebookId ? { lorebookId: p.lorebookId } : {}) }));
   await writeFileAtomic(path.join(PERSONAS, 'personas.json'), JSON.stringify(clean, null, 2));
   return clean;
 }
@@ -505,6 +507,43 @@ export function updatePersonas(change: (list: Persona[]) => Persona[] | Promise<
 }
 
 export const personaAvatarPath = (id: string) => path.join(PERSONAS, `${checkId(id)}.png`);
+
+// ─── Lorebooks (the bank) ────────────────────────────────────────────────────
+//   data/lorebooks/<id>.json   BankLorebook
+
+const LOREBOOKS = path.join(DATA_DIR, 'lorebooks');
+const lorebookPath = (id: string) => path.join(LOREBOOKS, `${checkId(id)}.json`);
+
+export async function listLorebooks(): Promise<BankLorebook[]> {
+  const files = await fs.readdir(LOREBOOKS).catch(() => [] as string[]);
+  const books = await Promise.all(files.filter((f) => f.endsWith('.json')).map((f) => readJson<BankLorebook>(path.join(LOREBOOKS, f)).catch(() => null)));
+  return books.filter((b): b is BankLorebook => !!b?.book).sort((a, b) => a.createdAt - b.createdAt);
+}
+
+export async function getLorebook(id: string): Promise<BankLorebook> {
+  const b = await readJson<BankLorebook>(lorebookPath(id));
+  if (!b) throw new NotFoundError(`No lorebook ${id}`);
+  return b;
+}
+
+export async function saveLorebook(b: BankLorebook): Promise<BankLorebook> {
+  const book = normalizeLorebook(b?.book);
+  if (!book) throw new BadRequestError('A lorebook needs its book');
+  const now = Date.now();
+  const clean: BankLorebook = {
+    id: checkId(b.id),
+    book,
+    ...(b.fromCard && typeof b.fromCard.projectId === 'string' ? { fromCard: { projectId: b.fromCard.projectId, name: String(b.fromCard.name ?? '') } } : {}),
+    createdAt: typeof b.createdAt === 'number' ? b.createdAt : now,
+    updatedAt: now,
+  };
+  await writeFileAtomic(lorebookPath(clean.id), JSON.stringify(clean, null, 2));
+  return clean;
+}
+
+export async function deleteLorebook(id: string) {
+  await removeJson(lorebookPath(id));
+}
 
 // ─── Settings shared by every device ─────────────────────────────────────────
 //   data/settings.json   { gen, llm, naiKey }: what browsers used to keep in
