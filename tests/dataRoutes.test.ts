@@ -24,6 +24,41 @@ describe('data routes', { timeout: 30_000 }, () => {
     rmSync(out, { recursive: true, force: true });
   });
 
+  describe('/api/lorebooks', () => {
+    const book = { name: 'Kingdoms', extensions: {}, entries: [{ keys: ['north'], content: 'Cold.', extensions: {}, enabled: true, insertion_order: 100, use_regex: false }] };
+
+    it('adds, lists, saves and deletes bank lorebooks, one file each', async () => {
+      const added = await (await routeFetch('/api/lorebooks', json('POST', { id: 'lb1', book, fromCard: { projectId: 'c1', name: 'Ann' }, createdAt: 5, junk: 1 }))).json();
+      expect(added).toMatchObject({ id: 'lb1', fromCard: { projectId: 'c1', name: 'Ann' }, createdAt: 5 });
+      expect(added.junk).toBeUndefined();
+      expect(read('lorebooks', 'lb1.json').book.entries[0].content).toBe('Cold.');
+
+      const renamed = { ...added, book: { ...book, name: 'The Kingdoms' } };
+      await routeFetch('/api/lorebooks/lb1', json('PUT', renamed));
+      await routeFetch('/api/lorebooks', json('POST', { id: 'lb2', book: { entries: [] }, createdAt: 9 }));
+      const list = await (await routeFetch('/api/lorebooks')).json();
+      expect(list.map((b: { id: string; book: { name?: string } }) => [b.id, b.book.name])).toEqual([
+        ['lb1', 'The Kingdoms'],
+        ['lb2', undefined],
+      ]);
+
+      await routeFetch('/api/lorebooks/lb2', { method: 'DELETE' });
+      expect(existsSync(path.join(dir, 'lorebooks', 'lb2.json'))).toBe(false);
+      expect((await routeFetch('/api/lorebooks/lb2')).status).toBe(404);
+    });
+
+    it('refuses a bad id, an id that does not match the address, and a missing book', async () => {
+      expect((await routeFetch('/api/lorebooks', json('POST', { id: '../x', book }))).status).toBe(400);
+      expect((await routeFetch('/api/lorebooks/lb1', json('PUT', { id: 'other', book }))).status).toBe(400);
+      expect((await routeFetch('/api/lorebooks', json('POST', { id: 'lb3' }))).status).toBe(400);
+    });
+
+    it("keeps a persona's lorebook", async () => {
+      const saved = await (await routeFetch('/api/personas', json('PUT', [{ id: 'p9', name: 'Sam', description: '', lorebookId: 'lb1' }]))).json();
+      expect(saved).toEqual([{ id: 'p9', name: 'Sam', description: '', lorebookId: 'lb1' }]);
+    });
+  });
+
   describe('/api/personas', () => {
     it('replaces the list, dropping bad ids and anything that is not a persona field', async () => {
       const res = await routeFetch(

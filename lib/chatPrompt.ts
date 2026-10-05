@@ -36,6 +36,12 @@ export interface ChatPromptSettings {
   loreTokenBudget?: number;
   /** How many times recursive scanning goes round, at most. */
   loreMaxRecursion?: number;
+  /** Lorebooks from the bank that every chat uses, as SillyTavern's global
+   *  World Info (lib/lorebookBank.ts). */
+  globalLorebooks?: string[];
+  /** Ask, when a card with a lorebook is imported, whether to add the
+   *  lorebook to the bank, as SillyTavern asks (off: never ask). */
+  askLorebookImport?: boolean;
   /** The active persona (see store/personaStore.ts); null uses userName
    *  and persona above. */
   personaId: string | null;

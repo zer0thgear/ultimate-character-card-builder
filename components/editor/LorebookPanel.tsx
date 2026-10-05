@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 import type { Lorebook, LorebookEntry } from '@/types/card';
 import { useProjectStore } from '@/store/projectStore';
 import { useLlmStore } from '@/store/llmStore';
@@ -20,13 +20,19 @@ import { CutOffNotice } from '@/components/llm/CutOffNotice';
 import { AssistReasoning } from '@/components/llm/AssistTrace';
 import { ReferenceTray, referenceConnectionId, useReferences } from '@/components/llm/References';
 import { withReferences } from '@/lib/references';
+import { useLorebookStore } from '@/store/lorebookStore';
+import { openLorebooks, pickBankLorebook } from '@/components/LorebookBank';
+import { copyFromCard, hasCardLore } from '@/lib/lorebookBank';
+
+/** Editing a lorebook of the bank (components/LorebookBank.tsx) rather than
+ *  the open card's: content is edited in place, without the card's ✨ tools. */
+const StandaloneContext = createContext(false);
 
 export function LorebookPanel() {
   const book = useProjectStore((s) => s.project?.card.data.character_book);
   const card = useProjectStore((s) => s.project?.card);
   const updateCard = useProjectStore((s) => s.updateCard);
-  const loreDepth = useLlmStore((s) => s.chatSettings.loreScanDepth ?? DEFAULT_SCAN_DEPTH);
-  const loreBudget = useLlmStore((s) => s.chatSettings.loreTokenBudget ?? 0);
+  const projectId = useProjectStore((s) => s.project?.id);
 
   const setBook = (b: Lorebook | undefined, key?: string) =>
     updateCard((d) => {
@@ -55,6 +61,40 @@ export function LorebookPanel() {
     }
   };
 
+  /** Puts the card's lorebook in the bank, as SillyTavern's "Import Card Lore". */
+  const toBank = async () => {
+    if (!projectId || !card || !hasCardLore(card.data)) return;
+    const store = useLorebookStore.getState();
+    if (!store.loaded) await store.load().catch(() => {});
+    const before = copyFromCard(useLorebookStore.getState().books, projectId);
+    if (before && !(await confirmDialog({ title: 'Update the copy in Lorebooks?', body: `This card's lorebook went into 📖 Lorebooks before. Its copy there is replaced with the lorebook as it is now.`, confirmLabel: 'Replace it' }))) return;
+    try {
+      const b = await store.importFromCard(projectId, card.data);
+      if (b) {
+        toast(before ? `Updated "${b.book.name}" in Lorebooks.` : `Added "${b.book.name}" to Lorebooks.`, 'success');
+        openLorebooks(b.id);
+      }
+    } catch (err) {
+      toast(`Couldn't add it: ${(err as Error).message}`, 'error');
+    }
+  };
+  /** Copies a bank lorebook into the card: as its lorebook, or after its entries. */
+  const fromBank = async () => {
+    const picked = await pickBankLorebook('Copy a lorebook into this card');
+    if (!picked) return;
+    const copy = structuredClone(picked.book);
+    if (book?.entries.length) {
+      const merge = await confirmDialog({
+        title: `Add "${picked.book.name || 'that lorebook'}" to this card's lorebook?`,
+        body: `Its ${copy.entries.length} entries go after the ${book.entries.length} already here.`,
+        confirmLabel: 'Add entries',
+      });
+      if (!merge) return;
+      setBook({ ...book, entries: [...book.entries, ...copy.entries] });
+    } else setBook(copy);
+    toast(`Copied ${copy.entries.length} entries from "${picked.book.name || 'the lorebook'}".`, 'success');
+  };
+
   if (!book) {
     return (
       <div className="flex flex-col gap-3">
@@ -65,6 +105,9 @@ export function LorebookPanel() {
               Attach a new lorebook
             </Button>
             <Button onClick={() => void importBook()}>Import (JSON, card PNG, CHARX)</Button>
+            <Button onClick={() => void fromBank()} title="Copy one of your lorebooks (📖 Lorebooks) into this card">
+              📖 From Lorebooks…
+            </Button>
           </div>
         </Empty>
       </div>
@@ -72,56 +115,78 @@ export function LorebookPanel() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      {hasMismatchedEntryNames(book) && (
-        <div className="flex items-center gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-          <span className="flex-1">Some entries have a name but no comment (or the other way round). Chub shows names and SillyTavern shows comments.</span>
-          <Button size="sm" onClick={() => setBook(backfillEntryNames(book))}>
-            Fill in the blanks
+    <LorebookEditor
+      book={book}
+      setBook={setBook}
+      actions={
+        <>
+          <Button size="sm" onClick={() => void importBook()}>
+            Import…
           </Button>
-        </div>
-      )}
-      <Section
-        title="Lorebook"
-        actions={
-          <>
-            <Button size="sm" onClick={() => void importBook()}>
-              Import…
+          <Button size="sm" onClick={() => void fromBank()} title="Add the entries of one of your lorebooks (📖 Lorebooks) to this one">
+            📖 Add from…
+          </Button>
+          <Button size="sm" disabled={!book.entries.length} onClick={() => void toBank()} title="Put a copy of this lorebook in 📖 Lorebooks, to attach to chats, personas or every chat">
+            📖 To Lorebooks
+          </Button>
+          <Button size="sm" onClick={() => downloadBlob(JSON.stringify(lorebookFile(book), null, 2), `${book.name || (card ? cardFileName(card) : 'lorebook')} lorebook.json`, 'application/json')}>
+            Export
+          </Button>
+          <IconButton
+            title="Remove the lorebook from this card"
+            tone="danger"
+            onClick={async () => {
+              if (await confirmDialog({ title: 'Remove this lorebook?', body: `All ${book.entries.length} entries go with it. Undo brings it back.`, confirmLabel: 'Remove', danger: true })) setBook(undefined);
+            }}
+          >
+            🗑
+          </IconButton>
+        </>
+      }
+    />
+  );
+}
+
+/**
+ * A lorebook's settings, entries and key tester: the card's (LorebookPanel)
+ * or, with `standalone`, one in the bank. `setBook`'s key groups typing
+ * into one undo step where the caller has undo.
+ */
+export function LorebookEditor({ book, setBook, actions, standalone = false }: { book: Lorebook; setBook: (b: Lorebook, key?: string) => void; actions?: ReactNode; standalone?: boolean }) {
+  const loreDepth = useLlmStore((s) => s.chatSettings.loreScanDepth ?? DEFAULT_SCAN_DEPTH);
+  const loreBudget = useLlmStore((s) => s.chatSettings.loreTokenBudget ?? 0);
+  return (
+    <StandaloneContext.Provider value={standalone}>
+      <div className="flex flex-col gap-5">
+        {hasMismatchedEntryNames(book) && (
+          <div className="flex items-center gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+            <span className="flex-1">Some entries have a name but no comment (or the other way round). Chub shows names and SillyTavern shows comments.</span>
+            <Button size="sm" onClick={() => setBook(backfillEntryNames(book))}>
+              Fill in the blanks
             </Button>
-            <Button size="sm" onClick={() => downloadBlob(JSON.stringify(lorebookFile(book), null, 2), `${book.name || (card ? cardFileName(card) : 'lorebook')} lorebook.json`, 'application/json')}>
-              Export
-            </Button>
-            <IconButton
-              title="Remove the lorebook from this card"
-              tone="danger"
-              onClick={async () => {
-                if (await confirmDialog({ title: 'Remove this lorebook?', body: `All ${book.entries.length} entries go with it. Undo brings it back.`, confirmLabel: 'Remove', danger: true })) setBook(undefined);
-              }}
-            >
-              🗑
-            </IconButton>
-          </>
-        }
-      >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <input value={book.name ?? ''} onChange={(e) => setBook({ ...book, name: e.target.value }, 'book.name')} placeholder="Lorebook name" className={inputClass} />
-          <input value={book.description ?? ''} onChange={(e) => setBook({ ...book, description: e.target.value }, 'book.description')} placeholder="Description" className={inputClass} />
-        </div>
-        <div className="flex flex-wrap items-end gap-4">
-          <label className="flex w-32 flex-col gap-0.5 text-xs text-slate-400" title={`How many recent messages are searched for keys. Blank: whatever the frontend defaults to (the test chat's is ${loreDepth}, set in its 🔧 Chat settings).`}>
-            Scan depth
-            <NumberInput value={book.scan_depth} onChange={(v) => setBook({ ...book, scan_depth: v })} min={0} step={1} allowEmpty placeholder={`default (${loreDepth})`} />
-          </label>
-          <label className="flex w-32 flex-col gap-0.5 text-xs text-slate-400" title={`Most tokens the lorebook may add per message. Blank: whatever the frontend defaults to (the test chat's is ${loreBudget ? loreBudget : 'no limit'}, set in its 🔧 Chat settings).`}>
-            Token budget
-            <NumberInput value={book.token_budget} onChange={(v) => setBook({ ...book, token_budget: v })} min={0} step={50} allowEmpty placeholder={`default (${loreBudget ? loreBudget : 'none'})`} />
-          </label>
-          <Toggle checked={!!book.recursive_scanning} onChange={(v) => setBook({ ...book, recursive_scanning: v })} label="Recursive scanning" title="Entries' content can trigger other entries" />
-        </div>
-      </Section>
-      <Entries book={book} setBook={setBook} />
-      <KeyTester book={book} />
-    </div>
+          </div>
+        )}
+        <Section title="Lorebook" actions={actions}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <input value={book.name ?? ''} onChange={(e) => setBook({ ...book, name: e.target.value }, 'book.name')} placeholder="Lorebook name" className={inputClass} />
+            <input value={book.description ?? ''} onChange={(e) => setBook({ ...book, description: e.target.value }, 'book.description')} placeholder="Description" className={inputClass} />
+          </div>
+          <div className="flex flex-wrap items-end gap-4">
+            <label className="flex w-32 flex-col gap-0.5 text-xs text-slate-400" title={`How many recent messages are searched for keys. Blank: whatever the frontend defaults to (the test chat's is ${loreDepth}, set in its 🔧 Chat settings).`}>
+              Scan depth
+              <NumberInput value={book.scan_depth} onChange={(v) => setBook({ ...book, scan_depth: v })} min={0} step={1} allowEmpty placeholder={`default (${loreDepth})`} />
+            </label>
+            <label className="flex w-32 flex-col gap-0.5 text-xs text-slate-400" title={`Most tokens the lorebook may add per message. Blank: whatever the frontend defaults to (the test chat's is ${loreBudget ? loreBudget : 'no limit'}, set in its 🔧 Chat settings).`}>
+              Token budget
+              <NumberInput value={book.token_budget} onChange={(v) => setBook({ ...book, token_budget: v })} min={0} step={50} allowEmpty placeholder={`default (${loreBudget ? loreBudget : 'none'})`} />
+            </label>
+            <Toggle checked={!!book.recursive_scanning} onChange={(v) => setBook({ ...book, recursive_scanning: v })} label="Recursive scanning" title="Entries' content can trigger other entries" />
+          </div>
+        </Section>
+        <Entries book={book} setBook={setBook} />
+        <KeyTester book={book} />
+      </div>
+    </StandaloneContext.Provider>
   );
 }
 
@@ -129,7 +194,8 @@ function Entries({ book, setBook }: { book: Lorebook; setBook: (b: Lorebook, key
   const [open, setOpen] = useState<Set<number>>(new Set());
   const [filter, setFilter] = useState('');
   const [writing, setWriting] = useState(false);
-  const writingTools = useWritingTools();
+  const standalone = useContext(StandaloneContext);
+  const writingTools = useWritingTools() && !standalone;
   const entries = book.entries;
   const setEntries = (next: LorebookEntry[], key?: string) => setBook({ ...book, entries: next }, key);
   const setEntry = (i: number, patch: Partial<LorebookEntry>, key?: string) => setEntries(entries.map((e, j) => (j === i ? { ...e, ...patch } : e)), key && `entry.${i}.${key}`);
@@ -147,7 +213,7 @@ function Entries({ book, setBook }: { book: Lorebook; setBook: (b: Lorebook, key
     setOpen((s) => new Set([...s].map((i) => remapIndex(i, from, to))));
   };
   const remove = async (i: number) => {
-    if (entries[i].content.trim() && !(await confirmDialog({ title: `Delete "${entryName(entries[i]) || `entry ${i + 1}`}"?`, body: 'Undo brings it back.', confirmLabel: 'Delete', danger: true }))) return;
+    if (entries[i].content.trim() && !(await confirmDialog({ title: `Delete "${entryName(entries[i]) || `entry ${i + 1}`}"?`, body: standalone ? "It's gone for good." : 'Undo brings it back.', confirmLabel: 'Delete', danger: true }))) return;
     setEntries(entries.filter((_, j) => j !== i));
     setOpen((s) => new Set([...s].filter((j) => j !== i).map((j) => (j > i ? j - 1 : j))));
   };
@@ -219,9 +285,12 @@ function Entries({ book, setBook }: { book: Lorebook; setBook: (b: Lorebook, key
 }
 
 function EntryEditor({ index, entry: e, setEntry }: { index: number; entry: LorebookEntry; setEntry: (patch: Partial<LorebookEntry>, key?: string) => void }) {
-  const [content, setContent] = useCardField(`character_book.entries.${index}.content`);
+  const standalone = useContext(StandaloneContext);
+  const [cardContent, setCardContent] = useCardField(`character_book.entries.${index}.content`);
+  const content = standalone ? e.content : cardContent;
+  const setContent = standalone ? (v: string) => setEntry({ content: v }, 'content') : setCardContent;
   // Art is Builder's: Chat mode's card drawer leaves it out.
-  const writingTools = useWritingTools();
+  const writingTools = useWritingTools() && !standalone;
   const requestEntryPrompt = useBridgeStore((s) => s.requestEntryPrompt);
   const rules = entryRules(e);
   /** Sets SillyTavern's settings in the entry's extensions; undefined removes one. */
@@ -353,7 +422,7 @@ function EntryEditor({ index, entry: e, setEntry }: { index: number; entry: Lore
             <Toggle checked={rules.delayUntilRecursion > 0} onChange={(v) => setExt({ delay_until_recursion: v || undefined })} title="Only another entry's content fires it, never the chat directly" label={<span className="text-xs">Only fired by other entries</span>} />
             <Toggle checked={rules.ignoreBudget} onChange={(v) => setExt({ ignore_budget: v || undefined })} title="Goes in even past the lorebook's token budget" label={<span className="text-xs">Ignore the budget</span>} />
           </div>
-          <p className="text-[11px] text-slate-500">These are saved in the card the way SillyTavern saves them, and the test chat follows them. Chub and other frontends may ignore them.</p>
+          <p className="text-[11px] text-slate-500">These are saved the way SillyTavern saves them in a card, and the test chat follows them. Chub and other frontends may ignore them.</p>
         </div>
       </details>
       <div className="flex flex-col gap-1">
@@ -370,7 +439,7 @@ function EntryEditor({ index, entry: e, setEntry }: { index: number; entry: Lore
                 🎨
               </IconButton>
             )}
-            <FieldActions path={`character_book.entries.${index}.content`} />
+            {!standalone && <FieldActions path={`character_book.entries.${index}.content`} />}
           </div>
         </div>
         <AutoTextarea value={content} onChange={(ev) => setContent(ev.target.value)} minRows={3} maxRows={20} />

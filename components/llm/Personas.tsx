@@ -11,6 +11,7 @@ import type { Persona } from '@/types/project';
 import type { AvatarShape } from '@/lib/chatPrompt';
 import { AutoTextarea, Button, IconButton, TokenBadge, confirmDialog, cx, inputClass, pickFiles } from '@/components/ui';
 import { parseStPersonas, samePersona, PersonaImportError } from '@/lib/stPersonas';
+import { LorebookSelect } from '@/components/LorebookBank';
 
 /** SillyTavern personas from a settings.json or persona backup, with any
  *  avatar images picked alongside it matched by file name. */
@@ -212,6 +213,10 @@ export function PersonaManager() {
                 Description <TokenBadge text={p.description} />
               </div>
               <AutoTextarea value={p.description} onChange={(e) => update(p.id, { description: e.target.value })} minRows={2} maxRows={12} placeholder="Who you are: appearance, role, relationship to the character… ({{char}} works here)" />
+              <label className="flex items-center gap-2 text-xs text-slate-400" title="A lorebook from 📖 Lorebooks that comes along with this persona in every chat, as SillyTavern's persona lorebook">
+                Lorebook
+                <LorebookSelect value={p.lorebookId} onChange={(id) => update(p.id, { lorebookId: id })} className="w-56" />
+              </label>
             </div>
           </div>
         );
