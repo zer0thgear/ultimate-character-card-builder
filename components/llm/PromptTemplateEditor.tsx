@@ -2,16 +2,30 @@
 
 import type { ReactNode } from 'react';
 import type { AssistTemplate } from '@/lib/assist';
+import type { FromPack } from '@/lib/packLayer';
 import { AutoTextarea, Button, confirmDialog } from '@/components/ui';
 
 /**
  * Built-in prompts, editable, each with its default a click away: the
  * assistant's (Settings → Assistant) and Adventure mode's actors (⚙ Actors).
  * `edits` holds only the changed ones; back to the default word for word
- * counts as not edited.
+ * counts as not edited. `base`: prompts enabled extension packs change
+ * (lib/packLayer.ts), which stand in for the built-in default.
  */
-export function PromptTemplateEditor({ templates, edits, onChange, intro }: { templates: AssistTemplate[]; edits: Record<string, string>; onChange: (next: Record<string, string>) => void; intro?: ReactNode }) {
-  const defaults = Object.fromEntries(templates.map((t) => [t.key, t.text]));
+export function PromptTemplateEditor({
+  templates,
+  edits,
+  onChange,
+  intro,
+  base = {},
+}: {
+  templates: AssistTemplate[];
+  edits: Record<string, string>;
+  onChange: (next: Record<string, string>) => void;
+  intro?: ReactNode;
+  base?: Record<string, FromPack>;
+}) {
+  const defaults = Object.fromEntries(templates.map((t) => [t.key, base[t.key]?.text ?? t.text]));
   const setTemplate = (key: string, text: string) => {
     const next = { ...edits };
     if (text === defaults[key]) delete next[key];
@@ -34,7 +48,7 @@ export function PromptTemplateEditor({ templates, edits, onChange, intro }: { te
             size="sm"
             variant="ghost"
             onClick={async () => {
-              if (await confirmDialog({ title: 'Restore every prompt to its default?', body: `Your ${edited} edited prompt${edited === 1 ? '' : 's'} go back to the built-in wording.`, confirmLabel: 'Restore all', danger: true })) onChange({});
+              if (await confirmDialog({ title: 'Restore every prompt to its default?', body: `Your ${edited} edited prompt${edited === 1 ? '' : 's'} go back to the built-in wording (or an extension pack's).`, confirmLabel: 'Restore all', danger: true })) onChange({});
             }}
           >
             ↺ Restore all
@@ -54,18 +68,27 @@ export function PromptTemplateEditor({ templates, edits, onChange, intro }: { te
             <div className="flex flex-col gap-3 border-t border-slate-800 p-2.5">
               {inGroup.map((t) => {
                 const isEdited = t.key in edits;
+                const pack = base[t.key]?.from;
                 return (
                   <div key={t.key} className="flex flex-col gap-1">
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                       <span className="text-slate-300">{t.label}</span>
+                      <code className="text-[10px] text-slate-600" title="Its key, for extension packs (Settings → Extensions)">
+                        {t.key}
+                      </code>
                       {isEdited && <span className="rounded bg-violet-500/15 px-1.5 text-[10px] text-violet-300">edited</span>}
+                      {pack && (
+                        <span className="rounded bg-sky-500/15 px-1.5 text-[10px] text-sky-300" title={`The extension pack "${pack}" changes this prompt (Settings → Extensions)`}>
+                          🧩 {pack}
+                        </span>
+                      )}
                       {t.vars.length > 0 && <span className="text-[10px] text-slate-500">{t.vars.map((v) => `{{${v}}}`).join(' ')}</span>}
-                      <Button size="sm" variant="ghost" className="ml-auto" disabled={!isEdited} onClick={() => restore(t.key)} title="Back to the built-in wording">
+                      <Button size="sm" variant="ghost" className="ml-auto" disabled={!isEdited} onClick={() => restore(t.key)} title={pack ? `Back to the wording from ${pack}` : 'Back to the built-in wording'}>
                         ↺ Default
                       </Button>
                     </div>
                     {t.note && <p className="text-[11px] text-slate-500">{t.note}</p>}
-                    <AutoTextarea aria-label={`${group}: ${t.label}`} value={edits[t.key] ?? t.text} onChange={(e) => setTemplate(t.key, e.target.value)} minRows={2} maxRows={16} className="font-mono text-xs" />
+                    <AutoTextarea aria-label={`${group}: ${t.label}`} value={edits[t.key] ?? defaults[t.key]} onChange={(e) => setTemplate(t.key, e.target.value)} minRows={2} maxRows={16} className="font-mono text-xs" />
                   </div>
                 );
               })}

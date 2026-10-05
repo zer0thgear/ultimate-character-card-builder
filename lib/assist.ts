@@ -2,6 +2,7 @@ import type { CardData } from '@/types/card';
 import type { LlmImage, LlmMessage } from '@/types/llm';
 import { CHARACTER_NOTE_PATH, fieldLabel, getPath } from '@/lib/cardPath';
 import { entryName } from '@/lib/cardSpec';
+import { packLayer } from '@/lib/packLayer';
 
 // The writing assistant's requests: each builds the messages for one job,
 // with the card as context. Replies are meant to be dropped straight into
@@ -512,8 +513,9 @@ export function setTemplateOverrides(next: Record<string, string> | undefined) {
   overrides = next ?? {};
 }
 
-const template = (key: string) => overrides[key] ?? DEFAULT_TEMPLATES[key] ?? '';
-/** A template as it stands (your edit, else the built-in one). */
+// Your edit, else an extension pack's (lib/packLayer.ts), else the built-in.
+const template = (key: string) => overrides[key] ?? packLayer().templates[key]?.text ?? DEFAULT_TEMPLATES[key] ?? '';
+/** A template as it stands (your edit, else a pack's, else the built-in one). */
 export const templateText = template;
 
 /**

@@ -8,6 +8,7 @@ import type { AdventureSession, AdventureSummary } from '@/types/adventure';
 import { newCard } from '@/lib/cardSpec';
 import { normalizeCard, normalizeLorebook } from '@/lib/cardSpec';
 import { notesSnippet } from '@/lib/cardSummary';
+import { PackError, validatePack, type InstalledPack } from '@/lib/extensionPack';
 import { countTokens } from 'gpt-tokenizer';
 import { sumTallies, tallyChat, type ChatTally } from '@/lib/chatStats';
 
@@ -543,6 +544,65 @@ export async function saveLorebook(b: BankLorebook): Promise<BankLorebook> {
 
 export async function deleteLorebook(id: string) {
   await removeJson(lorebookPath(id));
+}
+
+// ─── Extension packs ─────────────────────────────────────────────────────────
+//   data/packs/<id>.json   InstalledPack (lib/extensionPack.ts)
+
+const PACKS = path.join(DATA_DIR, 'packs');
+const packPath = (id: string) => path.join(PACKS, `${checkId(id)}.json`);
+
+export async function listPacks(): Promise<InstalledPack[]> {
+  const files = await fs.readdir(PACKS).catch(() => [] as string[]);
+  const packs = await Promise.all(files.filter((f) => f.endsWith('.json')).map((f) => readJson<InstalledPack>(path.join(PACKS, f)).catch(() => null)));
+  return packs.filter((p): p is InstalledPack => !!p?.pack?.id).sort((a, b) => a.installedAt - b.installedAt);
+}
+
+/** Installs a pack, or updates the one with its id (keeping when it was
+ *  installed, so its place in the order stays). It's checked again here. */
+export async function savePack(p: Partial<InstalledPack>): Promise<InstalledPack> {
+  let pack;
+  try {
+    pack = validatePack(p?.pack).pack;
+  } catch (err) {
+    throw err instanceof PackError ? new BadRequestError(err.message) : err;
+  }
+  const before = await readJson<InstalledPack>(packPath(pack.id)).catch(() => null);
+  const now = Date.now();
+  const codeApproved = p.codeApproved === true && !!pack.ui?.length;
+  const clean: InstalledPack = {
+    pack,
+    enabled: p.enabled !== false,
+    ...(codeApproved ? { codeApproved, granted: (Array.isArray(p.granted) ? p.granted : []).filter((g) => pack.permissions?.includes(g as never)) } : {}),
+    installedAt: before?.installedAt ?? (typeof p.installedAt === 'number' ? p.installedAt : now),
+    updatedAt: now,
+  };
+  await writeFileAtomic(packPath(pack.id), JSON.stringify(clean, null, 2));
+  return clean;
+}
+
+export async function deletePack(id: string) {
+  await removeJson(packPath(id));
+  await removeJson(packDataPath(id));
+}
+
+// An extension's own data (uccb.storage), one JSON object per pack:
+//   data/pack-data/<id>.json
+const PACK_DATA = path.join(DATA_DIR, 'pack-data');
+const packDataPath = (id: string) => path.join(PACK_DATA, `${checkId(id)}.json`);
+export const MAX_PACK_DATA_BYTES = 1_000_000;
+
+export async function getPackData(id: string): Promise<Record<string, unknown>> {
+  return (await readJson<Record<string, unknown>>(packDataPath(id))) ?? {};
+}
+
+export async function savePackData(id: string, data: unknown): Promise<Record<string, unknown>> {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new BadRequestError("An extension's data must be an object.");
+  if (!(await readJson<InstalledPack>(packPath(id)))) throw new NotFoundError(`No extension ${id}`);
+  const text = JSON.stringify(data);
+  if (text.length > MAX_PACK_DATA_BYTES) throw new BadRequestError(`An extension can keep at most ${MAX_PACK_DATA_BYTES / 1_000_000} MB of data.`);
+  await writeFileAtomic(packDataPath(id), text);
+  return data as Record<string, unknown>;
 }
 
 // ─── Settings shared by every device ─────────────────────────────────────────

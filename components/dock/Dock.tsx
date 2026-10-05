@@ -10,13 +10,18 @@ import { GalleryPanel } from '@/components/dock/GalleryPanel';
 import { LibraryPanel } from '@/components/dock/LibraryPanel';
 import { ChatPanel } from '@/components/dock/ChatPanel';
 import { BrainstormPanel } from '@/components/dock/BrainstormPanel';
+import { SandboxFrame } from '@/components/extensions/SandboxFrame';
+import { usePackStore } from '@/store/packStore';
 
 // The right-hand side: everything that works alongside the card text.
 // Panels other than the open one stay mounted (hidden), so a generation or
 // a chat reply carries on while you look at something else.
 
 export function Dock({ phone = false }: { phone?: boolean }) {
-  const { dockTab, setDockTab } = useUiStore();
+  const { dockTab: chosen, setDockTab } = useUiStore();
+  // Extensions' tabs (lib/extensionSandbox.ts); one that's gone falls back to Image.
+  const extTabs = usePackStore((s) => s.layer.ui).filter((u) => u.slot === 'dockTab');
+  const dockTab: DockTab = chosen.startsWith('ext:') && !extTabs.some((u) => `ext:${u.packId}.${u.id}` === chosen) ? 'image' : chosen;
   const generating = useSessionStore((s) => s.generating);
   const projectId = useProjectStore((s) => s.project?.id);
   const sessionCount = useSessionStore((s) => s.images.filter((i) => i.projectId === projectId).length);
@@ -27,6 +32,7 @@ export function Dock({ phone = false }: { phone?: boolean }) {
     { value: 'library', label: '📚 Library' },
     { value: 'chat', label: '💬 Test chat' },
     { value: 'assist', label: '✨ Brainstorm' },
+    ...extTabs.map((u) => ({ value: `ext:${u.packId}.${u.id}` as const, label: `${u.icon ?? '🧩'} ${u.label}` })),
   ];
   const panel = (tab: DockTab, node: React.ReactNode) => (
     <div className="h-full min-h-0" hidden={dockTab !== tab}>
@@ -47,6 +53,11 @@ export function Dock({ phone = false }: { phone?: boolean }) {
         {dockTab === 'library' && <LibraryPanel />}
         {panel('chat', <ChatPanel />)}
         {panel('assist', <BrainstormPanel />)}
+        {extTabs.map((u) => (
+          <div key={`${u.packId}.${u.id}`} className="h-full min-h-0" hidden={dockTab !== `ext:${u.packId}.${u.id}`}>
+            <SandboxFrame ui={u} fill />
+          </div>
+        ))}
       </div>
     </div>
   );

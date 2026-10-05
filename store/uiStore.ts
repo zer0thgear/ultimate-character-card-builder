@@ -9,9 +9,11 @@ import { api } from '@/lib/api';
 
 // Layout and preferences (persisted), the server's config, and toasts.
 
-export type EditorTab = 'basics' | 'greetings' | 'lorebook' | 'prompts' | 'creator' | 'notes' | 'tools';
+/** `ext:<pack>.<ui>`: an extension's tab (components/extensions/). */
+export type ExtTab = `ext:${string}`;
+export type EditorTab = 'basics' | 'greetings' | 'lorebook' | 'prompts' | 'creator' | 'notes' | 'tools' | ExtTab;
 export type HomeTab = 'cards' | 'library' | 'helper';
-export type DockTab = 'image' | 'gallery' | 'library' | 'chat' | 'assist';
+export type DockTab = 'image' | 'gallery' | 'library' | 'chat' | 'assist' | ExtTab;
 
 /** Builder: writing and drawing cards. Chat: chatting with them, the
  *  building tools out of the way. */

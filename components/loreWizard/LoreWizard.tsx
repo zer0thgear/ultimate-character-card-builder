@@ -11,14 +11,14 @@ import type { Lorebook } from '@/types/card';
 import { entryName } from '@/lib/cardSpec';
 import { bankName, cardLoreName } from '@/lib/lorebookBank';
 import {
-  FOCUS_OPTIONS,
-  SIZE_COUNT,
   applyChanges,
   cleanEntryText,
   droppedSources,
   entriesFromBook,
+  focusOptions,
   isWritten,
   keyWarnings,
+  lengthOptions,
   newSession,
   parsePlan,
   parseRevision,
@@ -26,6 +26,7 @@ import {
   reviewMessages,
   reviseMessages,
   saveToBook,
+  sizeOptions,
   toWrite,
   writeMessages,
   type WizardEntry,
@@ -397,7 +398,7 @@ function Brief({
       <div className="flex flex-col gap-1">
         <span className="text-xs text-slate-400">Focus on (optional)</span>
         <div className="flex flex-wrap gap-1.5">
-          {FOCUS_OPTIONS.map((f) => {
+          {focusOptions().map((f) => {
             const on = s.focus.includes(f);
             return (
               <button
@@ -419,11 +420,7 @@ function Brief({
           <Select<WizardSize>
             value={s.size}
             onChange={(size) => set({ size })}
-            options={[
-              { value: 'small', label: `A few (about ${SIZE_COUNT.small})` },
-              { value: 'medium', label: `Some (about ${SIZE_COUNT.medium})` },
-              { value: 'large', label: `Lots (about ${SIZE_COUNT.large})` },
-            ]}
+            options={sizeOptions().map((o) => ({ value: o.id, label: o.label }))}
           />
         </label>
         )}
@@ -432,11 +429,7 @@ function Brief({
           <Select<WizardLength>
             value={s.length}
             onChange={(length) => set({ length })}
-            options={[
-              { value: 'short', label: 'Short (under 80 words)' },
-              { value: 'medium', label: 'Medium (80–180 words)' },
-              { value: 'long', label: 'Long (180–350 words)' },
-            ]}
+            options={lengthOptions().map((o) => ({ value: o.id, label: o.label }))}
           />
         </label>
         {!bankName && (

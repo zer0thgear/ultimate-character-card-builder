@@ -1,6 +1,7 @@
 import type { AppConfig, CardProject, CardVersion, CardVersionInfo, TrashedProject, BankLorebook, ChatSession, ChatSummary, StorySession, StorySummary, KeptImage, Persona, ProjectSummary, AvatarInfo } from '@/types/project';
 import type { LlmEvent, LlmRequest } from '@/types/llm';
 import type { Lorebook } from '@/types/card';
+import type { InstalledPack } from '@/lib/extensionPack';
 import type { LibraryItem } from '@/lib/librarySearch';
 import type { HelpDocs } from '@/lib/helpDesk';
 import type { AdventureSession, AdventureSummary } from '@/types/adventure';
@@ -96,6 +97,12 @@ export const api = {
   saveLorebook: (b: BankLorebook) => call<BankLorebook>(`/api/lorebooks/${b.id}`, json('PUT', b)),
   syncCardLorebook: (projectId: string, book: Lorebook, syncByDefault: boolean) => call<{ synced: boolean; updatedAt?: number }>(`/api/projects/${projectId}/lorebook`, json('PUT', { book, syncByDefault })),
   deleteLorebook: (id: string) => call<{ ok: true }>(`/api/lorebooks/${id}`, { method: 'DELETE' }),
+  listPacks: () => call<InstalledPack[]>('/api/packs'),
+  installPack: (p: InstalledPack) => call<InstalledPack>('/api/packs', json('POST', p)),
+  savePack: (p: InstalledPack) => call<InstalledPack>(`/api/packs/${p.pack.id}`, json('PUT', p)),
+  deletePack: (id: string) => call<{ ok: true }>(`/api/packs/${id}`, { method: 'DELETE' }),
+  getPackData: (id: string) => call<Record<string, unknown>>(`/api/packs/${id}/data`),
+  savePackData: (id: string, data: Record<string, unknown>) => call<Record<string, unknown>>(`/api/packs/${id}/data`, json('PUT', data)),
 
   listPersonas: () => call<Persona[]>('/api/personas'),
   savePersonas: (list: Persona[]) => call<Persona[]>('/api/personas', json('PUT', list)),

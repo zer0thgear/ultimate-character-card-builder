@@ -5,6 +5,7 @@ import type { AdventureWorld, WorldEntry } from '@/types/adventure';
 import { useProjectStore } from '@/store/projectStore';
 import { useLlmStore } from '@/store/llmStore';
 import { useAdventureStore } from '@/store/adventureStore';
+import { usePackStore } from '@/store/packStore';
 import { toast } from '@/store/uiStore';
 import { RULE_EXAMPLES, emptyWorld, mergeWorld, overlayList, parseScout, scoutMessages, tallyUsage, withOverride, type ShownEntry, type WorldList } from '@/lib/adventure';
 import { AutoTextarea, Button, IconButton, Tabs, choiceDialog, cx, inputClass } from '@/components/ui';
@@ -56,6 +57,7 @@ export function WorldDrawer({ onClose }: { onClose: () => void }) {
   const project = useProjectStore((s) => s.project);
   const adventure = useAdventureStore((s) => s.adventure);
   const update = useAdventureStore((s) => s.update);
+  const packRules = usePackStore((s) => s.layer.ruleExamples);
   const [tab, setTab] = useState<Tab>('personae');
   // Changes go to the card (every adventure) or this adventure only.
   const [scope, setScope] = useState<'card' | 'adventure'>('card');
@@ -148,9 +150,10 @@ export function WorldDrawer({ onClose }: { onClose: () => void }) {
             <AutoTextarea value={rules} onChange={(e) => setRules(e.target.value)} minRows={8} placeholder="- Wild creatures can be caught once weakened; a roll decides it." className={cx(inputClass, 'text-sm')} />
             <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
               Start from:
-              {RULE_EXAMPLES.map((r) => (
-                <Button key={r.label} size="sm" variant="ghost" onClick={() => setRules(rules.trim() ? `${rules.trim()}\n\n${r.text}` : r.text)}>
+              {[...RULE_EXAMPLES, ...packRules].map((r, i) => (
+                <Button key={`${i}-${r.label}`} size="sm" variant="ghost" title={'from' in r ? `From the extension pack "${r.from}"` : undefined} onClick={() => setRules(rules.trim() ? `${rules.trim()}\n\n${r.text}` : r.text)}>
                   + {r.label}
+                  {'from' in r && <span className="text-sky-400/80"> 🧩</span>}
                 </Button>
               ))}
             </div>
