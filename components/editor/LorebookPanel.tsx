@@ -20,6 +20,8 @@ import { CutOffNotice } from '@/components/llm/CutOffNotice';
 import { AssistReasoning } from '@/components/llm/AssistTrace';
 import { ReferenceTray, referenceConnectionId, useReferences } from '@/components/llm/References';
 import { withReferences } from '@/lib/references';
+import { LoreWizardDialog } from '@/components/loreWizard/LoreWizard';
+import { useLoreWizardStore } from '@/store/loreWizardStore';
 
 export function LorebookPanel() {
   const book = useProjectStore((s) => s.project?.card.data.character_book);
@@ -27,6 +29,9 @@ export function LorebookPanel() {
   const updateCard = useProjectStore((s) => s.updateCard);
   const loreDepth = useLlmStore((s) => s.chatSettings.loreScanDepth ?? DEFAULT_SCAN_DEPTH);
   const loreBudget = useLlmStore((s) => s.chatSettings.loreTokenBudget ?? 0);
+  const [wizard, setWizard] = useState(false);
+  // Builder only, as the other ✨ tools (Chat mode's card drawer leaves it out).
+  const writingTools = useWritingTools();
 
   const setBook = (b: Lorebook | undefined, key?: string) =>
     updateCard((d) => {
@@ -65,8 +70,10 @@ export function LorebookPanel() {
               Attach a new lorebook
             </Button>
             <Button onClick={() => void importBook()}>Import (JSON, card PNG, CHARX)</Button>
+            {writingTools && <WizardButton onClick={() => setWizard(true)} />}
           </div>
         </Empty>
+        {wizard && <LoreWizardDialog onClose={() => setWizard(false)} />}
       </div>
     );
   }
@@ -85,6 +92,7 @@ export function LorebookPanel() {
         title="Lorebook"
         actions={
           <>
+            {writingTools && <WizardButton size="sm" onClick={() => setWizard(true)} />}
             <Button size="sm" onClick={() => void importBook()}>
               Import…
             </Button>
@@ -121,7 +129,19 @@ export function LorebookPanel() {
       </Section>
       <Entries book={book} setBook={setBook} />
       <KeyTester book={book} />
+      {wizard && <LoreWizardDialog onClose={() => setWizard(false)} />}
     </div>
+  );
+}
+
+/** Opens the 🧙 Lorebook wizard; says so when a draft is waiting in it. */
+function WizardButton({ size, onClick }: { size?: 'sm'; onClick: () => void }) {
+  const id = useProjectStore((s) => s.project?.id ?? '');
+  const draft = useLoreWizardStore((s) => s.sessions[id]?.entries.length ?? 0);
+  return (
+    <Button size={size} onClick={onClick} title="Plan and write a whole lorebook with the assistant, in a guided session">
+      🧙 Wizard{draft ? ` (${draft} in the draft)` : ''}
+    </Button>
   );
 }
 
