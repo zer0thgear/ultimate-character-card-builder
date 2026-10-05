@@ -11,12 +11,15 @@ import {
   SIZE_COUNT,
   applyChanges,
   cleanEntryText,
+  droppedSources,
+  entriesFromBook,
   isWritten,
   keyWarnings,
   newSession,
   parsePlan,
   parseRevision,
   planMessages,
+  reviewMessages,
   reviseMessages,
   saveToBook,
   toWrite,
@@ -96,6 +99,7 @@ export function LoreWizardDialog({ onClose }: { onClose: () => void }) {
   };
 
   const plan = async () => {
+    if (current().fromBook) return review();
     const s = current();
     const signal = start();
     setBusy({ kind: 'plan' });
@@ -115,6 +119,33 @@ export function LoreWizardDialog({ onClose }: { onClose: () => void }) {
       entries: [...x.entries, ...p.entries],
       chat: [...x.chat, { role: 'wizard', runId: r.runId, text: p.message || (p.entries.length ? `Here's a plan with ${p.entries.length} entries.` : r.text.trim() || 'The planner sent nothing back.'), ...(p.entries.length ? { changes: [`${p.entries.length} entries planned`] } : {}) }],
     }));
+  };
+
+  /** A session on the card's lorebook: its entries come into the draft,
+   *  and the Planner reviews them and proposes changes (nothing is
+   *  rewritten until you say so). */
+  const review = async () => {
+    const entries = entriesFromBook(card()?.character_book);
+    update((x) => ({
+      ...x,
+      stage: 'draft',
+      entries,
+      sources: entries.flatMap((e) => (e.sourceId !== undefined ? [e.sourceId] : [])),
+      chat: [...x.chat, { role: 'user', text: x.pitch.trim() || 'What do you think of this lorebook?' }],
+    }));
+    const s = current();
+    const signal = start();
+    setBusy({ kind: 'plan' });
+    const r = await wizardCall('planner', 'Planner: the review', reviewMessages(s, card()), { signal, onRun: setLiveRun });
+    setBusy(null);
+    if (r.aborted) return;
+    if (r.error) {
+      toast(r.error, 'error');
+      return;
+    }
+    const rev = parseRevision(r.text);
+    const applied = applyChanges(current().entries, rev.changes);
+    update((x) => ({ ...x, entries: applied.entries, chat: [...x.chat, { role: 'wizard', runId: r.runId, text: rev.message || (rev.parsed ? 'It looks good as it is.' : r.text.trim()), ...(applied.notes.length ? { changes: applied.notes } : {}) }] }));
   };
 
   const send = async (text: string) => {
@@ -144,8 +175,11 @@ export function LoreWizardDialog({ onClose }: { onClose: () => void }) {
   const save = async () => {
     const written = session.entries.filter(isWritten);
     const book = useProjectStore.getState().project?.card.data.character_book;
+    const ids = new Set((book?.entries ?? []).map((e) => e.id));
     const names = new Set((book?.entries ?? []).map((e) => entryName(e).trim().toLowerCase()));
-    const clash = written.filter((e) => names.has(e.name.trim().toLowerCase())).length;
+    // Entries from the lorebook go back to their own place; others may clash by name.
+    const clash = written.filter((e) => !(e.sourceId !== undefined && ids.has(e.sourceId)) && names.has(e.name.trim().toLowerCase())).length;
+    const dropped = session.fromBook ? droppedSources(session).filter((id) => ids.has(id)) : [];
     let replace = false;
     if (clash) {
       const pick = await choiceDialog({
@@ -159,10 +193,30 @@ export function LoreWizardDialog({ onClose }: { onClose: () => void }) {
       if (!pick) return;
       replace = pick === 'replace';
     }
-    const r = saveToBook(book, written, { replace, name: session.title || undefined });
+    let remove: typeof dropped = [];
+    if (dropped.length) {
+      const pick = await choiceDialog({
+        title: `Remove ${dropped.length} entr${dropped.length === 1 ? 'y' : 'ies'} from the card too?`,
+        body: `${dropped.length === 1 ? "An entry you took out of the draft is" : `${dropped.length} entries you took out of the draft are`} still in the card's lorebook. Undo brings ${dropped.length === 1 ? 'it' : 'them'} back.`,
+        choices: [
+          { value: 'remove', label: 'Remove from the card', danger: true },
+          { value: 'keep', label: 'Keep in the card' },
+        ],
+      });
+      if (!pick) return;
+      if (pick === 'remove') remove = dropped;
+    }
+    const r = saveToBook(book, written, { replace, remove, name: session.title || undefined });
     useProjectStore.getState().updateCard((d) => ({ ...d, character_book: r.book }));
-    const did = [r.added && `added ${r.added}`, r.replaced && `replaced ${r.replaced}`].filter(Boolean).join(' and ');
-    toast(`${did.charAt(0).toUpperCase()}${did.slice(1)} lorebook entr${r.added + r.replaced === 1 ? 'y' : 'ies'}. The draft stays here until you start over.`, 'success');
+    // From now on each saved entry goes back to its own place.
+    const saved = new Map(r.book.entries.map((e) => [entryName(e).trim().toLowerCase(), e.id]));
+    update((x) => ({
+      ...x,
+      sources: (x.sources ?? []).filter((id) => !remove.includes(id)),
+      entries: x.entries.map((e) => (e.sourceId === undefined && isWritten(e) && saved.get(e.name.trim().toLowerCase()) !== undefined ? { ...e, sourceId: saved.get(e.name.trim().toLowerCase()) } : e)),
+    }));
+    const did = [r.added && `added ${r.added}`, r.replaced && `updated ${r.replaced}`, r.removed && `removed ${r.removed}`].filter(Boolean).join(', ');
+    toast(did ? `${did.charAt(0).toUpperCase()}${did.slice(1)} lorebook entr${r.added + r.replaced + r.removed === 1 ? 'y' : 'ies'}. The draft stays here until you start over.` : 'Nothing to save: the lorebook already matches the draft.', did ? 'success' : 'info');
   };
 
   const startOver = async () => {
@@ -251,15 +305,36 @@ function Brief({ session: s, update, busy, onPlan, onStop, hasCard }: { session:
       <p className="text-sm text-slate-400">
         Tell the wizard what the lorebook is about. It plans the entries and asks a question or two, then writes them one by one. You can change any entry by hand, or tell it what to change and it rewrites them.
       </p>
+      {hasBook && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs text-slate-400">Start from</span>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {[
+              { from: false, label: '✨ New entries', hint: "Plan and write entries to add to the card's lorebook" },
+              { from: true, label: `📖 The card's lorebook (${card?.character_book?.entries.length})`, hint: 'Bring its entries in: get thoughts on them, change them and add to them' },
+            ].map((o) => (
+              <button
+                key={o.label}
+                type="button"
+                onClick={() => set({ fromBook: o.from })}
+                className={cx('rounded-md border px-3 py-2 text-left', !!s.fromBook === o.from ? 'border-violet-500/60 bg-violet-500/10' : 'border-slate-800 hover:bg-slate-800/60')}
+              >
+                <div className="text-sm text-slate-200">{o.label}</div>
+                <div className="text-xs text-slate-500">{o.hint}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <label className="flex flex-col gap-1 text-xs text-slate-400">
-        What should it cover?
+        {s.fromBook ? 'What do you want from it? (optional)' : 'What should it cover?'}
         <AutoTextarea
           autoFocus
           value={s.pitch}
           onChange={(e) => set({ pitch: e.target.value })}
           minRows={4}
           maxRows={14}
-          placeholder={hasCard ? "Leave it blank to plan from the card, or say what you want: \"the city she grew up in, its guilds and the cult in the sewers\"" : 'The world, its places and people: "a sunken archipelago ruled by rival pirate houses, with sea-witches and a drowned god"'}
+          placeholder={s.fromBook ? 'Leave it blank for a general review, or say what you want: "fill the gaps in the geography", "tighten the long entries", "fix the keys"' : hasCard ? "Leave it blank to plan from the card, or say what you want: \"the city she grew up in, its guilds and the cult in the sewers\"" : 'The world, its places and people: "a sunken archipelago ruled by rival pirate houses, with sea-witches and a drowned god"'}
         />
       </label>
       <div className="flex flex-col gap-1">
@@ -281,6 +356,7 @@ function Brief({ session: s, update, busy, onPlan, onStop, hasCard }: { session:
         </div>
       </div>
       <div className="flex flex-wrap items-end gap-4">
+        {!s.fromBook && (
         <label className="flex flex-col gap-1 text-xs text-slate-400">
           How many entries
           <Select<WizardSize>
@@ -293,6 +369,7 @@ function Brief({ session: s, update, busy, onPlan, onStop, hasCard }: { session:
             ]}
           />
         </label>
+        )}
         <label className="flex flex-col gap-1 text-xs text-slate-400">
           Entry length
           <Select<WizardLength>
@@ -324,12 +401,12 @@ function Brief({ session: s, update, busy, onPlan, onStop, hasCard }: { session:
             Stop
           </Button>
         ) : (
-          <Button variant="primary" disabled={!s.pitch.trim() && !s.useCard} onClick={onPlan}>
-            Plan the lorebook
+          <Button variant="primary" disabled={!s.pitch.trim() && !s.useCard && !s.fromBook} onClick={onPlan}>
+            {s.fromBook ? 'Review the lorebook' : 'Plan the lorebook'}
           </Button>
         )}
       </div>
-      {busy && <p className="animate-pulse text-sm text-slate-400">The planner is drawing up the entries…</p>}
+      {busy && <p className="animate-pulse text-sm text-slate-400">{s.fromBook ? 'The planner is reading the lorebook…' : 'The planner is drawing up the entries…'}</p>}
     </div>
   );
 }
@@ -565,7 +642,7 @@ function Conversation({ session: s, busy, liveRun, onSend, onStop }: { session: 
           {thinking && (
             <div className="mr-2 rounded-lg bg-slate-900 px-3 py-2 text-sm text-slate-400">
               <AssistReasoning runId={liveRun} className="mb-1.5" />
-              <span className="animate-pulse">{busy?.kind === 'plan' ? 'Planning the entries…' : 'Working out what to change…'}</span>
+              <span className="animate-pulse">{busy?.kind === 'plan' ? (s.fromBook ? 'Reading the lorebook…' : 'Planning the entries…') : 'Working out what to change…'}</span>
             </div>
           )}
           <div ref={bottom} />

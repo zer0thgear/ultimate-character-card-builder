@@ -193,6 +193,37 @@ Reply with JSON in this shape:
 }`,
   },
   {
+    key: 'loreWizard.review',
+    group: '🧙 Lorebook wizard',
+    label: 'Planner: review a lorebook',
+    vars: ['card', 'draft', 'pitch', 'focus'],
+    note: 'For a session started from the card\'s lorebook. Keep the JSON reply shape; that is how the changes are read back.',
+    text: `<card>
+{{card}}
+</card>
+
+The card's lorebook as it stands:
+<lorebook>
+{{draft}}
+</lorebook>
+
+What the creator wants: {{pitch}}
+
+Focus on: {{focus}}
+
+Review the lorebook: what works, what's missing, what's thin, vague or contradicts the card or itself, and keys that will misfire (too common, shared, missing). Then propose changes: rewrites of entries that need it, new entries for the gaps, removals only for entries that are redundant or harmful. Nothing is rewritten until the creator agrees, so explain your reasons in the message.
+
+Reply with JSON in this shape, listing only what you'd change:
+{
+  "message": "your thoughts on the lorebook, for the creator: strengths, problems and what you propose, and a question if one would help",
+  "changes": [
+    { "op": "add", "name": "entry name", "category": "...", "keys": ["key"], "always": false, "brief": "what it will cover" },
+    { "op": "edit", "entry": "an existing entry's name", "name": "its new name, only if renamed", "keys": ["only if they change"], "always": "true or false, only if it changes", "rewrite": "what the writer should change in its text" },
+    { "op": "remove", "entry": "an existing entry's name" }
+  ]
+}`,
+  },
+  {
     key: 'loreWizard.revise',
     group: '🧙 Lorebook wizard',
     label: 'Planner: your message',

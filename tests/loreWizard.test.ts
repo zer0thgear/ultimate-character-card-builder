@@ -4,11 +4,14 @@ import {
   applyChanges,
   cleanEntryText,
   draftContext,
+  droppedSources,
+  entriesFromBook,
   keyWarnings,
   newSession,
   parsePlan,
   parseRevision,
   planMessages,
+  reviewMessages,
   reviseMessages,
   saveToBook,
   toWrite,
@@ -186,5 +189,45 @@ describe('saving', () => {
     expect(replaced).toMatchObject({ added: 1, replaced: 1 });
     expect(replaced.book.entries[0]).toMatchObject({ id: 5, name: 'ashford', keys: ['Ashford'], content: 'A mill town.', insertion_order: 300, extensions: { sticky: 2 } });
     expect(replaced.book.entries[1]).toMatchObject({ name: 'The Order', insertion_order: 301 });
+  });
+
+  it('puts entries from the lorebook back in their place, renamed if need be, and removes dropped ones', () => {
+    const book = {
+      extensions: {},
+      entries: [
+        { ...newEntry(), id: 3, name: 'Mill', comment: 'Mill', keys: ['mill'], content: 'Old.', extensions: { sticky: 1 } },
+        { ...newEntry(), id: 4, name: 'Gods', comment: 'Gods', keys: ['gods'], content: 'Many.' },
+        { ...newEntry(), id: 5, name: 'Keep', comment: 'Keep', keys: ['keep'], content: 'Same.', constant: true },
+      ],
+    };
+    const draft = entriesFromBook(book);
+    expect(draft.map((e) => [e.name, e.sourceId, e.always ?? false, e.content])).toEqual([
+      ['Mill', 3, false, 'Old.'],
+      ['Gods', 4, false, 'Many.'],
+      ['Keep', 5, true, 'Same.'],
+    ]);
+    const session = { ...newSession(), fromBook: true, sources: [3, 4, 5], entries: [{ ...draft[0], name: 'Old Mill', content: 'Burned.' }, draft[2], entry('Duke', { content: 'Rules.' })] };
+    expect(droppedSources(session)).toEqual([4]);
+    const r = saveToBook(book, session.entries, { remove: droppedSources(session) });
+    expect(r).toMatchObject({ added: 1, replaced: 1, removed: 1 });
+    expect(r.book.entries.map((e) => [e.id, e.name, e.comment, e.content])).toEqual([
+      [3, 'Old Mill', 'Old Mill', 'Burned.'],
+      [5, 'Keep', 'Keep', 'Same.'],
+      [6, 'Duke', 'Duke', 'Rules.'],
+    ]);
+    expect(r.book.entries[0].extensions).toEqual({ sticky: 1 });
+    // Saving again changes nothing.
+    expect(saveToBook(r.book, [{ ...session.entries[0] }, session.entries[1]])).toMatchObject({ added: 0, replaced: 0, removed: 0 });
+  });
+});
+
+describe('reviewing a lorebook', () => {
+  it('sends the whole lorebook and asks for thoughts and changes', () => {
+    const s = { ...newSession(), fromBook: true, entries: [entry('Mill', { content: 'Old.' })] };
+    const [, user] = reviewMessages(s, newCard().data);
+    expect(user.content).toContain('<entry name="Mill" keys="mill">\nOld.\n</entry>');
+    expect(user.content).toContain('What the creator wants: Thoughts on the lorebook');
+    expect(user.content).toContain('Review the lorebook');
+    expect(parseRevision(JSON.stringify({ message: 'Thin.', changes: [{ op: 'edit', entry: 'Mill', rewrite: 'More detail.' }] })).changes).toEqual([{ op: 'edit', entry: 'Mill', rewrite: 'More detail.' }]);
   });
 });

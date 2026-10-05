@@ -33,7 +33,12 @@ export interface WizardEntry {
   rewrite?: string;
   /** Why the last write failed. */
   error?: string;
+  /** The id of the card's lorebook entry it came from, in a session
+   *  started from the lorebook; saving puts it back there. */
+  sourceId?: SourceId;
 }
+
+export type SourceId = number | string;
 
 /** A message in the wizard's conversation (yours, or the Planner's). */
 export interface WizardMessage {
@@ -56,6 +61,10 @@ export interface WizardSession {
   useCard: boolean;
   entries: WizardEntry[];
   chat: WizardMessage[];
+  /** Started from the card's lorebook (to review, change and add to it),
+   *  with the ids of the entries it brought in. */
+  fromBook?: boolean;
+  sources?: SourceId[];
 }
 
 export const newSession = (useCard = true): WizardSession => ({
@@ -85,6 +94,27 @@ export const isWritten = (e: WizardEntry) => !!e.content.trim();
 
 /** Entries waiting for the Writer: never written, or with a change asked for. */
 export const toWrite = (entries: WizardEntry[]) => entries.filter((e) => !isWritten(e) || e.rewrite);
+
+/** The card's lorebook as a draft: every entry, written, tied to the
+ *  entry it came from. */
+export function entriesFromBook(book: Lorebook | undefined): WizardEntry[] {
+  return (book?.entries ?? []).map((e, i) => ({
+    id: uuid(),
+    name: entryName(e) || e.keys[0] || `Entry ${i + 1}`,
+    keys: [...e.keys],
+    ...(e.constant ? { always: true } : {}),
+    brief: '',
+    content: e.content,
+    ...(e.id !== undefined ? { sourceId: e.id } : {}),
+  }));
+}
+
+/** The lorebook's entries that were brought into the draft and taken out
+ *  of it since (saving removes them from the card). */
+export function droppedSources(s: WizardSession): SourceId[] {
+  const kept = new Set(s.entries.map((e) => e.sourceId).filter((id) => id !== undefined));
+  return (s.sources ?? []).filter((id) => !kept.has(id));
+}
 
 // ─── Reading replies ─────────────────────────────────────────────────────────
 
@@ -353,6 +383,20 @@ export function planMessages(s: WizardSession, card: CardData | undefined): LlmM
   );
 }
 
+/** The Planner's first look at a lorebook brought in from the card:
+ *  its thoughts, and the changes it proposes. */
+export function reviewMessages(s: WizardSession, card: CardData | undefined): LlmMessage[] {
+  return messages(
+    fillTemplate(templateText('loreWizard.planner'), {}),
+    fillTemplate(templateText('loreWizard.review'), {
+      card: s.useCard ? cardOnly(card, 8000) : '',
+      draft: draftContext(s.entries, 1500),
+      pitch: s.pitch.trim() || 'Thoughts on the lorebook, and the changes and new entries that would make it better.',
+      focus: s.focus.join(', '),
+    }),
+  );
+}
+
 /** The Planner, on your message about the draft. */
 export function reviseMessages(s: WizardSession, card: CardData | undefined, message: string): LlmMessage[] {
   return messages(
@@ -399,23 +443,38 @@ export function toLorebookEntries(entries: WizardEntry[], existing: LorebookEntr
   return out;
 }
 
-/** A lorebook with the written entries in it. `replace`: an entry with the
- *  same name as one already there takes its place (keeping its settings),
- *  rather than being added beside it. */
-export function saveToBook(book: Lorebook | undefined, entries: WizardEntry[], opts: { replace?: boolean; name?: string } = {}): { book: Lorebook; added: number; replaced: number } {
+/** A lorebook with the written entries in it. An entry that came from the
+ *  lorebook (sourceId) goes back in its place, keeping its other settings;
+ *  with `replace`, so does one with the same name as one already there,
+ *  rather than being added beside it. `remove` drops the entries with
+ *  those ids (ones taken out of the draft). Only entries that changed
+ *  count as replaced. */
+export function saveToBook(
+  book: Lorebook | undefined,
+  entries: WizardEntry[],
+  opts: { replace?: boolean; name?: string; remove?: SourceId[] } = {},
+): { book: Lorebook; added: number; replaced: number; removed: number } {
   const base = book ?? { ...newLorebook(), ...(opts.name?.trim() ? { name: opts.name.trim() } : {}) };
-  let list = [...base.entries];
+  const drop = new Set(opts.remove ?? []);
+  let list = base.entries.filter((x) => x.id === undefined || !drop.has(x.id));
+  const removed = base.entries.length - list.length;
   let replaced = 0;
   const fresh: WizardEntry[] = [];
   for (const e of entries.filter(isWritten)) {
-    const at = opts.replace ? list.findIndex((x) => norm(entryName(x)) === norm(e.name)) : -1;
+    let at = e.sourceId !== undefined ? list.findIndex((x) => x.id === e.sourceId) : -1;
+    const own = at >= 0;
+    if (!own && opts.replace) at = list.findIndex((x) => norm(entryName(x)) === norm(e.name));
     if (at < 0) {
       fresh.push(e);
       continue;
     }
-    list = list.map((x, i) => (i === at ? { ...x, keys: e.keys, constant: !!e.always, content: e.content.trim() } : x));
+    const was = list[at];
+    const next = { ...was, keys: e.keys, constant: !!e.always, content: e.content.trim(), ...(own && entryName(was) !== e.name ? { name: e.name, comment: e.name } : {}) };
+    const changed = was.content.trim() !== next.content || !!was.constant !== next.constant || was.keys.join('\n') !== next.keys.join('\n') || entryName(was) !== entryName(next);
+    if (!changed) continue;
+    list = list.map((x, i) => (i === at ? next : x));
     replaced++;
   }
   const added = toLorebookEntries(fresh, list);
-  return { book: { ...base, entries: [...list, ...added] }, added: added.length, replaced };
+  return { book: { ...base, entries: [...list, ...added] }, added: added.length, replaced, removed };
 }

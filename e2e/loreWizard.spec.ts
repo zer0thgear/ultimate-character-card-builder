@@ -12,13 +12,15 @@ async function mockWizard(page: Page) {
     const user = body.messages[1]?.content ?? '';
     sent.push({ system, user });
     let text = '';
-    if (system.startsWith('You are the planner') && user.includes('The creator says: Add the Duke')) {
+    if (system.startsWith('You are the planner') && user.includes('Review the lorebook')) {
+      text = JSON.stringify({ message: 'Solid, but Ashford is thin and the Duke repeats the card.', changes: [{ op: 'edit', entry: 'Ashford', rewrite: 'Add the river.' }, { op: 'remove', entry: 'Duke Varr' }, { op: 'add', name: 'Night Market', keys: ['market'], brief: 'Where the guild trades.' }] });
+    } else if (system.startsWith('You are the planner') && user.includes('The creator says: Add the Duke')) {
       text = JSON.stringify({ message: 'Added the Duke, and the Guild gets grimmer.', changes: [{ op: 'add', name: 'Duke Varr', category: 'person', keys: ['Duke', 'Varr'], brief: 'The ruler.' }, { op: 'edit', entry: 'Thieves Guild', rewrite: 'Make it grimmer.' }, { op: 'remove', entry: 'Old Mill' }] });
     } else if (system.startsWith('You are the planner')) {
       text = '```json\n' + JSON.stringify({ message: 'Three entries. Who rules the town?', entries: [{ name: 'Ashford', category: 'place', keys: ['Ashford'], always: true, brief: 'The mill town.' }, { name: 'Thieves Guild', category: 'faction', keys: ['Guild', 'thieves'], brief: 'Rogues under the town.' }, { name: 'Old Mill', category: 'place', keys: ['mill'], brief: 'Burned.' }] }) + '\n```';
     } else if (system.startsWith('You write lorebook entries')) {
       const name = user.match(/Write the entry "([^"]+)"/)?.[1];
-      text = user.includes('Make it grimmer.') ? `${name}, grim and bloody.` : `${name}: written.`;
+      text = user.includes('Make it grimmer.') ? `${name}, grim and bloody.` : user.includes('Add the river.') ? `${name}, on the river.` : `${name}: written.`;
     }
     await route.fulfill({ contentType: 'application/x-ndjson', body: `${JSON.stringify({ type: 'text', text })}\n${JSON.stringify({ type: 'done', stopReason: 'stop' })}\n` });
   });
@@ -76,9 +78,28 @@ test('the lorebook wizard plans, writes, revises and saves a lorebook', async ({
   await page.getByRole('button', { name: /Thieves Guild/ }).click();
   await expect(page.getByText('Thieves Guild, grim and bloody.')).toBeVisible();
 
-  // Saving again offers to replace what's there.
+  // Saving the same draft again changes nothing.
   await page.getByRole('button', { name: /🧙 Wizard/ }).click();
   await page.getByRole('button', { name: /Save 3 to the card's lorebook/ }).click();
-  await page.getByRole('button', { name: 'Replace those' }).click();
-  await expect(page.getByText(/Replaced 3 lorebook entries/)).toBeVisible();
+  await expect(page.getByText('Nothing to save: the lorebook already matches the draft.')).toBeVisible();
+
+  // A session on the card's lorebook: the Planner reviews it, you write what it proposes, and saving puts it back.
+  await page.getByRole('button', { name: 'Start over' }).click();
+  await page.getByRole('button', { name: 'Start over' }).last().click();
+  await page.getByRole('button', { name: /📖 The card's lorebook \(3\)/ }).click();
+  await page.getByRole('button', { name: 'Review the lorebook' }).click();
+  await expect(page.getByText('Solid, but Ashford is thin and the Duke repeats the card.')).toBeVisible();
+  await expect(page.getByText('✎ Ashford: to rewrite')).toBeVisible();
+  await expect(page.getByText('3 entries · 2 written')).toBeVisible();
+  expect(sent.find((s) => s.user.includes('Review the lorebook'))?.user).toContain('Ashford, by hand.');
+  await page.getByRole('button', { name: '✍ Write 2 more' }).click();
+  await expect(page.getByText('Ashford, on the river.')).toBeVisible();
+  await expect(page.getByText('Night Market: written.')).toBeVisible();
+  await page.getByRole('button', { name: /Save 3 to the card's lorebook/ }).click();
+  await page.getByRole('button', { name: 'Remove from the card' }).click();
+  await expect(page.getByText(/Added 1, updated 1, removed 1 lorebook entries/)).toBeVisible();
+  await page.getByRole('button', { name: 'Close', exact: true }).last().click();
+  await expect(page.getByText('Entries (3)')).toBeVisible();
+  await expect(page.getByText('Duke Varr')).toHaveCount(0);
+  await expect(page.getByText('Night Market')).toBeVisible();
 });
