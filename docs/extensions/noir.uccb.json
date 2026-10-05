@@ -1,0 +1,34 @@
+{
+  "uccb": 1,
+  "id": "noir",
+  "name": "Noir",
+  "version": "1.0.0",
+  "author": "UCCB",
+  "description": "An example pack: hard-boiled wording for the writing assistant, noir topics and a bigger size for the lorebook wizard, and a Snitch actor and a Heat rule for Adventure mode.",
+  "contributes": {
+    "templates": {
+      "field.system": "You are an expert character card writer helping a creator build a roleplay character card (the SillyTavern / Chub \"Tavern card\" format) for a hard-boiled noir setting. You write lean, concrete, rain-soaked prose with sharp verbs and no purple patches, match the card's established formatting conventions (for example *actions in asterisks* and \"quoted speech\" if the card uses them), and keep {{char}} and {{user}} macros exactly as written. You never add commentary, headings or quotation marks around your answer unless the field itself calls for them."
+    },
+    "loreWizard": {
+      "focus": ["Precincts & beats", "Informants", "Rackets", "Bars & clubs"],
+      "sizes": [{ "id": "city", "label": "A whole city", "count": 45 }],
+      "lengths": [{ "id": "case-file", "label": "Case file (a short paragraph)", "text": "about 40 to 70 words, in the clipped style of a police case file" }]
+    },
+    "adventureActors": [
+      {
+        "name": "Snitch",
+        "icon": "🐀",
+        "about": "A nervous informant who slips {{user}} a tip when the case stalls",
+        "prompt": "You are a small-time informant in a noir roleplay adventure. In two or three lines of dialogue, slip {{user}} a tip about the case: true, half-true or bait, as the Director's brief says. Stay jumpy and mercenary. Never decide what {{user}} does.",
+        "brief": "what the tip is about, and whether it's true, half-true or bait",
+        "when": "after"
+      }
+    ],
+    "ruleExamples": [
+      {
+        "label": "Heat",
+        "text": "Heat:\n- Track how much attention {{user}} has drawn from the police and the mob, from 0 (nobody's looking) to 5 (a price on their head).\n- Loud or careless actions raise heat; lying low or paying people off lowers it.\n- At 3 or more, tails and shakedowns start; at 5, someone comes for {{user}}.\n- Keep the heat in your notes."
+      }
+    ]
+  }
+}

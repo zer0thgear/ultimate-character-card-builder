@@ -59,6 +59,32 @@ describe('data routes', { timeout: 30_000 }, () => {
     });
   });
 
+  describe('/api/packs', () => {
+    const pack = { uccb: 1, id: 'noir', name: 'Noir', version: '1.0.0', contributes: { templates: { 'tags.system': 'Noir tags.', 'nope.key': 'x' } } };
+
+    it('installs, updates in place, turns off and uninstalls packs, checked on the way in', async () => {
+      const saved = await (await routeFetch('/api/packs', json('POST', { pack, enabled: true, installedAt: 5 }))).json();
+      expect(saved).toMatchObject({ enabled: true, installedAt: 5, pack: { id: 'noir', contributes: { templates: { 'tags.system': 'Noir tags.' } } } });
+      expect(saved.pack.contributes.templates['nope.key']).toBeUndefined();
+      expect(read('packs', 'noir.json').pack.name).toBe('Noir');
+
+      // A new version keeps its place (installedAt).
+      await routeFetch('/api/packs', json('POST', { pack: { ...pack, version: '1.1.0' }, enabled: true, installedAt: 99 }));
+      await routeFetch('/api/packs/noir', json('PUT', { ...saved, pack: { ...saved.pack, version: '1.1.0' }, enabled: false }));
+      const list = await (await routeFetch('/api/packs')).json();
+      expect(list).toHaveLength(1);
+      expect(list[0]).toMatchObject({ enabled: false, installedAt: 5, pack: { version: '1.1.0' } });
+
+      const bad = await routeFetch('/api/packs', json('POST', { pack: { id: 'x', name: 'X' } }));
+      expect(bad.status).toBe(400);
+      expect((await routeFetch('/api/packs/other', json('PUT', saved))).status).toBe(400);
+
+      await routeFetch('/api/packs/noir', { method: 'DELETE' });
+      expect(existsSync(path.join(dir, 'packs', 'noir.json'))).toBe(false);
+      expect(await (await routeFetch('/api/packs')).json()).toEqual([]);
+    });
+  });
+
   describe('/api/personas', () => {
     it('replaces the list, dropping bad ids and anything that is not a persona field', async () => {
       const res = await routeFetch(

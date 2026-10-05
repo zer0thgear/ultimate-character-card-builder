@@ -24,6 +24,8 @@ import { formatPrice, isOpenRouter, priceLabel } from '@/lib/modelPricing';
 import { useProjectStore } from '@/store/projectStore';
 import { AccountStatus } from '@/components/AccountStatus';
 import { ExtensionSettings, hasExtensionSettings } from '@/components/ExtensionSlots';
+import { ExtensionPacks } from '@/components/ExtensionPacks';
+import { usePackStore } from '@/store/packStore';
 import { ImageConnectionsTab } from '@/components/ImageConnectionsSettings';
 import { VersionHistorySettings } from '@/components/VersionsDialog';
 import { TextCompletionSettings } from '@/components/llm/TextTemplates';
@@ -61,8 +63,7 @@ export function SettingsDialog() {
             { value: 'chat', label: 'Chat preset' },
             { value: 'assist', label: 'Assistant' },
             { value: 'personas', label: 'Personas' },
-            // Local extensions' settings, when any are installed.
-            ...(hasExtensionSettings ? [{ value: 'extensions' as const, label: 'Extensions' }] : []),
+            { value: 'extensions', label: 'Extensions' },
           ]}
         />
       }
@@ -73,7 +74,7 @@ export function SettingsDialog() {
       {tab === 'llm' && <LlmTab />}
       {tab === 'assist' && <AssistTab />}
       {tab === 'personas' && <PersonaManager />}
-      {tab === 'extensions' && <ExtensionSettings />}
+      {tab === 'extensions' && <ExtensionsTab />}
       {tab === 'chat' && <ChatPresetTab />}
     </Modal>
   );
@@ -672,9 +673,11 @@ function RecentAssistRuns() {
  *  click away. Edits are saved with the LLM settings (every device). */
 function AssistPromptEditor() {
   const { assistSettings, setAssistSettings } = useLlmStore();
+  const base = usePackStore((s) => s.layer.templates);
   return (
     <PromptTemplateEditor
       templates={ASSIST_TEMPLATES}
+      base={base}
       edits={assistSettings.templates ?? {}}
       onChange={(templates) => setAssistSettings({ templates })}
       intro={
@@ -710,6 +713,21 @@ function AssistPromptPreview() {
         ))}
       </select>
       <MessageList messages={built.messages} />
+    </div>
+  );
+}
+
+/** Extension packs, and the local extensions' settings when there are any. */
+function ExtensionsTab() {
+  return (
+    <div className="flex flex-col gap-5">
+      <ExtensionPacks />
+      {hasExtensionSettings && (
+        <section className="flex flex-col gap-2 border-t border-slate-800 pt-4">
+          <h3 className="text-xs font-semibold tracking-wide text-slate-400 uppercase">Local extensions</h3>
+          <ExtensionSettings />
+        </section>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import type { LlmMessage } from '@/types/llm';
 import { cardContext, fillTemplate, templateText } from '@/lib/assist';
 import { extractJson } from '@/lib/adventure';
 import { entryName, newEntry, newLorebook } from '@/lib/cardSpec';
+import { packLayer, type LoreLengthOption, type LoreSizeOption } from '@/lib/packLayer';
 import { uuid } from '@/lib/uuid';
 
 // The lorebook wizard: a guided session that drafts a whole lorebook with
@@ -15,8 +16,9 @@ import { uuid } from '@/lib/uuid';
 // ─── The session ─────────────────────────────────────────────────────────────
 
 export type WizardStage = 'brief' | 'draft';
-export type WizardLength = 'short' | 'medium' | 'long';
-export type WizardSize = 'small' | 'medium' | 'large';
+/** A built-in length or size, or one an extension pack adds ("<pack>:<id>"). */
+export type WizardLength = 'short' | 'medium' | 'long' | (string & {});
+export type WizardSize = 'small' | 'medium' | 'large' | (string & {});
 
 /** One entry of the draft: planned (a brief, no text yet) or written. */
 export interface WizardEntry {
@@ -82,13 +84,37 @@ export const newSession = (useCard = true): WizardSession => ({
 /** What a lorebook is often about, for the brief's focus chips. */
 export const FOCUS_OPTIONS = ['Places', 'People', 'Factions', 'History', 'Customs & beliefs', 'Magic & technology', 'Items', 'Creatures', 'Events'];
 
-export const SIZE_COUNT: Record<WizardSize, number> = { small: 8, medium: 15, large: 30 };
+export const SIZE_COUNT: Record<'small' | 'medium' | 'large', number> = { small: 8, medium: 15, large: 30 };
 
-export const LENGTH_TEXT: Record<WizardLength, string> = {
+export const LENGTH_TEXT: Record<'short' | 'medium' | 'long', string> = {
   short: 'under 80 words',
   medium: 'about 80 to 180 words',
   long: 'about 180 to 350 words',
 };
+
+// The brief's choices: the built-in ones, then what enabled extension
+// packs add (lib/packLayer.ts).
+
+export const focusOptions = (): string[] => [...new Set([...FOCUS_OPTIONS, ...packLayer().loreFocus])];
+
+export const sizeOptions = (): LoreSizeOption[] => [
+  { id: 'small', label: `A few (about ${SIZE_COUNT.small})`, count: SIZE_COUNT.small },
+  { id: 'medium', label: `Some (about ${SIZE_COUNT.medium})`, count: SIZE_COUNT.medium },
+  { id: 'large', label: `Lots (about ${SIZE_COUNT.large})`, count: SIZE_COUNT.large },
+  ...packLayer().loreSizes.map((s) => ({ ...s, label: `${s.label} (about ${s.count})` })),
+];
+
+export const lengthOptions = (): LoreLengthOption[] => [
+  { id: 'short', label: 'Short (under 80 words)', text: LENGTH_TEXT.short },
+  { id: 'medium', label: 'Medium (80–180 words)', text: LENGTH_TEXT.medium },
+  { id: 'long', label: 'Long (180–350 words)', text: LENGTH_TEXT.long },
+  ...packLayer().loreLengths,
+];
+
+/** How many entries to plan; a pack's size that's gone (uninstalled) counts as medium. */
+export const entryCount = (size: WizardSize) => sizeOptions().find((o) => o.id === size)?.count ?? SIZE_COUNT.medium;
+/** How long an entry should be, for the Writer; medium when the choice is gone. */
+export const lengthText = (length: WizardLength) => lengthOptions().find((o) => o.id === length)?.text ?? LENGTH_TEXT.medium;
 
 export const isWritten = (e: WizardEntry) => !!e.content.trim();
 
@@ -379,7 +405,7 @@ export function planMessages(s: WizardSession, card: CardData | undefined, book?
       existing: existingContext(book ?? (s.useCard ? card?.character_book : undefined)),
       pitch: s.pitch.trim() || (s.useCard ? '(none: plan the lorebook this card needs)' : '(none)'),
       focus,
-      count: String(SIZE_COUNT[s.size]),
+      count: String(entryCount(s.size)),
     }),
   );
 }
@@ -428,7 +454,7 @@ export function writeMessages(s: WizardSession, card: CardData | undefined, entr
       keys: entry.always ? 'always on' : entry.keys.join(', ') || 'none yet',
       brief: entry.brief || entry.name,
       instruction: change,
-      length: LENGTH_TEXT[s.length],
+      length: lengthText(s.length),
     }),
   );
 }

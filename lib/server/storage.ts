@@ -8,6 +8,7 @@ import type { AdventureSession, AdventureSummary } from '@/types/adventure';
 import { newCard } from '@/lib/cardSpec';
 import { normalizeCard, normalizeLorebook } from '@/lib/cardSpec';
 import { notesSnippet } from '@/lib/cardSummary';
+import { PackError, validatePack, type InstalledPack } from '@/lib/extensionPack';
 import { countTokens } from 'gpt-tokenizer';
 import { sumTallies, tallyChat, type ChatTally } from '@/lib/chatStats';
 
@@ -543,6 +544,43 @@ export async function saveLorebook(b: BankLorebook): Promise<BankLorebook> {
 
 export async function deleteLorebook(id: string) {
   await removeJson(lorebookPath(id));
+}
+
+// ─── Extension packs ─────────────────────────────────────────────────────────
+//   data/packs/<id>.json   InstalledPack (lib/extensionPack.ts)
+
+const PACKS = path.join(DATA_DIR, 'packs');
+const packPath = (id: string) => path.join(PACKS, `${checkId(id)}.json`);
+
+export async function listPacks(): Promise<InstalledPack[]> {
+  const files = await fs.readdir(PACKS).catch(() => [] as string[]);
+  const packs = await Promise.all(files.filter((f) => f.endsWith('.json')).map((f) => readJson<InstalledPack>(path.join(PACKS, f)).catch(() => null)));
+  return packs.filter((p): p is InstalledPack => !!p?.pack?.id).sort((a, b) => a.installedAt - b.installedAt);
+}
+
+/** Installs a pack, or updates the one with its id (keeping when it was
+ *  installed, so its place in the order stays). It's checked again here. */
+export async function savePack(p: Partial<InstalledPack>): Promise<InstalledPack> {
+  let pack;
+  try {
+    pack = validatePack(p?.pack).pack;
+  } catch (err) {
+    throw err instanceof PackError ? new BadRequestError(err.message) : err;
+  }
+  const before = await readJson<InstalledPack>(packPath(pack.id)).catch(() => null);
+  const now = Date.now();
+  const clean: InstalledPack = {
+    pack,
+    enabled: p.enabled !== false,
+    installedAt: before?.installedAt ?? (typeof p.installedAt === 'number' ? p.installedAt : now),
+    updatedAt: now,
+  };
+  await writeFileAtomic(packPath(pack.id), JSON.stringify(clean, null, 2));
+  return clean;
+}
+
+export async function deletePack(id: string) {
+  await removeJson(packPath(id));
 }
 
 // ─── Settings shared by every device ─────────────────────────────────────────

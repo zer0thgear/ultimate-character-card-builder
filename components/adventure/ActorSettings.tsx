@@ -2,6 +2,7 @@
 
 import { ACTORS, customActorId, type ActorId, type CustomActor } from '@/types/adventure';
 import { useLlmStore } from '@/store/llmStore';
+import { usePackStore } from '@/store/packStore';
 import { useModelPrices } from '@/hooks/useModelPrices';
 import { ADVENTURE_TEMPLATES, CUSTOM_ACTOR_EXAMPLES, callsPerTurn, fieldKey } from '@/lib/adventure';
 import { isOpenRouter, priceLabel } from '@/lib/modelPricing';
@@ -16,6 +17,7 @@ import { uuid } from '@/lib/uuid';
 export function ActorSettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { connections, chatConnectionId, adventureSettings: s, setAdventureSettings: set } = useLlmStore();
   const unit = useLlmStore((x) => x.priceUnit);
+  const packPrompts = usePackStore((x) => x.layer.adventurePrompts);
   const prices = useModelPrices(open && connections.some(isOpenRouter));
   const chat = connections.find((c) => c.id === chatConnectionId) ?? connections[0];
   const label = (id: string) => {
@@ -86,6 +88,7 @@ export function ActorSettingsDialog({ open, onClose }: { open: boolean; onClose:
         <CustomActors actors={s.customActors ?? []} onChange={(customActors) => set({ customActors })} />
         <PromptTemplateEditor
           templates={ADVENTURE_TEMPLATES}
+          base={packPrompts}
           edits={s.prompts ?? {}}
           onChange={(prompts) => set({ prompts })}
           intro={
@@ -102,6 +105,7 @@ export function ActorSettingsDialog({ open, onClose }: { open: boolean; onClose:
 /** Actors of your own: a prompt, and a field in the Director's plan that
  *  briefs it (or none, to run every turn). */
 function CustomActors({ actors, onChange }: { actors: CustomActor[]; onChange: (next: CustomActor[]) => void }) {
+  const packActors = usePackStore((s) => s.layer.actors);
   const update = (id: string, patch: Partial<CustomActor>) => onChange(actors.map((a) => (a.id === id ? { ...a, ...patch } : a)));
   const add = (from?: Omit<CustomActor, 'id' | 'enabled'>) => onChange([...actors, { name: '', icon: '✦', about: '', prompt: '', brief: '', when: 'after', ...from, id: uuid(), enabled: true }]);
   return (
@@ -143,6 +147,11 @@ function CustomActors({ actors, onChange }: { actors: CustomActor[]; onChange: (
         {CUSTOM_ACTOR_EXAMPLES.map((x) => (
           <Button key={x.name} size="sm" variant="ghost" onClick={() => add(x)}>
             {x.icon} {x.name}
+          </Button>
+        ))}
+        {packActors.map(({ from, ...x }, i) => (
+          <Button key={`pack-${i}`} size="sm" variant="ghost" onClick={() => add(x)} title={`From the extension pack "${from}"`}>
+            {x.icon} {x.name} <span className="text-sky-400/80">🧩</span>
           </Button>
         ))}
       </div>

@@ -5,6 +5,7 @@ import { customActorId } from '@/types/adventure';
 import { fillTemplate, type AssistTemplate } from '@/lib/assist';
 import { macroExpander } from '@/lib/chatPrompt';
 import { scanLorebook, type LoreDefaults } from '@/lib/lorebookScan';
+import { packLayer } from '@/lib/packLayer';
 import { uuid } from '@/lib/uuid';
 
 // Adventure mode's engine (see types/adventure.ts). A turn is a few model
@@ -360,9 +361,10 @@ export const ADVENTURE_TEMPLATES: AssistTemplate[] = [
 
 export const ADVENTURE_DEFAULT_PROMPTS: Record<string, string> = Object.fromEntries(ADVENTURE_TEMPLATES.map((t) => [t.key, t.text]));
 
-/** An actor's system prompt: yours or the default, filled in, macros expanded. */
+/** An actor's system prompt: yours, an extension pack's or the default,
+ *  filled in, macros expanded. */
 function adventurePrompt(ctx: AdventureCtx, key: string, vars: Record<string, string>): string {
-  return expander(ctx)(fillTemplate(ctx.settings.prompts?.[key] ?? ADVENTURE_DEFAULT_PROMPTS[key] ?? '', vars));
+  return expander(ctx)(fillTemplate(ctx.settings.prompts?.[key] ?? packLayer().adventurePrompts[key]?.text ?? ADVENTURE_DEFAULT_PROMPTS[key] ?? '', vars));
 }
 
 /** The JSON the Director replies with ({{format}}), your actors' fields too. */
@@ -606,7 +608,7 @@ export function scoutMessages(card: CardData, prompts?: Record<string, string>):
   ]
     .filter(Boolean)
     .join('\n\n');
-  const system = fillTemplate(prompts?.scout ?? ADVENTURE_DEFAULT_PROMPTS.scout, {});
+  const system = fillTemplate(prompts?.scout ?? packLayer().adventurePrompts.scout?.text ?? ADVENTURE_DEFAULT_PROMPTS.scout, {});
   return [
     { role: 'system', content: system },
     { role: 'user', content: source },
