@@ -8,7 +8,7 @@ import { textTemplates, useLlmStore } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
-import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, withoutSwipe, buildChatPrompt, displayText, shownText, chatGreeting, greetingText, messageText, newMessage, type AvatarShape, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
+import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, withoutSwipe, buildChatPrompt, displayText, shownText, chatGreeting, greetingText, messageText, newMessage, withShownText, type AvatarShape, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
 import { buildPresetPrompt } from '@/lib/presetPrompt';
 import { buildTextPrompt } from '@/lib/textCompletion';
 import { CompareDialog, type KeptReply } from '@/components/dock/CompareReplies';
@@ -253,8 +253,12 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
    */
   const reply = async (messages: ChatMessage[], target?: ChatMessage, continueFrom?: string, emptySend = false): Promise<{ text: string; error?: string }> => {
     const guided = takeGuide();
+    // The reply being continued is sent as `continueFrom`, not as it's
+    // shown: a reroll continues from before the last continue, which
+    // mustn't reach the model (a preset's continue nudge sends the reply
+    // as history).
     const built = continueFrom !== undefined
-      ? build(messages, { mode: 'continue', continueText: continueFrom, guide: guided })
+      ? build(target ? withShownText(messages, target.id, continueFrom) : messages, { mode: 'continue', continueText: continueFrom, guide: guided })
       : build(target ? messages.filter((m) => m.id !== target.id) : messages, { emptySend, guide: guided });
     const id = target?.id ?? uuid();
     const base = continueFrom ?? '';

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseStPreset, presetParams, PresetImportError } from '@/lib/stPreset';
 import { buildPresetPrompt, squash } from '@/lib/presetPrompt';
-import { DEFAULT_CHAT_SETTINGS, newMessage } from '@/lib/chatPrompt';
+import { DEFAULT_CHAT_SETTINGS, messageText, newMessage, withShownText } from '@/lib/chatPrompt';
 import { newCard, newEntry, newLorebook } from '@/lib/cardSpec';
 import type { ChatMessage } from '@/types/project';
 
@@ -164,6 +164,17 @@ describe('buildPresetPrompt', () => {
     const pre = buildPresetPrompt(card(), history, settings, { ...preset(), continuePrefill: true }, { mode: 'continue', continueText: 'She draws' });
     expect(pre.prefill).toBe('She draws ');
     expect(pre.parts.some((p) => p.content === 'She draws')).toBe(false);
+  });
+
+  it('rerolling a continue sends the reply without the continue it replaces, either way', () => {
+    // Shown: the reply and its last continue; a reroll goes on from before it.
+    const shown = { ...newMessage('assistant', 'She draws. Her blade gleams.'), id: 'r1' };
+    const history = withShownText([...chat(), shown], 'r1', 'She draws.');
+    for (const continuePrefill of [false, true]) {
+      const b = buildPresetPrompt(card(), history, settings, { ...preset(), continuePrefill }, { mode: 'continue', continueText: 'She draws.' });
+      expect(JSON.stringify(b.messages)).not.toContain('gleams');
+    }
+    expect(messageText(shown)).toBe('She draws. Her blade gleams.');
   });
 
   it('sends the assistant prefill to Claude only, and send-if-empty when the user sent nothing', () => {

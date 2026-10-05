@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { newPreset } from '@/lib/stPreset';
 
 // The test chat over a text-completion connection: the prompt goes out as
 // one string in the instruct template, a hidden message is left out of it,
@@ -85,4 +86,42 @@ test('compare a reply from two connections and keep both as swipes', async ({ pa
   // The last reply now has three versions, showing the last kept.
   await expect(page.getByText('3/3')).toBeVisible();
   await expect(page.locator('[data-msg]').last()).toContainText('Written by beta.');
+});
+
+test("rerolling a continue doesn't send the continue it replaces", async ({ page, request }) => {
+  // A preset that continues with its nudge (SillyTavern's default), which
+  // sends the reply being continued as history.
+  const preset = { ...newPreset('Nudge'), continuePrefill: false };
+  const connection = { id: 'c', name: 'Model', kind: 'openai', baseUrl: 'http://127.0.0.1:9/v1', apiKey: '', model: 'm', params: { max_tokens: 50 } };
+  await request.put('/api/settings/llm', { data: { state: { connections: [connection], chatConnectionId: 'c', assistConnectionId: 'c', presets: [preset], chatSettings: { presetId: preset.id } }, version: 0 } });
+  const replies = ['The gate creaks open.', 'A crow calls overhead.', 'Rain begins to fall.'];
+  const sent: string[] = [];
+  await page.route('**/api/llm/chat', async (route) => {
+    sent.push(JSON.stringify(route.request().postDataJSON().messages));
+    const text = replies[sent.length - 1] ?? 'More.';
+    await route.fulfill({ contentType: 'application/x-ndjson', body: `${JSON.stringify({ type: 'text', text })}\n${JSON.stringify({ type: 'done', stopReason: 'stop' })}\n` });
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: '+ New card' }).first().click();
+  await page.getByPlaceholder('Character name').fill('Warden');
+  await page.getByRole('tab', { name: '💬 Test chat' }).click();
+  await page.getByRole('button', { name: 'Start a chat' }).click();
+  const box = page.locator('[data-chat-input]');
+  await box.fill('I knock.');
+  await box.press('Enter');
+  const last = page.locator('[data-msg]').last();
+  await expect(last).toContainText('The gate creaks open.');
+
+  await page.getByRole('button', { name: '→ Continue' }).click();
+  await expect(last).toContainText('The gate creaks open. A crow calls overhead.');
+  expect(sent[1]).toContain('The gate creaks open.');
+
+  // The reroll goes on from before the crow, and the model isn't told of it.
+  await last.hover();
+  await last.getByRole('button', { name: /Reroll the last continue/ }).click();
+  await expect(last).toContainText('The gate creaks open. Rain begins to fall.');
+  expect(sent).toHaveLength(3);
+  expect(sent[2]).toContain('The gate creaks open.');
+  expect(sent[2]).not.toContain('crow');
 });
