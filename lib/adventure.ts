@@ -1,4 +1,4 @@
-import type { CardData } from '@/types/card';
+import type { CardData, Lorebook } from '@/types/card';
 import type { LlmMessage } from '@/types/llm';
 import type { ActorId, AdventureEntry, AdventureSession, AdventureSettings, AdventureWorld, CallUsage, CustomActor, DiceRoll, SceneState, WorldEntry, WorldOverrides } from '@/types/adventure';
 import { customActorId } from '@/types/adventure';
@@ -396,6 +396,9 @@ export interface AdventureCtx {
   dice: boolean;
   /** The card's lorebook, scanned against the story (null: left out). */
   lore: LoreDefaults | null;
+  /** The lorebook scanned: the card's with the bank's global and persona
+   *  lorebooks in it (lib/lorebookBank.ts); the card's own when unset. */
+  loreBook?: Lorebook;
 }
 
 const charName = (card: CardData) => card.nickname || card.name || 'Character';
@@ -433,7 +436,7 @@ export function activeLore(ctx: AdventureCtx, entries: AdventureEntry[]): string
   if (!ctx.lore) return [];
   const texts = entries.filter((e) => e.kind !== 'director' && e.text.trim()).map((e) => e.text);
   const x = expander(ctx);
-  return scanLorebook(ctx.card.character_book, texts, { defaults: ctx.lore }).active.map((a) => x(a.entry.content)).filter(Boolean);
+  return scanLorebook(ctx.loreBook ?? ctx.card.character_book, texts, { defaults: ctx.lore }).active.map((a) => x(a.entry.content)).filter(Boolean);
 }
 
 const bullets = (list: WorldEntry[], x: (t: string) => string) => list.map((e) => `- ${x(e.name)}: ${x(e.text)}`).join('\n');

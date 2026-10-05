@@ -123,6 +123,14 @@ describe('prompts', () => {
     expect(user.content).toContain('Plan about 8 entries.');
   });
 
+  it('lists the entries of a bank lorebook it plans for, card or not', () => {
+    const bank = { name: 'Atlas', extensions: {}, entries: [{ ...newEntry(), name: 'Harbor', keys: ['harbor'], content: 'Ships.' }] };
+    const [, user] = planMessages({ ...newSession(), useCard: false, pitch: 'Ports' }, card, bank);
+    expect(user.content).toContain('- Harbor (keys: harbor)');
+    expect(user.content).not.toContain('Old Mill');
+    expect(user.content).not.toContain('<card>');
+  });
+
   it('leaves the card out when asked to', () => {
     const [, user] = planMessages({ ...newSession(), useCard: false, pitch: 'Space pirates' }, card);
     expect(user.content).not.toContain('witch');

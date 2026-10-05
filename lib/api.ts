@@ -1,4 +1,4 @@
-import type { AppConfig, CardProject, CardVersion, CardVersionInfo, TrashedProject, ChatSession, ChatSummary, StorySession, StorySummary, KeptImage, Persona, ProjectSummary, AvatarInfo } from '@/types/project';
+import type { AppConfig, CardProject, CardVersion, CardVersionInfo, TrashedProject, BankLorebook, ChatSession, ChatSummary, StorySession, StorySummary, KeptImage, Persona, ProjectSummary, AvatarInfo } from '@/types/project';
 import type { LlmEvent, LlmRequest } from '@/types/llm';
 import type { LibraryItem } from '@/lib/librarySearch';
 import type { HelpDocs } from '@/lib/helpDesk';
@@ -89,6 +89,11 @@ export const api = {
   deleteAdventure: (id: string, adventureId: string) => call<{ ok: true }>(`/api/projects/${id}/adventures/${adventureId}`, { method: 'DELETE' }),
 
   helpDocs: () => call<HelpDocs>('/api/help/docs'),
+
+  listLorebooks: () => call<BankLorebook[]>('/api/lorebooks'),
+  createLorebook: (b: BankLorebook) => call<BankLorebook>('/api/lorebooks', json('POST', b)),
+  saveLorebook: (b: BankLorebook) => call<BankLorebook>(`/api/lorebooks/${b.id}`, json('PUT', b)),
+  deleteLorebook: (id: string) => call<{ ok: true }>(`/api/lorebooks/${id}`, { method: 'DELETE' }),
 
   listPersonas: () => call<Persona[]>('/api/personas'),
   savePersonas: (list: Persona[]) => call<Persona[]>('/api/personas', json('PUT', list)),

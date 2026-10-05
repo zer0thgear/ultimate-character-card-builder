@@ -20,7 +20,7 @@ async function mockWizard(page: Page) {
       text = '```json\n' + JSON.stringify({ message: 'Three entries. Who rules the town?', entries: [{ name: 'Ashford', category: 'place', keys: ['Ashford'], always: true, brief: 'The mill town.' }, { name: 'Thieves Guild', category: 'faction', keys: ['Guild', 'thieves'], brief: 'Rogues under the town.' }, { name: 'Old Mill', category: 'place', keys: ['mill'], brief: 'Burned.' }] }) + '\n```';
     } else if (system.startsWith('You write lorebook entries')) {
       const name = user.match(/Write the entry "([^"]+)"/)?.[1];
-      text = user.includes('Make it grimmer.') ? `${name}, grim and bloody.` : user.includes('Add the river.') ? `${name}, on the river.` : `${name}: written.`;
+      text = user.includes('Make it grimmer.') ? `${name}, grim and bloody.` : user.includes('Add the river.') ? (user.includes('on the river.') ? `${name}, river and sea.` : `${name}, on the river.`) : `${name}: written.`;
     }
     await route.fulfill({ contentType: 'application/x-ndjson', body: `${JSON.stringify({ type: 'text', text })}\n${JSON.stringify({ type: 'done', stopReason: 'stop' })}\n` });
   });
@@ -96,10 +96,31 @@ test('the lorebook wizard plans, writes, revises and saves a lorebook', async ({
   await expect(page.getByText('Ashford, on the river.')).toBeVisible();
   await expect(page.getByText('Night Market: written.')).toBeVisible();
   await page.getByRole('button', { name: /Save 3 to the card's lorebook/ }).click();
-  await page.getByRole('button', { name: 'Remove from the card' }).click();
+  await page.getByRole('button', { name: 'Remove from the lorebook' }).click();
   await expect(page.getByText(/Added 1, updated 1, removed 1 lorebook entries/)).toBeVisible();
   await page.getByRole('button', { name: 'Close', exact: true }).last().click();
   await expect(page.getByText('Entries (3)')).toBeVisible();
   await expect(page.getByText('Duke Varr')).toHaveCount(0);
   await expect(page.getByText('Night Market')).toBeVisible();
+
+  // The same entries as a new lorebook in 📖 Lorebooks, then that lorebook's own wizard.
+  await page.getByRole('button', { name: /🧙 Wizard/ }).click();
+  await page.getByRole('button', { name: '📖 Save as a new lorebook' }).click();
+  await expect(page.getByText(`Added "Mira's Lorebook (wizard)" to 📖 Lorebooks, with 3 entries.`)).toBeVisible();
+  await page.getByRole('button', { name: 'Close', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Close this card (back to the home screen)' }).click();
+  await page.getByRole('button', { name: '📖 Lorebooks' }).click();
+  await page.getByRole('button', { name: /Mira's Lorebook \(wizard\)/ }).click();
+  await page.getByRole('button', { name: /🧙 Wizard/ }).click();
+  await expect(page.getByText("🧙 Lorebook wizard: Mira's Lorebook (wizard)")).toBeVisible();
+  await page.getByRole('button', { name: /📖 "Mira's Lorebook \(wizard\)" \(3\)/ }).click();
+  await page.getByRole('button', { name: 'Review the lorebook' }).click();
+  await expect(page.getByText('✎ Ashford: to rewrite')).toBeVisible();
+  await page.getByRole('button', { name: '✍ Write 1 more' }).click();
+  await expect(page.getByText('Ashford, river and sea.')).toBeVisible();
+  await page.getByRole('button', { name: /Save 3 to "Mira's Lorebook \(wizard\)"/ }).click();
+  await expect(page.getByText(/Updated 1 lorebook entry/)).toBeVisible();
+  await page.getByRole('button', { name: 'Close', exact: true }).last().click();
+  await page.getByRole('button', { name: /Ashford/ }).first().click();
+  await expect(page.getByRole('dialog').getByText('Ashford, river and sea.')).toBeVisible();
 });

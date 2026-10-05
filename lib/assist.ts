@@ -175,7 +175,7 @@ Reply with JSON only, no other text.`,
 {{card}}
 </card>
 
-The card's lorebook already has these entries (don't plan them again):
+The lorebook already has these entries (don't plan them again):
 {{existing}}
 
 The creator's pitch: {{pitch}}
@@ -202,7 +202,7 @@ Reply with JSON in this shape:
 {{card}}
 </card>
 
-The card's lorebook as it stands:
+The lorebook as it stands:
 <lorebook>
 {{draft}}
 </lorebook>

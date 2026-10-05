@@ -1,11 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { create } from 'zustand';
 import { useProjectStore } from '@/store/projectStore';
 import { useLlmStore } from '@/store/llmStore';
 import { useLoreWizardStore } from '@/store/loreWizardStore';
+import { useLorebookStore } from '@/store/lorebookStore';
 import { toast } from '@/store/uiStore';
+import type { Lorebook } from '@/types/card';
 import { entryName } from '@/lib/cardSpec';
+import { bankName, cardLoreName } from '@/lib/lorebookBank';
 import {
   FOCUS_OPTIONS,
   SIZE_COUNT,
@@ -38,18 +42,25 @@ import { AssistReasoning } from '@/components/llm/AssistTrace';
 // 🧙 Lorebook wizard (lib/loreWizard.ts): you describe the lorebook, the
 // Planner plans its entries and asks a question or two, the Writer writes
 // each entry, and you change any of it by hand or by telling the Planner.
-// The written entries go into the card's lorebook when you save.
+// The written entries go into the lorebook it was opened from when you
+// save: the card's, or one in 📖 Lorebooks (`bankId`).
 
 type Busy = { kind: 'plan' | 'revise' } | { kind: 'write'; id: string } | null;
 
 const NUDGES = ['Make it darker and more dangerous', 'Add more about the villains', 'Fewer entries, each with more depth', 'Add a short history of the world', 'Give the keys more nicknames'];
 
-export function LoreWizardDialog({ onClose }: { onClose: () => void }) {
+/** The wizard's session key for a lorebook: the card's (by card id), or a
+ *  bank one's. */
+export const wizardKey = (cardId: string | undefined, bankId?: string) => (bankId ? `bank:${bankId}` : (cardId ?? ''));
+
+export function LoreWizardDialog({ onClose, bankId }: { onClose: () => void; bankId?: string }) {
   const project = useProjectStore((s) => s.project);
-  const cardId = project?.id ?? '';
+  const bank = useLorebookStore((s) => (bankId ? s.books.find((b) => b.id === bankId) : undefined));
+  const cardId = wizardKey(project?.id, bankId);
   const hasCard = !!project && !!(project.card.data.description.trim() || project.card.data.scenario.trim() || project.card.data.first_mes.trim());
   const stored = useLoreWizardStore((s) => s.sessions[cardId]);
-  const session = useMemo(() => stored ?? newSession(hasCard), [stored, hasCard]);
+  // A bank lorebook's session builds on the open card only if you ask it to.
+  const session = useMemo(() => stored ?? newSession(!bankId && hasCard), [stored, hasCard, bankId]);
   const setSession = useLoreWizardStore((s) => s.setSession);
   const [busy, setBusy] = useState<Busy>(null);
   const [live, setLive] = useState('');
@@ -57,7 +68,15 @@ export function LoreWizardDialog({ onClose }: { onClose: () => void }) {
   const abort = useRef<AbortController | null>(null);
 
   useEffect(() => () => abort.current?.abort(), []);
-  if (!project) return null;
+  if (!cardId || (bankId && !bank)) return null;
+
+  /** The lorebook the session is for, as it is now. */
+  const target = (): Lorebook | undefined => (bankId ? useLorebookStore.getState().books.find((b) => b.id === bankId)?.book : useProjectStore.getState().project?.card.data.character_book);
+  const targetName = bank ? `"${bankName(bank)}"` : "the card's lorebook";
+  const putTarget = (book: Lorebook) => {
+    if (bankId) useLorebookStore.getState().setBook(bankId, book);
+    else useProjectStore.getState().updateCard((d) => ({ ...d, character_book: book }));
+  };
 
   /** The session as it is now (a run's own copy goes stale while it waits). */
   const current = () => useLoreWizardStore.getState().sessions[cardId] ?? session;
@@ -65,6 +84,7 @@ export function LoreWizardDialog({ onClose }: { onClose: () => void }) {
   // builds on the card only if the card has something in it).
   const update = (fn: (s: WizardSession) => WizardSession) => setSession(cardId, (s) => fn(useLoreWizardStore.getState().sessions[cardId] ? s : session));
   const card = () => useProjectStore.getState().project?.card.data;
+  const bankBook = () => (bankId ? target() : undefined);
   const setEntry = (id: string, patch: Partial<WizardEntry>) => update((s) => ({ ...s, entries: s.entries.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
 
   const start = () => {
@@ -103,8 +123,8 @@ export function LoreWizardDialog({ onClose }: { onClose: () => void }) {
     const s = current();
     const signal = start();
     setBusy({ kind: 'plan' });
-    update((x) => ({ ...x, chat: [...x.chat, { role: 'user', text: x.pitch.trim() || 'Plan the lorebook this card needs.' }] }));
-    const r = await wizardCall('planner', 'Planner: the plan', planMessages(s, card()), { signal, onRun: setLiveRun });
+    update((x) => ({ ...x, chat: [...x.chat, { role: 'user', text: x.pitch.trim() || (bankId ? 'Plan this lorebook.' : 'Plan the lorebook this card needs.') }] }));
+    const r = await wizardCall('planner', 'Planner: the plan', planMessages(s, card(), bankBook()), { signal, onRun: setLiveRun });
     setBusy(null);
     if (r.aborted) return;
     if (r.error) {
@@ -121,11 +141,11 @@ export function LoreWizardDialog({ onClose }: { onClose: () => void }) {
     }));
   };
 
-  /** A session on the card's lorebook: its entries come into the draft,
+  /** A session on the lorebook itself: its entries come into the draft,
    *  and the Planner reviews them and proposes changes (nothing is
    *  rewritten until you say so). */
   const review = async () => {
-    const entries = entriesFromBook(card()?.character_book);
+    const entries = entriesFromBook(target());
     update((x) => ({
       ...x,
       stage: 'draft',
@@ -174,7 +194,7 @@ export function LoreWizardDialog({ onClose }: { onClose: () => void }) {
 
   const save = async () => {
     const written = session.entries.filter(isWritten);
-    const book = useProjectStore.getState().project?.card.data.character_book;
+    const book = target();
     const ids = new Set((book?.entries ?? []).map((e) => e.id));
     const names = new Set((book?.entries ?? []).map((e) => entryName(e).trim().toLowerCase()));
     // Entries from the lorebook go back to their own place; others may clash by name.
@@ -184,7 +204,7 @@ export function LoreWizardDialog({ onClose }: { onClose: () => void }) {
     if (clash) {
       const pick = await choiceDialog({
         title: 'Some entries are already in the lorebook',
-        body: `${clash} of these ${written.length} entries ${clash === 1 ? 'has' : 'have'} the same name as one in the card's lorebook (from saving before, say).`,
+        body: `${clash} of these ${written.length} entries ${clash === 1 ? 'has' : 'have'} the same name as one in ${targetName} (from saving before, say).`,
         choices: [
           { value: 'replace', label: 'Replace those' },
           { value: 'add', label: 'Add them as well' },
@@ -196,18 +216,18 @@ export function LoreWizardDialog({ onClose }: { onClose: () => void }) {
     let remove: typeof dropped = [];
     if (dropped.length) {
       const pick = await choiceDialog({
-        title: `Remove ${dropped.length} entr${dropped.length === 1 ? 'y' : 'ies'} from the card too?`,
-        body: `${dropped.length === 1 ? "An entry you took out of the draft is" : `${dropped.length} entries you took out of the draft are`} still in the card's lorebook. Undo brings ${dropped.length === 1 ? 'it' : 'them'} back.`,
+        title: `Remove ${dropped.length} entr${dropped.length === 1 ? 'y' : 'ies'} from the lorebook too?`,
+        body: `${dropped.length === 1 ? 'An entry you took out of the draft is' : `${dropped.length} entries you took out of the draft are`} still in ${targetName}.${bankId ? '' : ` Undo brings ${dropped.length === 1 ? 'it' : 'them'} back.`}`,
         choices: [
-          { value: 'remove', label: 'Remove from the card', danger: true },
-          { value: 'keep', label: 'Keep in the card' },
+          { value: 'remove', label: 'Remove from the lorebook', danger: true },
+          { value: 'keep', label: 'Keep in the lorebook' },
         ],
       });
       if (!pick) return;
       if (pick === 'remove') remove = dropped;
     }
     const r = saveToBook(book, written, { replace, remove, name: session.title || undefined });
-    useProjectStore.getState().updateCard((d) => ({ ...d, character_book: r.book }));
+    putTarget(r.book);
     // From now on each saved entry goes back to its own place.
     const saved = new Map(r.book.entries.map((e) => [entryName(e).trim().toLowerCase(), e.id]));
     update((x) => ({
@@ -219,8 +239,21 @@ export function LoreWizardDialog({ onClose }: { onClose: () => void }) {
     toast(did ? `${did.charAt(0).toUpperCase()}${did.slice(1)} lorebook entr${r.added + r.replaced + r.removed === 1 ? 'y' : 'ies'}. The draft stays here until you start over.` : 'Nothing to save: the lorebook already matches the draft.', did ? 'success' : 'info');
   };
 
+  /** The written entries as a new lorebook in 📖 Lorebooks (from a card's
+   *  session; the card's own lorebook is left as it is). */
+  const saveNew = async () => {
+    const c = card();
+    const name = session.title.trim() || (c ? `${cardLoreName({ name: c.name })}${c.character_book ? ' (wizard)' : ''}` : 'Wizard lorebook');
+    try {
+      const b = await useLorebookStore.getState().add(saveToBook(undefined, session.entries, { name }).book);
+      toast(`Added "${bankName(b)}" to 📖 Lorebooks, with ${b.book.entries.length} entr${b.book.entries.length === 1 ? 'y' : 'ies'}.`, 'success');
+    } catch (err) {
+      toast(`Couldn't add it: ${(err as Error).message}`, 'error');
+    }
+  };
+
   const startOver = async () => {
-    if (session.entries.length && !(await confirmDialog({ title: 'Start over?', body: 'The draft and the conversation go. Entries you saved to the card stay there.', confirmLabel: 'Start over', danger: true }))) return;
+    if (session.entries.length && !(await confirmDialog({ title: 'Start over?', body: `The draft and the conversation go. Entries you saved to ${targetName} stay there.`, confirmLabel: 'Start over', danger: true }))) return;
     stop();
     useLoreWizardStore.getState().clear(cardId);
   };
@@ -231,8 +264,8 @@ export function LoreWizardDialog({ onClose }: { onClose: () => void }) {
       open
       onClose={onClose}
       size="full"
-      title="🧙 Lorebook wizard"
-      pinned={<Steps session={session} />}
+      title={bank ? `🧙 Lorebook wizard: ${bankName(bank)}` : '🧙 Lorebook wizard'}
+      pinned={<Steps session={session} saveLabel={bankId ? 'Save to the lorebook' : 'Save to the card'} />}
       footer={
         <>
           <Button variant="ghost" className="mr-auto" disabled={!!busy || (!session.entries.length && !session.chat.length)} onClick={() => void startOver()}>
@@ -241,16 +274,21 @@ export function LoreWizardDialog({ onClose }: { onClose: () => void }) {
           <Button variant="ghost" onClick={onClose} title="The draft stays here for next time">
             Close
           </Button>
+          {session.stage === 'draft' && !bankId && (
+            <Button disabled={!written || !!busy} onClick={() => void saveNew()} title="Puts the written entries in a new lorebook of their own in 📖 Lorebooks, to use in any chat; the card's lorebook stays as it is">
+              📖 Save as a new lorebook
+            </Button>
+          )}
           {session.stage === 'draft' && (
-            <Button variant="primary" disabled={!written || !!busy} onClick={() => void save()} title="Puts the written entries into the card's lorebook (planned ones that aren't written yet stay behind)">
-              Save {written || ''} to the card&apos;s lorebook
+            <Button variant="primary" disabled={!written || !!busy} onClick={() => void save()} title={`Puts the written entries into ${targetName} (planned ones that aren't written yet stay behind)`}>
+              Save {written || ''} to {bank ? `"${bankName(bank)}"` : <>the card&apos;s lorebook</>}
             </Button>
           )}
         </>
       }
     >
       {session.stage === 'brief' ? (
-        <Brief session={session} update={update} busy={!!busy} onPlan={() => void plan()} onStop={stop} hasCard={hasCard} />
+        <Brief session={session} update={update} busy={!!busy} onPlan={() => void plan()} onStop={stop} book={bank?.book ?? project?.card.data.character_book} bankName={bank ? bankName(bank) : undefined} cardName={project?.card.data.name} />
       ) : (
         <div className="grid gap-4 lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_24rem]">
           <EntryList session={session} update={update} setEntry={setEntry} busy={busy} live={live} onWrite={(ids, instruction) => void write(ids, instruction)} onStop={stop} />
@@ -261,13 +299,13 @@ export function LoreWizardDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function Steps({ session }: { session: WizardSession }) {
+function Steps({ session, saveLabel }: { session: WizardSession; saveLabel: string }) {
   const written = session.entries.filter(isWritten).length;
   const steps = [
     { label: 'Describe it', done: session.stage === 'draft' },
     { label: 'Plan the entries', done: session.entries.length > 0 },
     { label: `Write them${session.entries.length ? ` (${written}/${session.entries.length})` : ''}`, done: !!session.entries.length && written === session.entries.length },
-    { label: 'Save to the card', done: false },
+    { label: saveLabel, done: false },
   ];
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
@@ -296,10 +334,29 @@ function WizardConnections() {
   );
 }
 
-function Brief({ session: s, update, busy, onPlan, onStop, hasCard }: { session: WizardSession; update: (fn: (s: WizardSession) => WizardSession) => void; busy: boolean; onPlan: () => void; onStop: () => void; hasCard: boolean }) {
+function Brief({
+  session: s,
+  update,
+  busy,
+  onPlan,
+  onStop,
+  book,
+  bankName,
+  cardName,
+}: {
+  session: WizardSession;
+  update: (fn: (s: WizardSession) => WizardSession) => void;
+  busy: boolean;
+  onPlan: () => void;
+  onStop: () => void;
+  /** The lorebook the session is for (the card's, or `bankName`'s). */
+  book: Lorebook | undefined;
+  bankName?: string;
+  cardName?: string;
+}) {
   const set = (patch: Partial<WizardSession>) => update((x) => ({ ...x, ...patch }));
-  const card = useProjectStore((st) => st.project?.card.data);
-  const hasBook = !!card?.character_book?.entries.length;
+  const hasBook = !!book?.entries.length;
+  const bookLabel = bankName ? `"${bankName}"` : "the card's lorebook";
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <p className="text-sm text-slate-400">
@@ -310,8 +367,8 @@ function Brief({ session: s, update, busy, onPlan, onStop, hasCard }: { session:
           <span className="text-xs text-slate-400">Start from</span>
           <div className="grid gap-2 sm:grid-cols-2">
             {[
-              { from: false, label: '✨ New entries', hint: "Plan and write entries to add to the card's lorebook" },
-              { from: true, label: `📖 The card's lorebook (${card?.character_book?.entries.length})`, hint: 'Bring its entries in: get thoughts on them, change them and add to them' },
+              { from: false, label: '✨ New entries', hint: `Plan and write entries to add to ${bookLabel}` },
+              { from: true, label: `📖 ${bankName ? `"${bankName}"` : "The card's lorebook"} (${book?.entries.length})`, hint: 'Bring its entries in: get thoughts on them, change them and add to them' },
             ].map((o) => (
               <button
                 key={o.label}
@@ -334,7 +391,7 @@ function Brief({ session: s, update, busy, onPlan, onStop, hasCard }: { session:
           onChange={(e) => set({ pitch: e.target.value })}
           minRows={4}
           maxRows={14}
-          placeholder={s.fromBook ? 'Leave it blank for a general review, or say what you want: "fill the gaps in the geography", "tighten the long entries", "fix the keys"' : hasCard ? "Leave it blank to plan from the card, or say what you want: \"the city she grew up in, its guilds and the cult in the sewers\"" : 'The world, its places and people: "a sunken archipelago ruled by rival pirate houses, with sea-witches and a drowned god"'}
+          placeholder={s.fromBook ? 'Leave it blank for a general review, or say what you want: "fill the gaps in the geography", "tighten the long entries", "fix the keys"' : s.useCard ? "Leave it blank to plan from the card, or say what you want: \"the city she grew up in, its guilds and the cult in the sewers\"" : 'The world, its places and people: "a sunken archipelago ruled by rival pirate houses, with sea-witches and a drowned god"'}
         />
       </label>
       <div className="flex flex-col gap-1">
@@ -382,19 +439,21 @@ function Brief({ session: s, update, busy, onPlan, onStop, hasCard }: { session:
             ]}
           />
         </label>
-        {!hasBook && (
-          <label className="flex min-w-48 flex-1 flex-col gap-1 text-xs text-slate-400">
+        {!bankName && (
+          <label className="flex min-w-48 flex-1 flex-col gap-1 text-xs text-slate-400" title={hasBook ? 'For 📖 Save as a new lorebook' : "For the card's new lorebook, or 📖 Save as a new lorebook"}>
             Lorebook name
             <input value={s.title} onChange={(e) => set({ title: e.target.value })} placeholder="optional" className={inputClass} />
           </label>
         )}
       </div>
-      <Toggle
-        checked={s.useCard}
-        onChange={(useCard) => set({ useCard })}
-        label={<span className="text-xs">Build on the card{hasBook ? ' and its lorebook' : ''}</span>}
-        title="Send the card (and the names of the lorebook's entries) along, so the lorebook fits it and doesn't repeat it. Off for a lorebook that stands on its own."
-      />
+      {cardName !== undefined && (
+        <Toggle
+          checked={s.useCard}
+          onChange={(useCard) => set({ useCard })}
+          label={<span className="text-xs">{bankName ? `Build on the open card (${cardName || 'Unnamed'})` : `Build on the card${hasBook ? ' and its lorebook' : ''}`}</span>}
+          title="Send the card (and the names of the lorebook's entries) along, so the lorebook fits it and doesn't repeat it. Off for a lorebook that stands on its own."
+        />
+      )}
       <div className="flex justify-end">
         {busy ? (
           <Button variant="danger" onClick={onStop}>
@@ -685,5 +744,31 @@ function Conversation({ session: s, busy, liveRun, onSend, onStop }: { session: 
         </div>
       </div>
     </div>
+  );
+}
+
+// Which wizard is open, held outside the button that opened it: saving
+// into an empty card's lorebook swaps that button for another, and the
+// window has to stay open across that.
+const useWizardOpen = create<{ open: { bankId?: string } | null; set: (open: { bankId?: string } | null) => void }>((set) => ({ open: null, set: (open) => set({ open }) }));
+
+/** Opens the 🧙 Lorebook wizard on the card's lorebook or a bank one. */
+export const openLoreWizard = (bankId?: string) => useWizardOpen.getState().set({ bankId });
+
+/** Where the wizard's window lives (in the Shell). */
+export function LoreWizardHost() {
+  const { open, set } = useWizardOpen();
+  return open ? <LoreWizardDialog bankId={open.bankId} onClose={() => set(null)} /> : null;
+}
+
+/** Opens the 🧙 Lorebook wizard on the card's lorebook or a bank one
+ *  (`bankId`); says so when a draft is waiting in it. */
+export function WizardButton({ size, bankId }: { size?: 'sm'; bankId?: string }) {
+  const key = wizardKey(useProjectStore((s) => s.project?.id), bankId);
+  const draft = useLoreWizardStore((s) => s.sessions[key]?.entries.length ?? 0);
+  return (
+    <Button size={size} onClick={() => openLoreWizard(bankId)} title="Plan, write and review a whole lorebook with the assistant, in a guided session">
+      🧙 Wizard{draft ? ` (${draft} in the draft)` : ''}
+    </Button>
   );
 }

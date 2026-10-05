@@ -24,7 +24,10 @@ import { ChatPictureBubble, DescribeDialog, DrawButton, PendingPicture, useChatP
 import { addContinue, addReroll, branchCount, choose, onPath, pathDepth, pathText, rerollBase, startTree, undoContinue, type ContinueNode } from '@/lib/continueTree';
 import { api } from '@/lib/api';
 import { resolvePersona, usePersonaStore } from '@/store/personaStore';
+import { ensureLorebooks, useLorebookStore } from '@/store/lorebookStore';
+import { lorebooksInPlay, withAttachedLore } from '@/lib/lorebookBank';
 import { openSettings } from '@/components/SettingsDialog';
+import { GlobalLorebooks, LorebookSelect, openLorebooks } from '@/components/LorebookBank';
 import { useMediaQuery, PHONE_QUERY } from '@/hooks/useMediaQuery';
 import { useKeyboard } from '@/hooks/useKeyboard';
 import { chatFileName, chatToStJsonl, chatToText } from '@/lib/chatExport';
@@ -51,6 +54,8 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const { chat, list, loadFor, newChat, openChat, deleteChat, rename, setGreeting, setGreetingEdit, setMessages, branchFrom } = useChatStore();
   const { connections, chatConnectionId, setChatConnection, chatSettings, presets } = useLlmStore();
   const personas = usePersonaStore((s) => s.personas);
+  const bank = useLorebookStore((s) => s.books);
+  useEffect(ensureLorebooks, []);
   const phone = useMediaQuery(PHONE_QUERY);
   const keyboard = useKeyboard((s) => s.open);
   // With the dock filling the window, the chat keeps to a centred column.
@@ -209,6 +214,10 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const showTimes = chatSettings.showTimestamps ?? true;
   const settings = { ...chatSettings, userName: me.name, persona: me.description };
   const preset = chatSettings.presetId ? (presets.find((p) => p.id === chatSettings.presetId) ?? null) : null;
+  // The bank's lorebooks this chat brings in beside the card's: its own,
+  // the persona's and the global ones (lib/lorebookBank.ts).
+  const attachedLore = lorebooksInPlay(bank, { projectId: project?.id, chatLorebookId: chat?.lorebookId, personaLorebookId: me.persona?.lorebookId, globalIds: chatSettings.globalLorebooks });
+  const loreCard = withAttachedLore(card, attachedLore);
   /** The preset's samplers over a connection's, when the chat uses them. */
   const overridesFor = (c: LlmConnection | null, p: ChatPreset | null): Partial<SamplerParams> => (p && chatSettings.presetSamplers && c ? presetParams(p, c.kind) : {});
   const overrides = overridesFor(connection, preset);
@@ -223,7 +232,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
     // A text-completion connection lays the prompt out in its instruct
     // template; a chat-completion preset's prompts don't apply to it.
     const text = textTemplates(c);
-    const built = text ? buildTextPrompt(card, history(messages), settings, text.instruct, text.context, full) : p ? buildPresetPrompt(card, history(messages), settings, p, full) : buildChatPrompt(card, history(messages), settings, full);
+    const built = text ? buildTextPrompt(loreCard, history(messages), settings, text.instruct, text.context, full) : p ? buildPresetPrompt(loreCard, history(messages), settings, p, full) : buildChatPrompt(loreCard, history(messages), settings, full);
     return c ? { ...built, sentWith: sentWith(c, over, p) } : built;
   };
 
@@ -1327,7 +1336,10 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
   const usingPreset = !!s.presetId;
   const personas = usePersonaStore((st) => st.personas);
   const chat = useChatStore((st) => st.chat);
-  const usingPersona = !!resolvePersona(personas, s, chat).persona;
+  const persona = resolvePersona(personas, s, chat).persona;
+  const usingPersona = !!persona;
+  const setChatLorebook = useChatStore((st) => st.setChatLorebook);
+  const updatePersona = usePersonaStore((st) => st.update);
   return (
     <div className="flex max-h-[55%] flex-shrink-0 flex-col gap-3 overflow-y-auto border-b border-slate-800 bg-slate-950 p-3">
       <div className="flex items-center justify-between">
@@ -1401,6 +1413,34 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
               Recursion steps
               <NumberInput value={s.loreMaxRecursion ?? DEFAULT_CHAT_SETTINGS.loreMaxRecursion} onChange={(v) => setChatSettings({ loreMaxRecursion: v ?? DEFAULT_CHAT_SETTINGS.loreMaxRecursion })} min={1} max={20} step={1} />
             </label>
+          </div>
+        )}
+        {s.useLorebook && (
+          <div className="flex w-full flex-col gap-2 rounded-md border border-slate-800 p-2" data-testid="chat-lorebooks">
+            <div className="flex items-center justify-between text-xs text-slate-500">
+              <span>Lorebooks from 📖 Lorebooks, scanned with the card&apos;s (chat&apos;s first, then the persona&apos;s, the card&apos;s and the global ones):</span>
+              <button type="button" className="flex-shrink-0 text-violet-300 hover:underline" onClick={() => openLorebooks()}>
+                Manage
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {chat && (
+                <label className="flex flex-col gap-0.5 text-xs text-slate-400" title="This chat's own lorebook (one per chat, as in SillyTavern)">
+                  This chat&apos;s
+                  <LorebookSelect value={chat.lorebookId} onChange={setChatLorebook} className="w-48" />
+                </label>
+              )}
+              {persona && (
+                <label className="flex flex-col gap-0.5 text-xs text-slate-400" title={`Comes along with ${persona.name || 'this persona'} in every chat (one per persona, as in SillyTavern)`}>
+                  {persona.name || 'Your persona'}&apos;s (persona)
+                  <LorebookSelect value={persona.lorebookId} onChange={(id) => updatePersona(persona.id, { lorebookId: id })} className="w-48" />
+                </label>
+              )}
+            </div>
+            <div className="flex flex-col gap-1 text-xs text-slate-400">
+              Global: on in every chat
+              <GlobalLorebooks />
+            </div>
           </div>
         )}
         <Toggle checked={s.useCardRegex ?? true} onChange={(v) => setChatSettings({ useCardRegex: v })} label={<span className="text-xs" title="Scripts a card carries (as SillyTavern's Regex extension runs them) to change how messages look or what the model is sent. The card's are listed on its Prompts tab">Run the card&apos;s regex scripts</span>} />

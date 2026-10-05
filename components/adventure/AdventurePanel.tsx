@@ -10,6 +10,8 @@ import { useProjectStore } from '@/store/projectStore';
 import { useAdventureStore } from '@/store/adventureStore';
 import { useLlmStore } from '@/store/llmStore';
 import { resolvePersona, usePersonaStore } from '@/store/personaStore';
+import { ensureLorebooks, useLorebookStore } from '@/store/lorebookStore';
+import { combineLorebooks, lorebooksInPlay } from '@/lib/lorebookBank';
 import { toast } from '@/store/uiStore';
 import { openSettings } from '@/components/SettingsDialog';
 import { api } from '@/lib/api';
@@ -32,9 +34,13 @@ function useAdventureCtx(adventure: AdventureSession | null): AdventureCtx | nul
   const personas = usePersonaStore((s) => s.personas);
   const chatSettings = useLlmStore((s) => s.chatSettings);
   const settings = useLlmStore((s) => s.adventureSettings);
+  const bank = useLorebookStore((s) => s.books);
+  useEffect(ensureLorebooks, []);
   return useMemo(() => {
     if (!project) return null;
     const me = resolvePersona(personas, chatSettings, adventure);
+    // The bank's global and persona lorebooks come along, as in chats.
+    const attached = lorebooksInPlay(bank, { projectId: project.id, personaLorebookId: me.persona?.lorebookId, globalIds: chatSettings.globalLorebooks });
     return {
       card: project.card.data,
       userName: me.name,
@@ -43,8 +49,9 @@ function useAdventureCtx(adventure: AdventureSession | null): AdventureCtx | nul
       settings,
       dice: adventure?.dice ?? settings.diceDefault,
       lore: chatSettings.useLorebook ? loreDefaults(chatSettings) : null,
+      loreBook: combineLorebooks(project.card.data.character_book, attached),
     };
-  }, [project, personas, chatSettings, settings, adventure]);
+  }, [project, personas, chatSettings, settings, adventure, bank]);
 }
 
 export function AdventurePanel({ phone }: { phone: boolean }) {

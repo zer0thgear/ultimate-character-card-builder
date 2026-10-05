@@ -33,7 +33,7 @@ export interface WizardEntry {
   rewrite?: string;
   /** Why the last write failed. */
   error?: string;
-  /** The id of the card's lorebook entry it came from, in a session
+  /** The id of the lorebook entry it came from, in a session
    *  started from the lorebook; saving puts it back there. */
   sourceId?: SourceId;
 }
@@ -61,7 +61,7 @@ export interface WizardSession {
   useCard: boolean;
   entries: WizardEntry[];
   chat: WizardMessage[];
-  /** Started from the card's lorebook (to review, change and add to it),
+  /** Started from the lorebook it's for (to review, change and add to it),
    *  with the ids of the entries it brought in. */
   fromBook?: boolean;
   sources?: SourceId[];
@@ -95,7 +95,7 @@ export const isWritten = (e: WizardEntry) => !!e.content.trim();
 /** Entries waiting for the Writer: never written, or with a change asked for. */
 export const toWrite = (entries: WizardEntry[]) => entries.filter((e) => !isWritten(e) || e.rewrite);
 
-/** The card's lorebook as a draft: every entry, written, tied to the
+/** A lorebook as a draft: every entry, written, tied to the
  *  entry it came from. */
 export function entriesFromBook(book: Lorebook | undefined): WizardEntry[] {
   return (book?.entries ?? []).map((e, i) => ({
@@ -322,7 +322,7 @@ function cardOnly(card: CardData | undefined, budget: number): string {
   return cardContext(rest, undefined, budget);
 }
 
-/** The card's lorebook as names and keys, so the plan doesn't repeat it. */
+/** A lorebook's entries as names and keys, so the plan doesn't repeat it. */
 export function existingContext(book: Lorebook | undefined): string {
   return (book?.entries ?? [])
     .filter((e) => e.content.trim() || entryName(e))
@@ -368,14 +368,15 @@ const conversation = (chat: WizardMessage[], keep = 12) =>
 
 const messages = (system: string, user: string): LlmMessage[] => [...(system ? [{ role: 'system' as const, content: system }] : []), { role: 'user', content: user }];
 
-/** The Planner's first plan, from the brief. */
-export function planMessages(s: WizardSession, card: CardData | undefined): LlmMessage[] {
+/** The Planner's first plan, from the brief. `book`: the lorebook the
+ *  entries are for, when it isn't the card's (one in 📖 Lorebooks). */
+export function planMessages(s: WizardSession, card: CardData | undefined, book?: Lorebook): LlmMessage[] {
   const focus = s.focus.length ? s.focus.join(', ') : '';
   return messages(
     fillTemplate(templateText('loreWizard.planner'), {}),
     fillTemplate(templateText('loreWizard.plan'), {
       card: s.useCard ? cardOnly(card, 10000) : '',
-      existing: s.useCard ? existingContext(card?.character_book) : '',
+      existing: existingContext(book ?? (s.useCard ? card?.character_book : undefined)),
       pitch: s.pitch.trim() || (s.useCard ? '(none: plan the lorebook this card needs)' : '(none)'),
       focus,
       count: String(SIZE_COUNT[s.size]),
@@ -383,7 +384,7 @@ export function planMessages(s: WizardSession, card: CardData | undefined): LlmM
   );
 }
 
-/** The Planner's first look at a lorebook brought in from the card:
+/** The Planner's first look at a lorebook brought into the draft:
  *  its thoughts, and the changes it proposes. */
 export function reviewMessages(s: WizardSession, card: CardData | undefined): LlmMessage[] {
   return messages(

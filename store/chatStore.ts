@@ -72,6 +72,8 @@ interface ChatState {
   setGreetingEdit: (index: number, text: string | undefined) => void;
   /** Lock a persona to this chat (undefined unlocks it). */
   setPersonaLock: (personaId: string | undefined) => void;
+  /** This chat's own lorebook from the bank (undefined: none). */
+  setChatLorebook: (lorebookId: string | undefined) => void;
   /** This chat's author's note (undefined removes it). */
   setAuthorsNote: (note: AuthorsNote | undefined) => void;
   setMessages: (change: (m: ChatMessage[]) => ChatMessage[]) => void;
@@ -162,6 +164,12 @@ export const useChatStore = create<ChatState>((set, get) => {
         return chat;
       }),
     setPersonaLock: (personaId) => updateChat((c) => ({ ...c, personaId })),
+    setChatLorebook: (lorebookId) =>
+      updateChat((c) => {
+        const chat: ChatSession = { ...c, lorebookId };
+        if (!lorebookId) delete chat.lorebookId;
+        return chat;
+      }),
     setAuthorsNote: (note) =>
       updateChat((c) => {
         const chat: ChatSession = { ...c, authorsNote: note };

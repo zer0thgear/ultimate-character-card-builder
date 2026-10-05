@@ -30,6 +30,8 @@ import { chatStatsDetail, sortDetail } from '@/lib/cardSort';
 import { importFromUrl, overwriteCard } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
 import { TrashDialog, duplicateCard, openTrash } from '@/components/TrashDialog';
+import { LorebooksDialog, openLorebooks } from '@/components/LorebookBank';
+import { LoreWizardHost } from '@/components/loreWizard/LoreWizard';
 import { VersionsDialog, openVersions } from '@/components/VersionsDialog';
 import { TitleStatus } from '@/components/TitleStatus';
 import { FirstRunChecklist } from '@/components/FirstRun';
@@ -183,6 +185,8 @@ export function Shell() {
       <FieldToolsHost />
       <ConfirmHost />
       <TrashDialog />
+      <LorebooksDialog />
+      <LoreWizardHost />
       <VersionsDialog />
       <TitleStatus />
       <ShortcutsDialog />
@@ -501,6 +505,9 @@ function CardsHome() {
             🔗 Import from a URL…
           </Button>
           <Button onClick={() => setHomeTab('library')}>📚 Browse the gen library</Button>
+          <Button onClick={() => openLorebooks()} title="Your lorebooks, as SillyTavern's World Info: use one in every chat, in one chat, or with a persona">
+            📖 Lorebooks
+          </Button>
           <Button variant="ghost" onClick={() => setHomeTab('helper')} title="Ask how anything in UCCB works: buttons, macros, setup">
             🛎 Ask the helper
           </Button>
