@@ -206,6 +206,12 @@ export const promptHistory = (history: ChatMessage[], dropLast = false) => (drop
 /** A message's current text. */
 export const messageText = (m: ChatMessage) => m.swipes[m.swipe] ?? '';
 
+/** `messages` with message `id` showing `text` instead (a copy; the rest
+ *  as they are): what a continue sends, which can stop short of what's
+ *  shown (a reroll leaves off the last continue). */
+export const withShownText = (messages: ChatMessage[], id: string, text: string): ChatMessage[] =>
+  messages.map((m) => (m.id === id ? { ...m, swipes: m.swipes.map((s, i) => (i === m.swipe ? text : s)) } : m));
+
 /** The example dialogue split at each <START>. */
 export function exampleBlocks(mesExample: string): string[] {
   return mesExample
