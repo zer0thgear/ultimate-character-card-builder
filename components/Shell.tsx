@@ -23,6 +23,8 @@ import { useKeyboard, watchKeyboard } from '@/hooks/useKeyboard';
 import { useSessionStore as useGenSession } from '@/store/sessionStore';
 import { VisionWriteHost } from '@/components/VisionWriteDialog';
 import { ExtensionHosts } from '@/components/ExtensionSlots';
+import { ExtDialogHost, openExtDialog } from '@/components/extensions/SandboxFrame';
+import { usePackStore } from '@/store/packStore';
 import { ChatCardActions, ChatCardList, ChatHeaderAvatar, ChatHome, ChatScreen, switchAppMode } from '@/components/chatmode/ChatMode';
 import { CardListMeta } from '@/components/CardListMeta';
 import { CardSortControl, TagFilter, TagFilterNote, useSortedCards } from '@/components/CardSort';
@@ -197,6 +199,7 @@ export function Shell() {
       <ShortcutsDialog />
       <VisionWriteHost />
       <ExtensionHosts />
+      <ExtDialogHost />
       <AssistInspectorHost />
       <Lightbox />
       <TouchTips />
@@ -337,11 +340,26 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
             ⌨
           </IconButton>
         )}
+        <ExtensionCommands />
         <IconButton title="Settings" onClick={() => openSettings()}>
           ⚙
         </IconButton>
       </div>
     </header>
+  );
+}
+
+/** Extensions' header buttons, each opening its dialog. */
+function ExtensionCommands() {
+  const commands = usePackStore((s) => s.layer.ui).filter((u) => u.slot === 'command');
+  return (
+    <>
+      {commands.map((u) => (
+        <IconButton key={`${u.packId}.${u.id}`} title={`${u.label} (🧩 ${u.packName})`} onClick={() => openExtDialog({ packId: u.packId, uiId: u.id })}>
+          {u.icon ?? '🧩'}
+        </IconButton>
+      ))}
+    </>
   );
 }
 

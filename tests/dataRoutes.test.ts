@@ -85,6 +85,24 @@ describe('data routes', { timeout: 30_000 }, () => {
     });
   });
 
+  describe('/api/packs with code', () => {
+    const pack = { uccb: 1, id: 'tool', name: 'Tool', version: '1.0.0', contributes: {}, permissions: ['card:read'], ui: [{ id: 't', slot: 'dockTab', label: 'T', entry: 't.html' }], files: { 't.html': '<p>t</p>' } };
+
+    it('keeps only granted permissions the pack asks for, and its data until uninstalled', async () => {
+      const saved = await (await routeFetch('/api/packs', json('POST', { pack, enabled: true, codeApproved: true, granted: ['card:read', 'llm'] }))).json();
+      expect(saved).toMatchObject({ codeApproved: true, granted: ['card:read'] });
+
+      expect(await (await routeFetch('/api/packs/tool/data')).json()).toEqual({});
+      await routeFetch('/api/packs/tool/data', json('PUT', { vibe: 'Norse' }));
+      expect(await (await routeFetch('/api/packs/tool/data')).json()).toEqual({ vibe: 'Norse' });
+      expect((await routeFetch('/api/packs/tool/data', json('PUT', [1]))).status).toBe(400);
+      expect((await routeFetch('/api/packs/nobody/data', json('PUT', { a: 1 }))).status).toBe(404);
+
+      await routeFetch('/api/packs/tool', { method: 'DELETE' });
+      expect(existsSync(path.join(dir, 'pack-data', 'tool.json'))).toBe(false);
+    });
+  });
+
   describe('/api/personas', () => {
     it('replaces the list, dropping bad ids and anything that is not a persona field', async () => {
       const res = await routeFetch(

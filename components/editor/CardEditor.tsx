@@ -13,10 +13,16 @@ import { openVisionWrite } from '@/components/VisionWriteDialog';
 import { ExtensionImageActions } from '@/components/ExtensionSlots';
 import { FullPaneButton } from '@/components/FullPaneButton';
 import { SourceButton } from '@/components/CardSource';
+import { SandboxFrame } from '@/components/extensions/SandboxFrame';
+import { usePackStore } from '@/store/packStore';
 
 export function CardEditor() {
-  const { editorTab, setEditorTab, showAvatar } = useUiStore();
+  const { editorTab: chosen, setEditorTab, showAvatar } = useUiStore();
   const card = useProjectStore((s) => s.project?.card.data);
+  // Extensions' tabs; one that's gone falls back to Character.
+  const extTabs = usePackStore((s) => s.layer.ui).filter((u) => u.slot === 'editorTab');
+  const extTab = extTabs.find((u) => `ext:${u.packId}.${u.id}` === chosen);
+  const editorTab: EditorTab = chosen.startsWith('ext:') && !extTab ? 'basics' : chosen;
   if (!card) return null;
   const tabs: { value: EditorTab; label: string; badge?: number }[] = [
     { value: 'basics', label: 'Character' },
@@ -26,6 +32,7 @@ export function CardEditor() {
     { value: 'creator', label: 'Creator' },
     { value: 'notes', label: 'Notes' },
     { value: 'tools', label: 'Tools' },
+    ...extTabs.map((u) => ({ value: `ext:${u.packId}.${u.id}` as const, label: `${u.icon ?? '🧩'} ${u.label}` })),
   ];
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -43,6 +50,7 @@ export function CardEditor() {
           {editorTab === 'creator' && <CreatorPanel />}
           {editorTab === 'notes' && <NotesPanel />}
           {editorTab === 'tools' && <ToolsPanel />}
+          {extTab && <SandboxFrame key={`${extTab.packId}.${extTab.id}`} ui={extTab} />}
         </div>
       </div>
     </div>

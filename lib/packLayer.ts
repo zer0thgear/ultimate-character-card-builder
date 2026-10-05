@@ -1,4 +1,5 @@
 import type { CustomActor } from '@/types/adventure';
+import type { PackUi } from '@/lib/extensionPack';
 
 // What the enabled extension packs (lib/extensionPack.ts) add to the app,
 // merged into one layer. It sits between the built-in prompts and options
@@ -41,9 +42,11 @@ export interface PackLayer {
   actors: PackActor[];
   /** World rules to start from (🌍 World). */
   ruleExamples: { label: string; text: string; from: string }[];
+  /** Extension UI from packs whose code you approved (lib/extensionSandbox.ts). */
+  ui: (PackUi & { packId: string; packName: string })[];
 }
 
-export const emptyLayer = (): PackLayer => ({ templates: {}, adventurePrompts: {}, loreFocus: [], loreSizes: [], loreLengths: [], actors: [], ruleExamples: [] });
+export const emptyLayer = (): PackLayer => ({ templates: {}, adventurePrompts: {}, loreFocus: [], loreSizes: [], loreLengths: [], actors: [], ruleExamples: [], ui: [] });
 
 let layer: PackLayer = emptyLayer();
 

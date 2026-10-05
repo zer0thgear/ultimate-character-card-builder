@@ -1,6 +1,7 @@
 import { DEFAULT_TEMPLATES } from '@/lib/assist';
 import { ADVENTURE_DEFAULT_PROMPTS } from '@/lib/adventure';
 import { emptyLayer, type LoreLengthOption, type LoreSizeOption, type PackActor, type PackLayer } from '@/lib/packLayer';
+import { HOST_RE, UI_SLOTS, isPermission, type Permission, type UiSlot } from '@/lib/extensionSandbox';
 
 // Extension packs: shareable add-ons that change what the app asks the
 // model and what its wizards offer, without code. A pack is one JSON file
@@ -11,7 +12,7 @@ import { emptyLayer, type LoreLengthOption, type LoreSizeOption, type PackActor,
 
 export const PACK_FORMAT = 1;
 /** The largest pack accepted, as JSON. */
-export const MAX_PACK_BYTES = 1_000_000;
+export const MAX_PACK_BYTES = 5_000_000;
 const MAX_TEXT = 50_000;
 const MAX_ITEMS = 100;
 const ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
@@ -36,6 +37,21 @@ export interface PackContributions {
   ruleExamples?: { label: string; text: string }[];
 }
 
+/** A piece of an extension's UI (lib/extensionSandbox.ts). */
+export interface PackUi {
+  /** Letters, digits, - and _, unique in the pack (ui.openDialog uses it). */
+  id: string;
+  slot: UiSlot;
+  label: string;
+  /** An emoji for tabs and buttons. */
+  icon?: string;
+  /** The HTML it shows: one of the pack's `files`. */
+  entry: string;
+  /** For a field action: the fields it's offered on, as card paths
+   *  ("description", "first_mes"…); none: every text field. */
+  fields?: string[];
+}
+
 export interface ExtensionPack {
   /** The pack format (1). */
   uccb: number;
@@ -49,12 +65,27 @@ export interface ExtensionPack {
   /** Where to find out more (a link). */
   homepage?: string;
   contributes: PackContributions;
+  /** What its code may ask the app for (lib/extensionSandbox.ts PERMISSIONS). */
+  permissions?: Permission[];
+  /** Hosts its code may connect to ("api.example.com"). */
+  network?: string[];
+  /** Its UI, each in a sandboxed frame. */
+  ui?: PackUi[];
+  /** Its HTML, scripts and styles, by path ("panel.html": "…"). */
+  files?: Record<string, string>;
 }
+
+/** Whether a pack has code (UI) of its own. */
+export const hasCode = (p: ExtensionPack) => !!p.ui?.length;
 
 /** A pack as installed. */
 export interface InstalledPack {
   pack: ExtensionPack;
   enabled: boolean;
+  /** The permissions you approved (a pack's code gets only these), and
+   *  whether you approved its code running at all. */
+  granted?: string[];
+  codeApproved?: boolean;
   installedAt: number;
   updatedAt: number;
 }
@@ -163,7 +194,36 @@ export function validatePack(raw: unknown): { pack: ExtensionPack; warnings: str
   });
   if (rules) contributes.ruleExamples = rules;
 
-  if (!Object.keys(contributes).length) warnings.push("It doesn't add anything this version of UCCB understands.");
+  // Code: its files, UI, permissions and hosts.
+  const files: Record<string, string> = {};
+  if (raw.files !== undefined) {
+    if (!isObj(raw.files)) warnings.push('"files" should be an object of paths and their text; left out.');
+    else
+      for (const [path, text] of Object.entries(raw.files)) {
+        if (!/^[\w.\-/]{1,200}$/.test(path) || path.includes('..')) warnings.push(`File "${path}" has a name that isn't allowed; left out.`);
+        else if (typeof text !== 'string') warnings.push(`File "${path}" isn't text; left out.`);
+        else files[path] = text;
+      }
+  }
+  const ui = list(raw.ui, 'ui', (x) => {
+    const uid = str(x.id, 64);
+    const slot = str(x.slot, 30);
+    const label = str(x.label, 60)?.trim();
+    const entry = str(x.entry, 200);
+    if (!uid || !ID_RE.test(uid) || !slot || !Object.hasOwn(UI_SLOTS, slot) || !label || !entry) return undefined;
+    if (!Object.hasOwn(files, entry)) {
+      warnings.push(`ui "${uid}" shows "${entry}", which isn't one of its files.`);
+      return undefined;
+    }
+    const fields = Array.isArray(x.fields) ? x.fields.map((f) => str(f, 100)).filter((f): f is string => !!f) : undefined;
+    return { id: uid, slot: slot as UiSlot, label, ...(str(x.icon, 16) ? { icon: str(x.icon, 16) } : {}), entry, ...(fields?.length ? { fields } : {}) };
+  })?.filter((u, i, all) => all.findIndex((v) => v.id === u.id) === i);
+  const permissions = Array.isArray(raw.permissions) ? [...new Set(raw.permissions.filter((p): p is Permission => isPermission(p)))] : [];
+  if (Array.isArray(raw.permissions)) for (const p of raw.permissions) if (!isPermission(p)) warnings.push(`Unknown permission "${String(p)}"; left out.`);
+  const network = Array.isArray(raw.network) ? [...new Set(raw.network.filter((h): h is string => typeof h === 'string' && HOST_RE.test(h)).map((h) => h.toLowerCase()))].slice(0, 20) : [];
+  if (Array.isArray(raw.network)) for (const h of raw.network) if (typeof h !== 'string' || !HOST_RE.test(h)) warnings.push(`"${String(h)}" isn't a host name (like api.example.com); left out.`);
+
+  if (!Object.keys(contributes).length && !ui?.length) warnings.push("It doesn't add anything this version of UCCB understands.");
 
   const pack: ExtensionPack = {
     uccb: PACK_FORMAT,
@@ -174,6 +234,7 @@ export function validatePack(raw: unknown): { pack: ExtensionPack; warnings: str
     ...(str(raw.description, 2000)?.trim() ? { description: str(raw.description, 2000)!.trim() } : {}),
     ...(/^https?:\/\//.test(str(raw.homepage, 500) ?? '') ? { homepage: str(raw.homepage, 500) } : {}),
     contributes,
+    ...(ui?.length ? { ui, files, ...(permissions.length ? { permissions } : {}), ...(network.length ? { network } : {}) } : {}),
   };
   return { pack, warnings };
 }
@@ -206,6 +267,12 @@ export function describeContributions(c: PackContributions): string[] {
   return out;
 }
 
+/** What a pack's UI adds, in a few words each ("a dock tab: Names"). */
+export function describeUi(p: ExtensionPack): string[] {
+  const where: Record<UiSlot, string> = { dockTab: 'dock tab', editorTab: 'editor tab', fieldAction: 'field button', command: 'header button', dialog: 'dialog', settings: 'settings section' };
+  return (p.ui ?? []).map((u) => `${where[u.slot]}: ${u.icon ? `${u.icon} ` : ''}${u.label}`);
+}
+
 /**
  * The enabled packs merged into one layer (lib/packLayer.ts). Packs are
  * laid on in the order they were installed, so where two change the same
@@ -226,7 +293,21 @@ export function buildLayer(installed: InstalledPack[]): PackLayer {
     for (const a of c.adventureActors ?? []) layer.actors.push({ ...a, from });
     for (const r of c.ruleExamples ?? []) layer.ruleExamples.push({ ...r, from });
   }
+  // Code runs only once you've approved it.
+  for (const p of on) if (p.codeApproved) for (const u of p.pack.ui ?? []) layer.ui.push({ ...u, packId: p.pack.id, packName: p.pack.name });
   return layer;
+}
+
+/** The permissions a new version of a pack asks for that you haven't
+ *  approved, and whether its code is new (so it asks you again). */
+export function newPermissions(pack: ExtensionPack, before: InstalledPack | undefined): { permissions: Permission[]; network: string[]; newCode: boolean } {
+  const granted = new Set(before?.codeApproved ? (before.granted ?? []) : []);
+  const hosts = new Set(before?.codeApproved ? (before.pack.network ?? []) : []);
+  return {
+    permissions: (pack.permissions ?? []).filter((p) => !granted.has(p)),
+    network: (pack.network ?? []).filter((h) => !hosts.has(h)),
+    newCode: hasCode(pack) && !before?.codeApproved,
+  };
 }
 
 /** Which installed packs change a prompt another enabled pack also changes,

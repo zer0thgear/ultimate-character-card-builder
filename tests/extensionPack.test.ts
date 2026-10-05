@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TEMPLATES, cardTagsMessages, setTemplateOverrides, templateText } from '@/lib/assist';
-import { buildLayer, describeContributions, packConflicts, packFromEdits, packIdFrom, parsePack, validatePack, PackError, type ExtensionPack, type InstalledPack } from '@/lib/extensionPack';
+import { buildLayer, describeContributions, describeUi, newPermissions, packConflicts, packFromEdits, packIdFrom, parsePack, validatePack, PackError, type ExtensionPack, type InstalledPack } from '@/lib/extensionPack';
 import { setPackLayer } from '@/lib/packLayer';
+import { buildSrcdoc, callAllowed, inlineFiles, sandboxCsp } from '@/lib/extensionSandbox';
 import { entryCount, focusOptions, lengthOptions, lengthText, newSession, planMessages, sizeOptions, writeMessages } from '@/lib/loreWizard';
 import { scoutMessages } from '@/lib/adventure';
 import { newCard } from '@/lib/cardSpec';
@@ -133,5 +134,80 @@ describe('sharing your edits', () => {
     expect(validatePack(JSON.parse(JSON.stringify(p))).pack).toEqual(p);
     expect(describeContributions(p.contributes)).toEqual(['1 assistant prompt', '1 Adventure prompt', '1 Adventure actor']);
     expect(packIdFrom('  ')).toBe('my-pack');
+  });
+});
+
+describe('packs with code', () => {
+  const codePack = {
+    uccb: 1,
+    id: 'tools',
+    name: 'Tools',
+    permissions: ['card:read', 'llm', 'root'],
+    network: ['api.example.com', 'http://evil', '*.cdn.example.org'],
+    ui: [
+      { id: 'tab', slot: 'dockTab', label: 'Tab', entry: 'tab.html' },
+      { id: 'tab', slot: 'editorTab', label: 'Dup', entry: 'tab.html' },
+      { id: 'gone', slot: 'dockTab', label: 'Gone', entry: 'missing.html' },
+      { id: 'odd', slot: 'toolbar', label: 'Odd', entry: 'tab.html' },
+    ],
+    files: { 'tab.html': '<p>hi</p>', '../escape.js': 'x' },
+  };
+
+  it('keeps its UI, files, known permissions and plain hosts', () => {
+    const { pack: p, warnings } = validatePack(codePack);
+    expect(p.ui).toEqual([{ id: 'tab', slot: 'dockTab', label: 'Tab', entry: 'tab.html' }]);
+    expect(p.files).toEqual({ 'tab.html': '<p>hi</p>' });
+    expect(p.permissions).toEqual(['card:read', 'llm']);
+    expect(p.network).toEqual(['api.example.com', '*.cdn.example.org']);
+    expect(warnings.join(' ')).toMatch(/root/);
+    expect(warnings.join(' ')).toMatch(/missing\.html/);
+    expect(warnings.join(' ')).toMatch(/escape\.js/);
+    expect(warnings.join(' ')).toMatch(/http:\/\/evil/);
+  });
+
+  it('only shows its UI once you approve its code, and asks again for new permissions', () => {
+    const { pack: p } = validatePack(codePack);
+    expect(buildLayer([installed(p, 1)]).ui).toEqual([]);
+    const approved = { ...installed(p, 1), codeApproved: true, granted: ['card:read', 'llm'] };
+    expect(buildLayer([approved]).ui).toEqual([{ id: 'tab', slot: 'dockTab', label: 'Tab', entry: 'tab.html', packId: 'tools', packName: 'Tools' }]);
+    expect(newPermissions(p, undefined)).toEqual({ permissions: ['card:read', 'llm'], network: ['api.example.com', '*.cdn.example.org'], newCode: true });
+    expect(newPermissions(p, approved)).toEqual({ permissions: [], network: [], newCode: false });
+    expect(newPermissions({ ...p, permissions: ['card:read', 'llm', 'card:write'], network: [...p.network!, 'other.example.com'] }, approved)).toEqual({ permissions: ['card:write'], network: ['other.example.com'], newCode: false });
+  });
+
+  it('reads the example extension in docs/ with nothing left out', () => {
+    const { pack: p, warnings } = parsePack(readFileSync('docs/extensions/name-ideas.uccb.json', 'utf8'));
+    expect(warnings).toEqual([]);
+    expect(describeUi(p)).toEqual(['dock tab: 🏷 Names', 'field button: 📊 Field stats']);
+  });
+});
+
+describe('the sandbox', () => {
+  it('lets a call through only with its permission', () => {
+    expect(callAllowed('card.get', ['card:read'])).toBe(true);
+    expect(callAllowed('card.get', [])).toBe(false);
+    expect(callAllowed('card.setFields', ['card:read'])).toBe(false);
+    expect(callAllowed('ui.toast', [])).toBe(true);
+    expect(callAllowed('settings.get', ['card:read', 'card:write', 'llm'])).toBe(false);
+    expect(callAllowed('__proto__', [])).toBe(false);
+  });
+
+  it('allows no network unless the pack declares hosts', () => {
+    expect(sandboxCsp()).toContain("connect-src 'none'");
+    expect(sandboxCsp()).toContain("default-src 'none'");
+    expect(sandboxCsp(['api.example.com', 'bad host'])).toContain('connect-src https://api.example.com;');
+  });
+
+  it("puts the pack's own scripts and styles inline, and nothing else", () => {
+    const html = inlineFiles('<link rel="stylesheet" href="./a.css"><script src="a.js"></script><script src="https://x.test/b.js"></script>', { 'a.css': 'p{}', 'a.js': 'if (1 < 2) "</script>";' });
+    expect(html).toBe('<style>p{}</style><script>if (1 < 2) "<\\/script>";</script><script src="https://x.test/b.js"></script>');
+  });
+
+  it('builds a page with the CSP first and the context escaped', () => {
+    const doc = buildSrcdoc({ html: '<p>hi</p>', context: { pack: { id: 'p', name: '</script><script>alert(1)</script>', version: '1' }, ui: { id: 'u', slot: 'dockTab', label: 'U' }, granted: [], theme: 'dark' } });
+    expect(doc.indexOf('Content-Security-Policy')).toBeLessThan(doc.indexOf('<script>'));
+    expect(doc).not.toContain('</script><script>alert(1)');
+    expect(doc).toContain('\\u003c/script>');
+    expect(doc.trim().endsWith('<p>hi</p>\n</body>\n</html>')).toBe(true);
   });
 });

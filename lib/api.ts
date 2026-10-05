@@ -101,6 +101,8 @@ export const api = {
   installPack: (p: InstalledPack) => call<InstalledPack>('/api/packs', json('POST', p)),
   savePack: (p: InstalledPack) => call<InstalledPack>(`/api/packs/${p.pack.id}`, json('PUT', p)),
   deletePack: (id: string) => call<{ ok: true }>(`/api/packs/${id}`, { method: 'DELETE' }),
+  getPackData: (id: string) => call<Record<string, unknown>>(`/api/packs/${id}/data`),
+  savePackData: (id: string, data: Record<string, unknown>) => call<Record<string, unknown>>(`/api/packs/${id}/data`, json('PUT', data)),
 
   listPersonas: () => call<Persona[]>('/api/personas'),
   savePersonas: (list: Persona[]) => call<Persona[]>('/api/personas', json('PUT', list)),

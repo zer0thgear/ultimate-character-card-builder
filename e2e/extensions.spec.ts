@@ -7,6 +7,8 @@ import { expect, test } from '@playwright/test';
 
 test('an extension pack installs, changes prompts and wizard choices, and uninstalls cleanly', async ({ page, request }) => {
   const connection = { id: 'c1', name: 'Mock', kind: 'openai', baseUrl: 'http://127.0.0.1:9/v1', apiKey: '', model: 'mock', params: { max_tokens: 200 } };
+  // Start with no packs (other specs share the data folder).
+  for (const p of (await (await request.get('/api/packs')).json()) as { pack: { id: string } }[]) await request.delete(`/api/packs/${p.pack.id}`);
   await request.put('/api/settings/llm', { data: { state: { connections: [connection], chatConnectionId: 'c1', assistConnectionId: 'c1' }, version: 0 } });
   const systems: string[] = [];
   await page.route('**/api/llm/chat', async (route) => {

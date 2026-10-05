@@ -14,6 +14,9 @@ import { CutOffNotice } from '@/components/llm/CutOffNotice';
 import { AssistReasoning } from '@/components/llm/AssistTrace';
 import { ReferenceTray, referenceConnectionId, useReferences } from '@/components/llm/References';
 import { withReferences } from '@/lib/references';
+import { usePackStore } from '@/store/packStore';
+import { openExtDialog } from '@/components/extensions/SandboxFrame';
+import { fieldView } from '@/components/extensions/hostApi';
 
 // Every card text field gets the same two helpers: ✨ the writing
 // assistant, and ⤢ a full-screen editor for long fields.
@@ -42,8 +45,23 @@ export const useWritingTools = () => useContext(WritingToolsContext);
 export function FieldActions({ path }: { path: string }) {
   const open = useFieldTools((s) => s.open);
   const writing = useWritingTools();
+  // Extensions' field actions (lib/extensionSandbox.ts) offered on this field.
+  const extActions = usePackStore((s) => s.layer.ui).filter((u) => u.slot === 'fieldAction' && (!u.fields?.length || u.fields.some((f) => path === f || path.startsWith(`${f}.`))));
   return (
     <>
+      {writing &&
+        extActions.map((u) => (
+          <IconButton
+            key={`${u.packId}.${u.id}`}
+            title={`${u.label} (🧩 ${u.packName})`}
+            onClick={() => {
+              const data = useProjectStore.getState().project?.card.data;
+              openExtDialog({ packId: u.packId, uiId: u.id, field: fieldView(path, data ? fieldLabel(data, path) : path) });
+            }}
+          >
+            {u.icon ?? '🧩'}
+          </IconButton>
+        ))}
       {writing && (
         <IconButton title="Writing assistant" tone="accent" onClick={() => open('assist', path)}>
           ✨

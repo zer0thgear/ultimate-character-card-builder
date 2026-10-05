@@ -4,15 +4,18 @@ import { useState } from 'react';
 import { usePackStore } from '@/store/packStore';
 import { useLlmStore } from '@/store/llmStore';
 import { toast } from '@/store/uiStore';
-import { PackError, describeContributions, packConflicts, packFileName, packFromEdits, packIdFrom, packJson, parsePack, type ExtensionPack } from '@/lib/extensionPack';
-import { AutoTextarea, Button, Toggle, confirmDialog, cx, downloadBlob, inputClass, pickFiles } from '@/components/ui';
+import { PackError, describeContributions, describeUi, hasCode, newPermissions, packConflicts, packFileName, packFromEdits, packIdFrom, packJson, parsePack, type ExtensionPack, type InstalledPack } from '@/lib/extensionPack';
+import { PERMISSIONS } from '@/lib/extensionSandbox';
+import { SandboxFrame } from '@/components/extensions/SandboxFrame';
+import { AutoTextarea, Button, Toggle, choiceDialog, confirmDialog, cx, downloadBlob, inputClass, pickFiles } from '@/components/ui';
 
 // Settings → Extensions: extension packs (lib/extensionPack.ts). Install
 // one from a file or pasted JSON, turn it on or off, share it, uninstall it;
 // and turn your own prompt edits into a pack to share.
 
 export function ExtensionPacks() {
-  const { packs, install, setEnabled, remove } = usePackStore();
+  const { packs, install, setEnabled, setCodeApproved, remove } = usePackStore();
+  const layerUi = usePackStore((s) => s.layer.ui);
   const [paste, setPaste] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const conflicts = packConflicts(packs);
@@ -36,8 +39,23 @@ export function ExtensionPacks() {
       });
       if (!ok) return false;
     }
+    // Code, or more permissions than you approved before, is asked about.
+    let code: boolean | undefined;
+    const asks = newPermissions(pack, before);
+    if (asks.newCode || (before?.codeApproved && (asks.permissions.length || asks.network.length))) {
+      const choice = await choiceDialog({
+        title: asks.newCode ? `${pack.name} runs code of its own` : `${pack.name} asks for more`,
+        body: <CodeApproval pack={pack} />,
+        choices: [
+          { value: 'code', label: asks.newCode ? 'Install with its code' : 'Allow' },
+          { value: 'nocode', label: asks.newCode ? 'Without its code' : "Don't run its code" },
+        ],
+      });
+      if (choice === null) return false;
+      code = choice === 'code';
+    }
     try {
-      await install(pack);
+      await install(pack, code);
     } catch (err) {
       toast((err as Error).message, 'error');
       return false;
@@ -53,7 +71,7 @@ export function ExtensionPacks() {
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-slate-400">
-        Extension packs change what the writing assistant, the lorebook wizard and Adventure mode ask the model, and add choices to them, without changing UCCB itself. A pack is one <code>.uccb.json</code> file: share it, install it here, and uninstall it to take everything it added away. Your own prompt edits always win over a pack&apos;s. How to write one: <code>docs/EXTENSIONS.md</code> in the UCCB folder.
+        Extension packs change what the writing assistant, the lorebook wizard and Adventure mode ask the model, add choices to them, and can add tabs, buttons and dialogs of their own (their code runs sandboxed, away from your API keys), without changing UCCB itself. A pack is one <code>.uccb.json</code> file: share it, install it here, and uninstall it to take everything it added away. Your own prompt edits always win over a pack&apos;s. How to write one: <code>docs/EXTENSIONS.md</code> in the UCCB folder.
       </p>
       <div className="flex flex-wrap gap-1.5">
         <Button size="sm" onClick={() => void importFiles()}>
@@ -120,7 +138,16 @@ export function ExtensionPacks() {
                   </span>
                 </div>
                 {pack.description && <p className="text-slate-400">{pack.description}</p>}
-                <p className="text-slate-500">Adds: {adds.length ? adds.join(', ') : 'nothing this version understands'}</p>
+                {(adds.length > 0 || !hasCode(pack)) && <p className="text-slate-500">Adds: {adds.length ? adds.join(', ') : 'nothing this version understands'}</p>}
+                {hasCode(pack) && <CodeStatus installed={packs.find((p) => p.pack.id === pack.id)!} onApprove={(on) => void setCodeApproved(pack.id, on).catch((err: Error) => toast(err.message, 'error'))} />}
+                {enabled &&
+                  layerUi
+                    .filter((u) => u.packId === pack.id && u.slot === 'settings')
+                    .map((u) => (
+                      <div key={u.id} className="mt-1 rounded border border-slate-800">
+                        <SandboxFrame ui={u} />
+                      </div>
+                    ))}
                 {clash && <p className="text-amber-300/90">Changes some of the same prompts as {clash.map(nameOf).join(', ')}; the one installed last wins.</p>}
                 {pack.homepage && (
                   <a href={pack.homepage} target="_blank" rel="noreferrer noopener" className="self-start text-sky-400 hover:underline">
@@ -132,6 +159,64 @@ export function ExtensionPacks() {
           })}
         </ul>
       )}
+    </div>
+  );
+}
+
+/** What a pack's code may do, for approving it. */
+function CodeApproval({ pack }: { pack: ExtensionPack }) {
+  return (
+    <div className="flex flex-col gap-2 text-sm">
+      <p>
+        It runs in a sandbox: it can&apos;t see your API keys, your other cards or anything else in UCCB, except through what&apos;s listed here. Only install code from people you trust.
+      </p>
+      <div>
+        <div className="text-xs font-semibold text-slate-400 uppercase">It adds</div>
+        <ul className="list-disc pl-5">
+          {describeUi(pack).map((d) => (
+            <li key={d}>{d}</li>
+          ))}
+        </ul>
+      </div>
+      <div>
+        <div className="text-xs font-semibold text-slate-400 uppercase">It may</div>
+        <ul className="list-disc pl-5">
+          {(pack.permissions ?? []).map((p) => (
+            <li key={p}>{PERMISSIONS[p]}</li>
+          ))}
+          {!!pack.network?.length && <li>Connect to {pack.network.join(', ')} (and send them what it can read)</li>}
+          {!pack.permissions?.length && !pack.network?.length && <li>Nothing beyond showing its own UI and keeping its own data</li>}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+/** An installed pack's code: what it may do, and turning it on or off. */
+function CodeStatus({ installed, onApprove }: { installed: InstalledPack; onApprove: (on: boolean) => void }) {
+  const { pack, codeApproved } = installed;
+  return (
+    <div className="flex flex-col gap-1 rounded bg-slate-900/60 p-2">
+      <p className="text-slate-400">
+        <span className="text-slate-300">Runs code</span> (sandboxed): {describeUi(pack).join(', ')}
+      </p>
+      <p className="text-slate-500">
+        May: {[...(pack.permissions ?? []).map((p) => PERMISSIONS[p].split(' (')[0].toLowerCase()), ...(pack.network?.length ? [`connect to ${pack.network.join(', ')}`] : [])].join('; ') || 'only show its own UI and keep its own data'}
+      </p>
+      <div className="flex items-center gap-2">
+        {codeApproved ? (
+          <Button size="sm" variant="ghost" onClick={() => onApprove(false)}>
+            Stop its code
+          </Button>
+        ) : (
+          <>
+            <span className="text-amber-300/90">Its code is off.</span>
+            <Button size="sm" variant="ghost" onClick={async () => (await confirmDialog({ title: `Run ${pack.name}'s code?`, body: <CodeApproval pack={pack} />, confirmLabel: 'Run its code' })) && onApprove(true)}>
+              Run its code…
+            </Button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

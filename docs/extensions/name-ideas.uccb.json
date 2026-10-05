@@ -1,0 +1,35 @@
+{
+  "uccb": 1,
+  "id": "name-ideas",
+  "name": "Name ideas",
+  "version": "1.0.0",
+  "author": "UCCB",
+  "description": "An example extension with code: a dock tab that asks your assistant connection for names that fit the card and names it with one click, and a 📊 button on every text field with its word count.",
+  "permissions": [
+    "card:read",
+    "card:write",
+    "llm"
+  ],
+  "contributes": {},
+  "ui": [
+    {
+      "id": "names",
+      "slot": "dockTab",
+      "label": "Names",
+      "icon": "🏷",
+      "entry": "names.html"
+    },
+    {
+      "id": "stats",
+      "slot": "fieldAction",
+      "label": "Field stats",
+      "icon": "📊",
+      "entry": "stats.html"
+    }
+  ],
+  "files": {
+    "names.html": "<div class=\"row\">\n  <input id=\"vibe\" placeholder=\"A vibe, e.g. elegant, short, Norse\" style=\"flex:1\">\n  <button id=\"go\" class=\"primary\">Suggest</button>\n</div>\n<p class=\"muted\" id=\"status\">Name ideas for the open card, from its description.</p>\n<ul id=\"list\"></ul>\n<script src=\"names.js\"></script>\n<style>\n  .row { display: flex; gap: 6px; }\n  ul { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 4px; }\n  li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 8px; border: 1px solid var(--uccb-border); border-radius: 6px; }\n</style>",
+    "names.js": "const $ = (id) => document.getElementById(id);\nconst status = (t) => ($('status').textContent = t);\n\nuccb.storage.get('vibe').then((v) => { if (v) $('vibe').value = v; });\n\nfunction show(names) {\n  $('list').replaceChildren(...names.map((name) => {\n    const li = document.createElement('li');\n    const span = document.createElement('span');\n    span.textContent = name;\n    const use = document.createElement('button');\n    use.textContent = 'Use';\n    use.onclick = async () => {\n      await uccb.card.setFields({ name });\n      uccb.ui.toast(`Named the card ${name}`, 'success');\n    };\n    li.append(span, use);\n    return li;\n  }));\n}\n\n$('go').onclick = async () => {\n  const card = await uccb.card.get();\n  if (!card) return status('Open a card first.');\n  const vibe = $('vibe').value.trim();\n  uccb.storage.set('vibe', vibe);\n  $('go').disabled = true;\n  status('Thinking…');\n  try {\n    const { text } = await uccb.llm.complete([\n      { role: 'system', content: 'You suggest character names. Reply with eight names, one per line, and nothing else.' },\n      { role: 'user', content: `The character:\\n${card.data.description || card.data.personality || '(no description yet)'}\\n\\nCurrent name: ${card.data.name || '(none)'}\\nWanted style: ${vibe || 'anything that fits'}` },\n    ], { label: 'Name ideas' });\n    const names = text.split('\\n').map((l) => l.replace(/^[\\s\\d.)*-]+/, '').trim()).filter(Boolean).slice(0, 12);\n    show(names);\n    status(names.length ? 'Pick one to name the card (undo works).' : 'No names came back.');\n  } catch (err) {\n    status(err.message);\n  } finally {\n    $('go').disabled = false;\n  }\n};",
+    "stats.html": "<div id=\"out\"></div>\n<script>\n  const f = uccb.context.field;\n  const text = f.value || '';\n  const words = (text.match(/\\S+/g) || []).length;\n  const sentences = (text.match(/[.!?…]+(\\s|$)/g) || []).length;\n  const rows = [['Field', f.label], ['Words', words], ['Characters', text.length], ['Sentences', sentences], ['Tokens (rough)', Math.round(text.length / 4)]];\n  document.getElementById('out').innerHTML = '<table>' + rows.map(([k, v]) => `<tr><td class=\"muted\">${k}</td><td>${String(v).replace(/</g, '&lt;')}</td></tr>`).join('') + '</table>';\n</script>\n<style> td { padding: 2px 12px 2px 0; } </style>"
+  }
+}

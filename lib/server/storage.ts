@@ -569,9 +569,11 @@ export async function savePack(p: Partial<InstalledPack>): Promise<InstalledPack
   }
   const before = await readJson<InstalledPack>(packPath(pack.id)).catch(() => null);
   const now = Date.now();
+  const codeApproved = p.codeApproved === true && !!pack.ui?.length;
   const clean: InstalledPack = {
     pack,
     enabled: p.enabled !== false,
+    ...(codeApproved ? { codeApproved, granted: (Array.isArray(p.granted) ? p.granted : []).filter((g) => pack.permissions?.includes(g as never)) } : {}),
     installedAt: before?.installedAt ?? (typeof p.installedAt === 'number' ? p.installedAt : now),
     updatedAt: now,
   };
@@ -581,6 +583,26 @@ export async function savePack(p: Partial<InstalledPack>): Promise<InstalledPack
 
 export async function deletePack(id: string) {
   await removeJson(packPath(id));
+  await removeJson(packDataPath(id));
+}
+
+// An extension's own data (uccb.storage), one JSON object per pack:
+//   data/pack-data/<id>.json
+const PACK_DATA = path.join(DATA_DIR, 'pack-data');
+const packDataPath = (id: string) => path.join(PACK_DATA, `${checkId(id)}.json`);
+export const MAX_PACK_DATA_BYTES = 1_000_000;
+
+export async function getPackData(id: string): Promise<Record<string, unknown>> {
+  return (await readJson<Record<string, unknown>>(packDataPath(id))) ?? {};
+}
+
+export async function savePackData(id: string, data: unknown): Promise<Record<string, unknown>> {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new BadRequestError("An extension's data must be an object.");
+  if (!(await readJson<InstalledPack>(packPath(id)))) throw new NotFoundError(`No extension ${id}`);
+  const text = JSON.stringify(data);
+  if (text.length > MAX_PACK_DATA_BYTES) throw new BadRequestError(`An extension can keep at most ${MAX_PACK_DATA_BYTES / 1_000_000} MB of data.`);
+  await writeFileAtomic(packDataPath(id), text);
+  return data as Record<string, unknown>;
 }
 
 // ─── Settings shared by every device ─────────────────────────────────────────
