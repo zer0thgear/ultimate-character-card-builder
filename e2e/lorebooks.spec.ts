@@ -43,10 +43,13 @@ test("lorebooks from the bank go into the chat beside the card's", async ({ page
 
   // The chat scans the card's lorebook and the global one; the card's own
   // copy in the bank isn't read twice, even switched on globally.
-  const copy = books.find((b: { fromCard?: unknown }) => b.fromCard);
-  const s = await (await request.get('/api/settings')).json();
-  await request.put('/api/settings/llm', { data: { ...s.llm, state: { ...s.llm.state, chatSettings: { ...s.llm.state.chatSettings, globalLorebooks: [...s.llm.state.chatSettings.globalLorebooks, copy.id] } } } });
-  await page.reload();
+  await page.getByRole('button', { name: 'Close this card (back to the home screen)' }).click();
+  await page.getByRole('button', { name: '📖 Lorebooks' }).click();
+  const copyRow = dialog.locator('div.rounded-md').filter({ hasText: "Keeper's Lorebook" }).filter({ has: page.getByRole('button', { name: 'Global' }) });
+  await copyRow.getByRole('button', { name: 'Global' }).click();
+  await expect(copyRow.getByRole('button', { name: '🌐 Global' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: /Keeper/ }).first().click();
   await page.getByRole('tab', { name: '💬 Test chat' }).click();
   await page.getByRole('button', { name: 'Start a chat' }).click();
   const box = page.locator('[data-chat-input]');
