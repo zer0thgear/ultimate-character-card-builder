@@ -31,6 +31,8 @@ import { importFromUrl, overwriteCard } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
 import { TrashDialog, duplicateCard, openTrash } from '@/components/TrashDialog';
 import { LorebooksDialog, openLorebooks } from '@/components/LorebookBank';
+import { ensureLorebooks } from '@/store/lorebookStore';
+import { installLorebookSync } from '@/store/lorebookSync';
 import { LoreWizardHost } from '@/components/loreWizard/LoreWizard';
 import { VersionsDialog, openVersions } from '@/components/VersionsDialog';
 import { TitleStatus } from '@/components/TitleStatus';
@@ -58,6 +60,9 @@ export function Shell() {
     watchKeyboard();
     void useConfigStore.getState().load();
     void usePersonaStore.getState().load();
+    // Cards' lorebooks synced with their copies in 📖 Lorebooks.
+    ensureLorebooks();
+    installLorebookSync();
     const store = useProjectStore.getState();
     void store.refreshList().then(() => {
       // The card this mode had open last time (a Chat-mode card only in Chat).

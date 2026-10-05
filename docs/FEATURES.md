@@ -66,6 +66,8 @@ The test chat (and Chat mode) scans them together with the card's own lorebook, 
 
 **Importing a card with a lorebook** asks whether to add its lorebook to the bank, as SillyTavern asks ("This card has a lorebook. Add it to your Lorebooks?"): **Add it**, **Not now**, or **Don't ask again** (turned back on in the bank with **Offer a card's lorebook when importing it**). The lorebook stays in the card either way, and the bank copy is named after the lorebook (or "<card>'s Lorebook"). Adding the same card's lorebook again replaces its copy. A card's own chats skip its bank copy, since they already have the card's lorebook; other cards' chats can use it.
 
+**Syncing a card's lorebook with its copy.** Turn on **Keep cards' lorebooks in sync with their copies here** in 📖 Lorebooks and a card's lorebook and its copy in the bank stay in step both ways: an edit to either (by hand, by the ✨ wizard, or an undo on the card) goes to the other, even when the card isn't open. Each side keeps its own name. A card with a copy shows a line on its Lorebook tab (🔗 *In sync with "…"*) with its own choice: **as every card** (the bank's setting), **Sync this card** or **Don't sync this card**. Turning syncing on for a card whose lorebook and copy have drifted apart asks which one to keep. Removing a card's lorebook leaves the copy in the bank.
+
 ## Art
 
 The dock on the right starts on **🎨 Image**. Model, size, sampler, the **negative prompt** and the other settings are global (the negative is the same for every card, as on novelai.net; a character's own negative is per character); the style, scene and character **prompts belong to the card**, so switching cards switches what's being drawn.

@@ -12,6 +12,7 @@ type RouteModule = Partial<Record<string, Handler>>;
 const ROUTES: [string, () => Promise<RouteModule>][] = [
   ['/api/projects', () => import('@/app/api/projects/route')],
   ['/api/projects/:id', () => import('@/app/api/projects/[id]/route')],
+  ['/api/projects/:id/lorebook', () => import('@/app/api/projects/[id]/lorebook/route')],
   ['/api/projects/:id/duplicate', () => import('@/app/api/projects/[id]/duplicate/route')],
   ['/api/projects/:id/versions', () => import('@/app/api/projects/[id]/versions/route')],
   ['/api/projects/:id/versions/:vid', () => import('@/app/api/projects/[id]/versions/[vid]/route')],

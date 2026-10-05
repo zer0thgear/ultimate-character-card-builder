@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Lorebook, LorebookEntry } from '@/types/card';
 import type { BankLorebook, ChatMessage } from '@/types/project';
-import { bankName, cardLoreName, combineLorebooks, copyFromCard, entryBook, lorebooksInPlay, newBankLorebook, withAttachedLore } from '@/lib/lorebookBank';
+import { bankName, cardBookForBank, cardLoreName, sameLore, syncsLorebook, combineLorebooks, copyFromCard, entryBook, lorebooksInPlay, newBankLorebook, withAttachedLore } from '@/lib/lorebookBank';
 import { describeEntry, scanLorebook } from '@/lib/lorebookScan';
 import { buildChatPrompt, DEFAULT_CHAT_SETTINGS, newMessage } from '@/lib/chatPrompt';
 import { newCard } from '@/lib/cardSpec';
@@ -77,5 +77,23 @@ describe('the lorebook bank', () => {
     expect(labels).toContain('Lorebook: Entry 2 [World]');
     expect(built.parts.find((p) => p.label === 'Lorebook: Entry 2 [World]')?.content).toBe('The north is cold.');
     expect(withAttachedLore(card, [])).toBe(card);
+  });
+
+  it("syncs by the card's own choice, else the global setting", () => {
+    expect(syncsLorebook({}, undefined)).toBe(false);
+    expect(syncsLorebook({}, true)).toBe(true);
+    expect(syncsLorebook({ lorebookSync: false }, true)).toBe(false);
+    expect(syncsLorebook({ lorebookSync: true }, false)).toBe(true);
+    expect(syncsLorebook(null, true)).toBe(true);
+  });
+
+  it("takes the card's book into its copy, keeping the copy's name when the card's has none", () => {
+    const copy = book("Ann's Lorebook", []);
+    const fromCard = cardBookForBank(book('', [entry(['a'], 'A.')]), copy);
+    expect(fromCard.name).toBe("Ann's Lorebook");
+    expect(fromCard.entries[0].content).toBe('A.');
+    expect(cardBookForBank(book('Ann lore', []), copy).name).toBe('Ann lore');
+    expect(sameLore(book('x', [entry(['a'], 'A.')]), book('y', [entry(['a'], 'A.')]))).toBe(true);
+    expect(sameLore(book('x', [entry(['a'], 'A.')]), book('x', [entry(['a'], 'B.')]))).toBe(false);
   });
 });

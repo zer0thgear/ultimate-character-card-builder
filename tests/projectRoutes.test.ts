@@ -24,6 +24,35 @@ describe('card project routes', { timeout: 30_000 }, () => {
   });
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
+  describe('/api/projects/:id/lorebook', () => {
+    const book = { name: 'Synced', extensions: {}, entries: [{ keys: ['k'], content: 'From the bank.', extensions: {}, enabled: true, insertion_order: 100, use_regex: false }] };
+    const sync = (id: string, syncByDefault: boolean) => routeFetch(`/api/projects/${id}/lorebook`, json('PUT', { book, syncByDefault }));
+
+    it("sets a synced card's lorebook and leaves the rest of the card alone", async () => {
+      const p = await create({ notes: 'keep me' });
+      const res = await (await sync(p.id, true)).json();
+      expect(res.synced).toBe(true);
+      expect(onDisk(p.id).card.data.character_book?.entries[0].content).toBe('From the bank.');
+      expect(onDisk(p.id).notes).toBe('keep me');
+    });
+
+    it("follows the card's own choice over the global one, and writes nothing when not synced", async () => {
+      const off = await create({ lorebookSync: false });
+      expect((await (await sync(off.id, true)).json()).synced).toBe(false);
+      expect(onDisk(off.id).card.data.character_book).toBeUndefined();
+      expect(onDisk(off.id).updatedAt).toBe(off.updatedAt);
+      const on = await create({ lorebookSync: true });
+      expect((await (await sync(on.id, false)).json()).synced).toBe(true);
+      const plain = await create();
+      expect((await (await sync(plain.id, false)).json()).synced).toBe(false);
+    });
+
+    it('refuses a body without a book', async () => {
+      const p = await create();
+      expect((await routeFetch(`/api/projects/${p.id}/lorebook`, json('PUT', {}))).status).toBe(400);
+    });
+  });
+
   describe('/api/projects', () => {
     it('creates a project on disk, seeded from the body, with an id of its own', async () => {
       const seed = await create({ id: 'mine', notes: 'from an import' });

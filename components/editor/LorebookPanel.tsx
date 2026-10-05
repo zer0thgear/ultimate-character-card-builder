@@ -14,7 +14,7 @@ import { lorebookEntryMessages, parseLorebookEntry } from '@/lib/assist';
 import { useLlmStream } from '@/hooks/useLlmStream';
 import { SortableList, arrayMove, remapIndex } from '@/components/SortableList';
 import { FieldActions, useCardField, useWritingTools } from '@/components/editor/fieldTools';
-import { AutoTextarea, Button, ChipInput, Empty, IconButton, Modal, NumberInput, Section, TokenBadge, Toggle, confirmDialog, cx, downloadBlob, enterSends, fileBytes, inputClass, pickFiles } from '@/components/ui';
+import { AutoTextarea, Button, ChipInput, Empty, IconButton, Modal, NumberInput, Section, TokenBadge, Toggle, choiceDialog, confirmDialog, cx, downloadBlob, enterSends, fileBytes, inputClass, pickFiles } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { CutOffNotice } from '@/components/llm/CutOffNotice';
 import { AssistReasoning } from '@/components/llm/AssistTrace';
@@ -22,7 +22,7 @@ import { ReferenceTray, referenceConnectionId, useReferences } from '@/component
 import { withReferences } from '@/lib/references';
 import { useLorebookStore } from '@/store/lorebookStore';
 import { openLorebooks, pickBankLorebook } from '@/components/LorebookBank';
-import { copyFromCard, hasCardLore } from '@/lib/lorebookBank';
+import { bankName, cardBookForBank, copyFromCard, hasCardLore, sameLore, syncsLorebook } from '@/lib/lorebookBank';
 import { WizardButton } from '@/components/loreWizard/LoreWizard';
 
 /** Editing a lorebook of the bank (components/LorebookBank.tsx) rather than
@@ -119,36 +119,94 @@ export function LorebookPanel() {
   }
 
   return (
-    <LorebookEditor
-      book={book}
-      setBook={setBook}
-      actions={
-        <>
-          {writingTools && <WizardButton size="sm" />}
-          <Button size="sm" onClick={() => void importBook()}>
-            Import…
-          </Button>
-          <Button size="sm" onClick={() => void fromBank()} title="Add the entries of one of your lorebooks (📖 Lorebooks) to this one">
-            📖 Add from…
-          </Button>
-          <Button size="sm" disabled={!book.entries.length} onClick={() => void toBank()} title="Put a copy of this lorebook in 📖 Lorebooks, to attach to chats, personas or every chat">
-            📖 To Lorebooks
-          </Button>
-          <Button size="sm" onClick={() => downloadBlob(JSON.stringify(lorebookFile(book), null, 2), `${book.name || (card ? cardFileName(card) : 'lorebook')} lorebook.json`, 'application/json')}>
-            Export
-          </Button>
-          <IconButton
-            title="Remove the lorebook from this card"
-            tone="danger"
-            onClick={async () => {
-              if (await confirmDialog({ title: 'Remove this lorebook?', body: `All ${book.entries.length} entries go with it. Undo brings it back.`, confirmLabel: 'Remove', danger: true })) setBook(undefined);
-            }}
-          >
-            🗑
-          </IconButton>
-        </>
-      }
-    />
+    <div className="flex flex-col gap-3">
+      <CardSyncRow />
+      <LorebookEditor
+        book={book}
+        setBook={setBook}
+        actions={
+          <>
+            {writingTools && <WizardButton size="sm" />}
+            <Button size="sm" onClick={() => void importBook()}>
+              Import…
+            </Button>
+            <Button size="sm" onClick={() => void fromBank()} title="Add the entries of one of your lorebooks (📖 Lorebooks) to this one">
+              📖 Add from…
+            </Button>
+            <Button size="sm" disabled={!book.entries.length} onClick={() => void toBank()} title="Put a copy of this lorebook in 📖 Lorebooks, to attach to chats, personas or every chat">
+              📖 To Lorebooks
+            </Button>
+            <Button size="sm" onClick={() => downloadBlob(JSON.stringify(lorebookFile(book), null, 2), `${book.name || (card ? cardFileName(card) : 'lorebook')} lorebook.json`, 'application/json')}>
+              Export
+            </Button>
+            <IconButton
+              title="Remove the lorebook from this card"
+              tone="danger"
+              onClick={async () => {
+                if (await confirmDialog({ title: 'Remove this lorebook?', body: `All ${book.entries.length} entries go with it. Undo brings it back.`, confirmLabel: 'Remove', danger: true })) setBook(undefined);
+              }}
+            >
+              🗑
+            </IconButton>
+          </>
+        }
+      />
+    </div>
+  );
+}
+
+/**
+ * Whether this card's lorebook is kept in step with its copy in 📖
+ * Lorebooks (store/lorebookSync.ts): as every card is (the bank's setting),
+ * or this card's own choice. Shown once the card has a copy there.
+ */
+function CardSyncRow() {
+  const project = useProjectStore((s) => s.project);
+  const setLorebookSync = useProjectStore((s) => s.setLorebookSync);
+  const updateCard = useProjectStore((s) => s.updateCard);
+  const books = useLorebookStore((s) => s.books);
+  const setBankBook = useLorebookStore((s) => s.setBook);
+  const syncDefault = useLlmStore((s) => s.chatSettings.syncCardLorebooks === true);
+  const copy = project ? copyFromCard(books, project.id) : undefined;
+  if (!project || !copy) return null;
+  const synced = syncsLorebook(project, syncDefault);
+  const value = project.lorebookSync === undefined ? '' : String(project.lorebookSync);
+  const choose = async (v: string) => {
+    const next = v === '' ? undefined : v === 'true';
+    const book = project.card.data.character_book;
+    // Turning syncing on with the two apart: one of them wins.
+    if (!synced && syncsLorebook({ lorebookSync: next }, syncDefault) && book && !sameLore(book, copy.book)) {
+      const which = await choiceDialog({
+        title: 'Which lorebook do you keep?',
+        body: `This card's lorebook and its copy in Lorebooks ("${bankName(copy)}") are different. Syncing starts from one of them, and the other is replaced (undo brings the card's back).`,
+        choices: [
+          { value: 'card', label: "This card's" },
+          { value: 'bank', label: 'The copy in Lorebooks' },
+        ],
+      });
+      if (!which) return;
+      setLorebookSync(next);
+      if (which === 'card') setBankBook(copy.id, cardBookForBank(book, copy.book));
+      else updateCard((d) => ({ ...d, character_book: { ...structuredClone(copy.book), name: book.name } }));
+      return;
+    }
+    setLorebookSync(next);
+  };
+  return (
+    <div className={cx('flex flex-wrap items-center gap-2 rounded-md border px-3 py-1.5 text-xs', synced ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-200' : 'border-slate-800 text-slate-400')}>
+      <span className="flex-1">
+        {synced ? '🔗 In sync with' : 'A copy is in'}{' '}
+        <button type="button" className="underline decoration-dotted hover:text-slate-100" onClick={() => openLorebooks(copy.id)}>
+          &quot;{bankName(copy)}&quot;
+        </button>{' '}
+        in Lorebooks{synced ? ': changes to either go to both.' : ", which doesn't change with this card."}
+      </span>
+      <select value={value} onChange={(e) => void choose(e.target.value)} className={cx(inputClass, 'w-auto py-0.5 text-xs')} title="Keep this card's lorebook and its copy in Lorebooks in step, both ways">
+        <option value="">Sync: as every card ({syncDefault ? 'on' : 'off'})</option>
+        <option value="true">Sync this card</option>
+        <option value="false">Don&apos;t sync this card</option>
+      </select>
+    </div>
   );
 }
 
