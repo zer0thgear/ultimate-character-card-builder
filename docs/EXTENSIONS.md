@@ -147,6 +147,7 @@ A pack can add UI of its own. Each piece is an HTML page from the pack's `files`
 | `editorTab` | A tab in the card editor. |
 | `fieldAction` | A button (its `icon`) on the card's text fields, opening a dialog. `fields` limits it to some fields by path (`description`, `first_mes`, `alternate_greetings`…; a prefix covers the fields under it), and leaving it out means every text field. The dialog gets the field in `uccb.context.field`. |
 | `command` | A button in the header, opening a dialog. |
+| `brainstormWizard` | A button (its `icon` and `label`) in the ✨ Brainstorm tab. The wizard takes the tab's place until **← Brainstorm**, and keeps its place while you're back in the chat. Good for a guided process: steps that ask, call `uccb.llm.complete` and write the card with `uccb.card.setFields`. |
 | `dialog` | A dialog the pack opens itself with `uccb.ui.openDialog(id, data)`; it gets `data` in `uccb.context.data`. |
 | `settings` | A section under the pack in Settings → Extensions. |
 

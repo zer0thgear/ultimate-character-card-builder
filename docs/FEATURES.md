@@ -242,6 +242,8 @@ Your persona is the player character (the one picked for the adventure, which th
 
 **✨ Brainstorm** is a free-form chat with the writing assistant, which always sees the card as it is right now. Replies can be copied or added to the card's Notes.
 
+Extension packs can add **wizards** here, as buttons beside the assistant picker: guided processes of their own (see [Extension packs](EXTENSIONS.md)). A wizard takes the tab's place until **← Brainstorm**, and keeps its place while you go back to the chat.
+
 ## The helper
 
 **🛎 Helper** (a tab on the home screen, or **🛎 Ask the helper**) is a chat that answers questions about UCCB itself: where a button is, what a setting does, which macros work, how to get set up. It answers from this guide, the tour and the README, sending the parts of them each question is about, so it knows the version you're running. It uses the writing assistant's connection unless you pick another one beside it.

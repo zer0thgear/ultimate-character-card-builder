@@ -269,7 +269,7 @@ export function describeContributions(c: PackContributions): string[] {
 
 /** What a pack's UI adds, in a few words each ("a dock tab: Names"). */
 export function describeUi(p: ExtensionPack): string[] {
-  const where: Record<UiSlot, string> = { dockTab: 'dock tab', editorTab: 'editor tab', fieldAction: 'field button', command: 'header button', dialog: 'dialog', settings: 'settings section' };
+  const where: Record<UiSlot, string> = { dockTab: 'dock tab', editorTab: 'editor tab', fieldAction: 'field button', command: 'header button', brainstormWizard: 'Brainstorm wizard', dialog: 'dialog', settings: 'settings section' };
   return (p.ui ?? []).map((u) => `${where[u.slot]}: ${u.icon ? `${u.icon} ` : ''}${u.label}`);
 }
 
