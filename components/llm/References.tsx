@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- thumbnails are data: and blob: URLs, which next/image can't optimise */
 
 import { useMemo, useState } from 'react';
+import { create } from 'zustand';
 import { useProjectStore } from '@/store/projectStore';
 import { useSessionStore, imageBlob } from '@/store/sessionStore';
 import { useLlmStore } from '@/store/llmStore';
@@ -12,6 +13,7 @@ import { isPng, readTextChunks } from '@/lib/png';
 import { importCardFile } from '@/lib/cardFile';
 import { imageDataUrl, imageForVision } from '@/lib/visionImage';
 import { hasPictures, type Reference } from '@/lib/references';
+import type { ProjectSummary } from '@/types/project';
 import { openLightbox } from '@/components/Lightbox';
 import { Button, IconButton, Modal, cx, fileBytes, inputClass, pickFiles } from '@/components/ui';
 
@@ -66,6 +68,14 @@ export async function referencesFromFiles(files: File[]): Promise<Reference[]> {
   }
   return out;
 }
+
+/** A card's picture as a picture to attach. */
+const avatarPicture = (id: string, name: string, url: string) => ({
+  id: `avatar:${id}`,
+  name: `${name.trim() || 'Unnamed'}'s picture`,
+  thumb: url,
+  blob: () => fetch(url).then((r) => r.blob()),
+});
 
 async function pictureReference(blob: Blob, name: string, id = uuid()): Promise<Reference> {
   const image = await imageForVision(blob);
@@ -138,9 +148,49 @@ export function ReferenceTray({ refs, onAdd, onRemove, className, label = 'Refer
   );
 }
 
+const usePickFor = create<{ ask: { title: string; refs: Reference[]; done: (refs: Reference[]) => void } | null; set: (ask: { title: string; refs: Reference[]; done: (refs: Reference[]) => void } | null) => void }>((set) => ({
+  ask: null,
+  set: (ask) => set({ ask }),
+}));
+
+/** Opens the picker on its own (for an extension's wizard, say), starting
+ *  from `refs`; resolves with what's attached once it's closed. */
+export function pickReferences(refs: Reference[], title = '📎 Add references'): Promise<Reference[]> {
+  return new Promise((resolve) => {
+    usePickFor.getState().ask?.done(usePickFor.getState().ask!.refs);
+    usePickFor.getState().set({ title, refs, done: resolve });
+  });
+}
+
+/** The picker pickReferences opens, mounted once (Shell). */
+export function ReferencePickHost() {
+  const ask = usePickFor((s) => s.ask);
+  const set = usePickFor((s) => s.set);
+  const [refs, setRefs] = useState<Reference[]>([]);
+  const [shown, setShown] = useState<typeof ask>(null);
+  // A new request starts from what it was given.
+  if (ask !== shown) {
+    setShown(ask);
+    setRefs(ask?.refs ?? []);
+  }
+  if (!ask) return null;
+  return (
+    <ReferencePicker
+      title={ask.title}
+      refs={refs}
+      onAdd={(next) => setRefs((cur) => [...cur, ...next.filter((n) => !cur.some((c) => c.id === n.id))])}
+      onRemove={(id) => setRefs((cur) => cur.filter((r) => r.id !== id))}
+      onClose={() => {
+        ask.done(refs);
+        set(null);
+      }}
+    />
+  );
+}
+
 /** Picking references: a click attaches one, a second click on it takes it
  *  off again. */
-function ReferencePicker({ refs, onAdd, onRemove, onClose }: { refs: Reference[]; onAdd: (r: Reference[]) => void; onRemove: (id: string) => void; onClose: () => void }) {
+function ReferencePicker({ refs, onAdd, onRemove, onClose, title = '📎 Add references' }: { refs: Reference[]; onAdd: (r: Reference[]) => void; onRemove: (id: string) => void; onClose: () => void; title?: string }) {
   const project = useProjectStore((s) => s.project);
   const summaries = useProjectStore((s) => s.summaries);
   const gens = useSessionStore((s) => s.images);
@@ -156,7 +206,9 @@ function ReferencePicker({ refs, onAdd, onRemove, onClose }: { refs: Reference[]
   const pictures = useMemo(() => {
     const kept = (project?.kept ?? []).map((k) => ({ id: `kept:${project!.id}:${k.file}`, name: k.label || 'Kept image', thumb: api.keptUrl(project!.id, k.file), blob: () => fetch(api.keptUrl(project!.id, k.file)).then((r) => r.blob()) }));
     const recent = [...gens].sort((a, b) => b.timestamp - a.timestamp).slice(0, 40).map((g) => ({ id: `gen:${g.id}`, name: `Gen ${new Date(g.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, thumb: g.url, blob: () => imageBlob(g) }));
-    return { kept, recent };
+    // The open card's own picture, whether or not it's kept anywhere.
+    const own = project?.avatar ? [avatarPicture(project.id, project.card.data.name, api.avatarUrl(project.id, project.avatar)!)] : [];
+    return { own, kept, recent };
   }, [project, gens]);
 
   const addCard = async (id: string, name: string) => {
@@ -187,28 +239,48 @@ function ReferencePicker({ refs, onAdd, onRemove, onClose }: { refs: Reference[]
     if (files.length) onAdd(await referencesFromFiles(files));
   };
 
-  const tile = (id: string, thumb: string | undefined, name: string, onClick: () => void, fallback: string) => (
-    <button
-      key={id}
-      type="button"
-      onClick={onClick}
-      title={has(id) ? `${name} (attached: click again to take it off)` : name}
-      aria-pressed={has(id)}
-      className={cx('relative flex flex-col items-center gap-1 rounded-md p-1 text-[11px] text-slate-300 hover:bg-slate-800', has(id) && 'bg-violet-500/15 ring-1 ring-violet-500/50')}
-    >
-      {thumb ? <img src={thumb} alt="" loading="lazy" className="aspect-square w-full rounded object-cover" /> : <span className="flex aspect-square w-full items-center justify-center rounded bg-slate-800 text-2xl">{fallback}</span>}
-      <span className="w-full truncate text-center">{name}</span>
-      {has(id) && <span className="absolute top-1.5 right-1.5 rounded-full bg-violet-600 px-1 text-[10px] text-white">✓</span>}
-      {busy === id.replace(/^card:/, '') || busy === id ? <span className="absolute inset-0 flex items-center justify-center rounded-md bg-slate-950/60 text-xs">…</span> : null}
-    </button>
+  const tile = (id: string, thumb: string | undefined, name: string, onClick: () => void, fallback: string, corner?: React.ReactNode) => (
+    <div key={id} className="relative">
+      <button
+        type="button"
+        onClick={onClick}
+        title={has(id) ? `${name} (attached: click again to take it off)` : name}
+        aria-pressed={has(id)}
+        className={cx('relative flex w-full flex-col items-center gap-1 rounded-md p-1 text-[11px] text-slate-300 hover:bg-slate-800', has(id) && 'bg-violet-500/15 ring-1 ring-violet-500/50')}
+      >
+        {thumb ? <img src={thumb} alt="" loading="lazy" className="aspect-square w-full rounded object-cover" /> : <span className="flex aspect-square w-full items-center justify-center rounded bg-slate-800 text-2xl">{fallback}</span>}
+        <span className="w-full truncate text-center">{name}</span>
+        {has(id) && <span className="absolute top-1.5 right-1.5 rounded-full bg-violet-600 px-1 text-[10px] text-white">✓</span>}
+        {busy === id.replace(/^card:/, '') || busy === id ? <span className="absolute inset-0 flex items-center justify-center rounded-md bg-slate-950/60 text-xs">…</span> : null}
+      </button>
+      {corner}
+    </div>
   );
+  /** On a card with a picture: attach its picture rather than its text. */
+  const pictureOf = (c: ProjectSummary) => {
+    const url = api.avatarUrl(c.id, c.avatar);
+    if (!url) return undefined;
+    const p = avatarPicture(c.id, c.name, url);
+    return (
+      <button
+        type="button"
+        onClick={() => void addPicture(p)}
+        title={has(p.id) ? `${p.name} (attached: click again to take it off)` : `Attach ${p.name} instead of the card`}
+        aria-label={`${p.name}${has(p.id) ? ' (attached)' : ''}`}
+        aria-pressed={has(p.id)}
+        className={cx('absolute top-1.5 left-1.5 rounded bg-slate-950/80 px-1 text-[11px] leading-5 hover:bg-slate-800', has(p.id) && 'bg-violet-600 text-white hover:bg-violet-500')}
+      >
+        🖼
+      </button>
+    );
+  };
 
   return (
-    <Modal open onClose={onClose} title="📎 Add references" size="lg" footer={<Button variant="primary" onClick={onClose}>Done{refs.length ? ` (${refs.length})` : ''}</Button>}>
+    <Modal open onClose={onClose} title={title} size="lg" footer={<Button variant="primary" onClick={onClose}>Done{refs.length ? ` (${refs.length})` : ''}</Button>}>
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <Button onClick={() => void fromFiles()}>📁 Card or picture file…</Button>
-          <span className="text-xs text-slate-500">PNG/JSON/CHARX cards, or any picture. You can also paste or drop pictures on 📎.</span>
+          <span className="text-xs text-slate-500">PNG/JSON/CHARX cards, or any picture. You can also paste or drop pictures on 📎. 🖼 on a card attaches its picture instead of its text.</span>
         </div>
 
         <section className="flex flex-col gap-2">
@@ -218,7 +290,7 @@ function ReferencePicker({ refs, onAdd, onRemove, onClose }: { refs: Reference[]
           </div>
           {cards.length ? (
             <div className="grid max-h-64 grid-cols-4 gap-1 overflow-y-auto sm:grid-cols-6">
-              {cards.map((c) => tile(`card:${c.id}`, api.avatarUrl(c.id, c.avatar) ?? undefined, c.name || 'Unnamed', () => void addCard(c.id, c.name), '🪪'))}
+              {cards.map((c) => tile(`card:${c.id}`, api.avatarUrl(c.id, c.avatar) ?? undefined, c.name || 'Unnamed', () => void addCard(c.id, c.name), '🪪', pictureOf(c)))}
             </div>
           ) : (
             <p className="text-xs text-slate-500">{query ? 'No cards match.' : 'No other cards yet.'}</p>
@@ -227,8 +299,9 @@ function ReferencePicker({ refs, onAdd, onRemove, onClose }: { refs: Reference[]
 
         <section className="flex flex-col gap-2">
           <h3 className="text-xs font-medium tracking-wide text-slate-400 uppercase">Pictures</h3>
-          {pictures.kept.length + pictures.recent.length ? (
+          {pictures.own.length + pictures.kept.length + pictures.recent.length ? (
             <div className="grid max-h-64 grid-cols-4 gap-1 overflow-y-auto sm:grid-cols-6">
+              {pictures.own.map((p) => tile(p.id, p.thumb, p.name, () => void addPicture(p), '🖼'))}
               {pictures.kept.map((p) => tile(p.id, p.thumb, p.name, () => void addPicture(p), '🖼'))}
               {pictures.recent.map((p) => tile(p.id, p.thumb, p.name, () => void addPicture(p), '🖼'))}
             </div>

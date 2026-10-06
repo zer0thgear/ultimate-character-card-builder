@@ -24,6 +24,7 @@ import { useSessionStore as useGenSession } from '@/store/sessionStore';
 import { VisionWriteHost } from '@/components/VisionWriteDialog';
 import { ExtensionHosts } from '@/components/ExtensionSlots';
 import { ExtDialogHost, openExtDialog } from '@/components/extensions/SandboxFrame';
+import { ReferencePickHost } from '@/components/llm/References';
 import { usePackStore } from '@/store/packStore';
 import { ChatCardActions, ChatCardList, ChatHeaderAvatar, ChatHome, ChatScreen, switchAppMode } from '@/components/chatmode/ChatMode';
 import { CardListMeta } from '@/components/CardListMeta';
@@ -200,6 +201,7 @@ export function Shell() {
       <VisionWriteHost />
       <ExtensionHosts />
       <ExtDialogHost />
+      <ReferencePickHost />
       <AssistInspectorHost />
       <Lightbox />
       <TouchTips />

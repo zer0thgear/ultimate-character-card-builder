@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { attachReferences, referenceBlock, withReferences, type Reference } from '@/lib/references';
+import { attachReferences, referenceBlock, referenceSummary, referencesById, withReferences, type Reference } from '@/lib/references';
 import { setTemplateOverrides } from '@/lib/assist';
 import { newCard } from '@/lib/cardSpec';
 
@@ -29,6 +29,15 @@ describe('references', () => {
     expect(msgs[1]).toEqual({ role: 'user', content: 'a' });
     expect(msgs[3].images).toHaveLength(1);
     expect(msgs[0]).toEqual({ role: 'system', content: 's' });
+  });
+
+  it("tells an extension only what a reference is, and finds the ones it names", () => {
+    expect([sister, pic].map(referenceSummary)).toEqual([
+      { id: 'c1', kind: 'card', name: 'Ada' },
+      { id: 'p1', kind: 'image', name: 'castle.png' },
+    ]);
+    expect(referencesById([sister, pic], ['p1', 'gone', 7])).toEqual([pic]);
+    expect(referencesById([sister, pic], 'c1')).toEqual([]);
   });
 
   it('uses your edited wording', () => {

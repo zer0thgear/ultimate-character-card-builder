@@ -42,6 +42,9 @@ export const METHOD_PERMISSION: Record<string, Permission | null> = {
   'lorebooks.list': 'lorebooks:read',
   'lorebooks.add': 'lorebooks:write',
   'llm.complete': 'llm',
+  'references.pick': 'llm',
+  'references.list': 'llm',
+  'references.remove': 'llm',
   'storage.get': null,
   'storage.set': null,
   'ui.toast': null,
@@ -176,6 +179,11 @@ const BOOTSTRAP = `(() => {
     }),
     llm: Object.freeze({
       complete: (messages, opts) => call('llm.complete', Object.assign({ messages }, opts || {})),
+    }),
+    references: Object.freeze({
+      pick: () => call('references.pick'),
+      list: () => call('references.list'),
+      remove: (id) => call('references.remove', { id }),
     }),
     storage: Object.freeze({
       get: (key) => call('storage.get', { key }),
