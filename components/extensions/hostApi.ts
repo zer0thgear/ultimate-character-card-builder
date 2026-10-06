@@ -9,7 +9,7 @@ import { useLorebookStore } from '@/store/lorebookStore';
 import { useLlmStore } from '@/store/llmStore';
 import { usePackStore } from '@/store/packStore';
 import { toast } from '@/store/uiStore';
-import { readPackData, writePackData } from '@/store/packDataCache';
+import { readPackData, updatePackData } from '@/store/packDataCache';
 import { llmCall } from '@/components/llm/llmCall';
 
 // The app's side of an extension's API (lib/extensionSandbox.ts): what each
@@ -104,10 +104,13 @@ export async function handleCall(host: CallHost, method: string, params: unknown
     }
     case 'storage.set': {
       if (typeof p.key !== 'string' || !p.key) throw new CallError('storage.set needs a key.');
-      const data = { ...(await readPackData(host.packId)) };
-      if (p.value === undefined || p.value === null) delete data[p.key];
-      else data[p.key] = p.value;
-      await writePackData(host.packId, data);
+      const key = p.key;
+      await updatePackData(host.packId, (old) => {
+        const data = { ...old };
+        if (p.value === undefined || p.value === null) delete data[key];
+        else data[key] = p.value;
+        return data;
+      });
       return { ok: true };
     }
     case 'ui.toast': {

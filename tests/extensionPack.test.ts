@@ -175,6 +175,13 @@ describe('packs with code', () => {
     expect(newPermissions({ ...p, permissions: ['card:read', 'llm', 'card:write'], network: [...p.network!, 'other.example.com'] }, approved)).toEqual({ permissions: ['card:write'], network: ['other.example.com'], newCode: false });
   });
 
+  it('takes a wizard for the Brainstorm tab', () => {
+    const { pack: p, warnings } = validatePack({ ...codePack, ui: [{ id: 'setup', slot: 'brainstormWizard', label: 'Card setup', icon: '🧙', entry: 'tab.html' }] });
+    expect(p.ui).toEqual([{ id: 'setup', slot: 'brainstormWizard', label: 'Card setup', icon: '🧙', entry: 'tab.html' }]);
+    expect(warnings.join(' ')).not.toMatch(/setup/);
+    expect(describeUi(p)).toEqual(['Brainstorm wizard: 🧙 Card setup']);
+  });
+
   it('reads the example extension in docs/ with nothing left out', () => {
     const { pack: p, warnings } = parsePack(readFileSync('docs/extensions/name-ideas.uccb.json', 'utf8'));
     expect(warnings).toEqual([]);

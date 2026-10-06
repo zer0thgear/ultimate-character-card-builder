@@ -27,6 +27,7 @@ export const UI_SLOTS = {
   editorTab: 'a tab in the card editor',
   fieldAction: "a button on the card's text fields, opening a dialog",
   command: 'a button in the header, opening a dialog',
+  brainstormWizard: 'a wizard in the Brainstorm tab',
   dialog: 'a dialog the extension opens itself',
   settings: 'a section in Settings → Extensions',
 } as const;
