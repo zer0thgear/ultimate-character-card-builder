@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { chubCharacter, chubCharacterId, chubLink } from '@/lib/server/chub';
+import { chubCharacter, chubCharacterId, chubLink, chubLinkCharacter } from '@/lib/server/chub';
 
 describe('Chub links', () => {
   it('reads character links and bare paths, as SillyTavern does', () => {
@@ -11,7 +11,7 @@ describe('Chub links', () => {
   });
 
   it("reads Cardbox's links (Chub's mirror) as the same characters", () => {
-    expect(chubLink('https://cardbox.moe/characters/kenv/serene-white-mage-97239a087c03')).toEqual({ id: 'kenv/serene-white-mage-97239a087c03', source: 'Cardbox' });
+    expect(chubLink('https://cardbox.moe/characters/kenv/serene-white-mage-97239a087c03')).toEqual({ id: 'kenv/serene-white-mage-97239a087c03', source: 'Cardbox', apiBase: 'https://cardbox.moe/gateway' });
     expect(chubLink('https://chub.ai/characters/kenv/serene-white-mage-97239a087c03')).toEqual({ id: 'kenv/serene-white-mage-97239a087c03', source: 'Chub' });
     expect(chubLink('https://notcardbox.moe/characters/a/b')).toBeNull();
   });
@@ -65,5 +65,42 @@ describe('a Chub character as a card', () => {
     );
     const r = await chubCharacter('someone/x');
     expect(r.avatar).toBeUndefined();
+  });
+});
+
+describe('fetching a link', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const node = { node: { definition: { name: 'Avery' } } };
+  /** Answers each API (by its start) with a status; records what was asked. */
+  const apis = (answers: Record<string, number>) => {
+    const asked: string[] = [];
+    vi.stubGlobal('fetch', async (url: string | URL) => {
+      const u = String(url);
+      asked.push(u);
+      const [, status] = Object.entries(answers).find(([start]) => u.startsWith(start)) ?? ['', 404];
+      return status === 200 ? Response.json(node) : new Response('no', { status });
+    });
+    return asked;
+  };
+
+  it("fetches a Cardbox link through Cardbox, which has cards Chub hides", async () => {
+    const asked = apis({ 'https://cardbox.moe/gateway/': 200, 'https://api.chub.ai/': 404 });
+    const r = await chubLinkCharacter('https://cardbox.moe/characters/marcnen/avery-6dd5e06acae5');
+    expect(r?.source).toBe('Cardbox');
+    expect(asked).toEqual(['https://cardbox.moe/gateway/api/characters/marcnen/avery-6dd5e06acae5?full=true']);
+  });
+
+  it("falls back to Chub when Cardbox can't be reached, but not when it hasn't the card", async () => {
+    apis({ 'https://cardbox.moe/gateway/': 502, 'https://api.chub.ai/': 200 });
+    expect((await chubLinkCharacter('https://cardbox.moe/characters/a/b'))?.source).toBe('Cardbox (from Chub)');
+    const asked = apis({ 'https://cardbox.moe/gateway/': 404, 'https://api.chub.ai/': 200 });
+    await expect(chubLinkCharacter('https://cardbox.moe/characters/a/b')).rejects.toThrow('Cardbox has no character at a/b.');
+    expect(asked).toHaveLength(1);
+  });
+
+  it('says a card Chub lacks may be hidden there, and leaves other links alone', async () => {
+    apis({ 'https://api.chub.ai/': 404 });
+    await expect(chubLinkCharacter('https://chub.ai/characters/a/b')).rejects.toThrow(/hidden where you are.*cardbox\.moe/);
+    expect(await chubLinkCharacter('https://example.com/characters/a/b')).toBeNull();
   });
 });

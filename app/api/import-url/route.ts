@@ -1,5 +1,5 @@
 import { serverExtensions } from '@/lib/extensions/server';
-import { chubCharacter, chubLink } from '@/lib/server/chub';
+import { chubCharacterId, chubLinkCharacter, type chubCharacter } from '@/lib/server/chub';
 import { handle, jsonBody } from '@/lib/server/http';
 import { BadRequestError } from '@/lib/server/storage';
 
@@ -30,12 +30,9 @@ export async function POST(req: Request) {
         if (found) return reply(found, from());
       }
     }
-    // Chub, or a mirror of it (Cardbox): fetched from Chub either way.
-    const chub = chubLink(text);
-    if (chub) {
-      const found = await chubCharacter(chub.id);
-      return reply(chub.source === 'Chub' ? found : { ...found, source: `${chub.source} (from Chub)` }, from(chub.id));
-    }
+    // Chub, or a mirror of it (Cardbox, fetched through the mirror).
+    const chub = await chubLinkCharacter(text);
+    if (chub) return reply(chub, from(chubCharacterId(text) ?? undefined));
     throw new BadRequestError('UCCB can import Chub and Cardbox character links (…/characters/creator/name) for now; that isn’t one.');
   });
 }
