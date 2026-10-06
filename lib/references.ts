@@ -50,3 +50,14 @@ export function withReferences(messages: LlmMessage[], refs: Reference[]): LlmMe
 }
 
 export const hasPictures = (refs: Reference[] | undefined) => !!refs?.some((r) => r.kind === 'image');
+
+/** What an extension is told about a reference you picked for it: what it
+ *  is, never what's in it (the app attaches that to its requests). */
+export const referenceSummary = (r: Reference) => ({ id: r.id, kind: r.kind, name: r.name });
+
+/** The references of `held` named by `ids` (unknown ids are left out). */
+export function referencesById(held: readonly Reference[], ids: unknown): Reference[] {
+  if (!Array.isArray(ids)) return [];
+  const want = new Set(ids.filter((i): i is string => typeof i === 'string'));
+  return held.filter((r) => want.has(r.id));
+}

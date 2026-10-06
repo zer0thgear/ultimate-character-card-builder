@@ -252,8 +252,9 @@ Pick a **personality** to have it ham up a trope while it helps: Helpful (plain)
 
 ## References
 
-**📎 References** attaches other cards and pictures to an assistant request, for "write her sister", "match this card's style" or "set a greeting here". It's on ✨ for fields, ✨ New greeting, ✨ Lorebook entry and Brainstorm. The picker offers your other cards, this card's kept gens and your recent gens, or a file: a PNG, JSON or CHARX card, or any picture. You can also paste a picture into the request's text box, or drop files on 📎.
+**📎 References** attaches other cards and pictures to an assistant request, for "write her sister", "match this card's style" or "set a greeting here". It's on ✨ for fields, ✨ New greeting, ✨ Lorebook entry and Brainstorm. The picker offers your other cards, this card's own picture, its kept gens and your recent gens, or a file: a PNG, JSON or CHARX card, or any picture. You can also paste a picture into the request's text box, or drop files on 📎.
 
+- **🖼 on a card** in the picker attaches that card's picture rather than its text, without keeping it anywhere first.
 - **Cards** go in as text, the way the card being worked on is sent (8,000 characters each, shared out when there are several), under a note saying they're for reference, not the card itself. A PNG counts as a card when it has card data in it; otherwise it's a picture.
 - **Pictures** go with the message, scaled like Write from image, and a request with pictures goes to the **Vision model** instead of the assistant's (the tray says which).
 - In Brainstorm, references stay with the message they were sent with, so later turns still see them. A thread with pictures in it keeps going to the vision model until you Clear it.

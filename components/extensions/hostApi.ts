@@ -10,6 +10,8 @@ import { useLlmStore } from '@/store/llmStore';
 import { usePackStore } from '@/store/packStore';
 import { toast } from '@/store/uiStore';
 import { readPackData, updatePackData } from '@/store/packDataCache';
+import { referenceSummary, referencesById, withReferences, type Reference } from '@/lib/references';
+import { pickReferences, referenceConnectionId } from '@/components/llm/References';
 import { llmCall } from '@/components/llm/llmCall';
 
 // The app's side of an extension's API (lib/extensionSandbox.ts): what each
@@ -64,6 +66,10 @@ function checkMessages(v: unknown): LlmMessage[] {
   });
 }
 
+/** The references you've picked for each extension, until the page is
+ *  reloaded. Its code only ever gets their names (referenceSummary). */
+const heldReferences = new Map<string, Reference[]>();
+
 export async function handleCall(host: CallHost, method: string, params: unknown): Promise<unknown> {
   const p = isObj(params) ? params : {};
   switch (method) {
@@ -90,13 +96,27 @@ export async function handleCall(host: CallHost, method: string, params: unknown
       return { id: saved.id };
     }
     case 'llm.complete': {
-      const messages = checkMessages(p.messages);
+      // References it names go on the request (pictures, to the vision model).
+      const refs = referencesById(heldReferences.get(host.packId) ?? [], p.references);
+      const messages = withReferences(checkMessages(p.messages), refs);
       const { connections, assistConnectionId } = useLlmStore.getState();
-      const connection = connections.find((c) => c.id === assistConnectionId) ?? connections[0] ?? null;
+      const id = referenceConnectionId(refs) ?? assistConnectionId;
+      const connection = connections.find((c) => c.id === id) ?? connections[0] ?? null;
       const label = typeof p.label === 'string' && p.label.trim() ? `: ${p.label.trim().slice(0, 60)}` : '';
       const r = await llmCall(connection, `🧩 ${host.packName}${label}`, messages);
       if (r.error) throw new CallError(r.error);
       return { text: r.text };
+    }
+    case 'references.pick': {
+      const refs = await pickReferences(heldReferences.get(host.packId) ?? [], `📎 References for ${host.packName}`);
+      heldReferences.set(host.packId, refs);
+      return refs.map(referenceSummary);
+    }
+    case 'references.list':
+      return (heldReferences.get(host.packId) ?? []).map(referenceSummary);
+    case 'references.remove': {
+      heldReferences.set(host.packId, (heldReferences.get(host.packId) ?? []).filter((r) => r.id !== p.id));
+      return (heldReferences.get(host.packId) ?? []).map(referenceSummary);
     }
     case 'storage.get': {
       const data = await readPackData(host.packId);

@@ -195,6 +195,8 @@ describe('the sandbox', () => {
     expect(callAllowed('card.get', [])).toBe(false);
     expect(callAllowed('card.setFields', ['card:read'])).toBe(false);
     expect(callAllowed('ui.toast', [])).toBe(true);
+    expect(callAllowed('references.pick', [])).toBe(false);
+    expect(callAllowed('references.pick', ['llm'])).toBe(true);
     expect(callAllowed('settings.get', ['card:read', 'card:write', 'llm'])).toBe(false);
     expect(callAllowed('__proto__', [])).toBe(false);
   });
