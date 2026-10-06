@@ -6,11 +6,14 @@ import type { UrlCardImport } from '@/lib/extensions/types';
 // "Import from URL" fetches them: the project's definition from Chub's API,
 // made into a V2 card, and its picture at full size. Links to Chub mirrors
 // (Cardbox) name the same characters by the same paths, and are fetched
-// from Chub the same way.
+// through the mirror's copy of Chub's API: it has characters Chub hides in
+// some places (NSFL ones), which is what the mirror is for. If the mirror
+// can't be reached, Chub's own API is tried.
 
 const CHUB_HOSTS = ['chub.ai', 'characterhub.org'];
-/** Sites that mirror Chub's character pages at Chub's paths. */
-const CHUB_MIRRORS: Record<string, string> = { 'cardbox.moe': 'Cardbox' };
+/** Sites that mirror Chub's character pages at Chub's paths, and where
+ *  their copy of Chub's API is. */
+const CHUB_MIRRORS: Record<string, { name: string; apiBase: string }> = { 'cardbox.moe': { name: 'Cardbox', apiBase: 'https://cardbox.moe/gateway' } };
 /** Where Chub keeps pictures; the only hosts a picture is fetched from. */
 const PICTURE_HOSTS = ['chub.ai', 'characterhub.org', 'charhub.io'];
 
@@ -18,21 +21,48 @@ const onHost = (host: string, domains: string[]) => domains.some((d) => host ===
 
 export const isChubHost = (host: string) => onHost(host.toLowerCase(), CHUB_HOSTS);
 
-/** The mirror a host belongs to ("Cardbox"), if it's one. */
+/** The mirror a host belongs to (Cardbox), if it's one. */
 const mirrorOf = (host: string) => Object.entries(CHUB_MIRRORS).find(([domain]) => onHost(host.toLowerCase(), [domain]))?.[1];
 
-/** A Chub character link (or a mirror's) as its id and where it's from. */
-export function chubLink(link: string): { id: string; source: string } | null {
+/** A Chub character link (or a mirror's) as its id, where it's from, and
+ *  (for a mirror) where its copy of Chub's API is. */
+export function chubLink(link: string): { id: string; source: string; apiBase?: string } | null {
   const id = chubCharacterId(link);
   if (!id) return null;
-  let source = 'Chub';
   try {
     const mirror = mirrorOf(new URL(link.trim()).hostname);
-    if (mirror) source = mirror;
+    if (mirror) return { id, source: mirror.name, apiBase: mirror.apiBase };
   } catch {
     /* a bare path */
   }
-  return { id, source };
+  return { id, source: 'Chub' };
+}
+
+/**
+ * The character a Chub link (or a mirror's) names. A mirror's link is
+ * fetched through the mirror; if that fails other than by not having it,
+ * from Chub. Chub not having it says it may be hidden there.
+ */
+export async function chubLinkCharacter(link: string): Promise<UrlCardImport | null> {
+  const found = chubLink(link);
+  if (!found) return null;
+  const { id, source, apiBase } = found;
+  if (apiBase) {
+    try {
+      return await chubCharacter(id, { apiBase, source });
+    } catch (err) {
+      if (err instanceof NotFoundError) throw err;
+      const viaChub = await chubCharacter(id).catch(() => null);
+      if (!viaChub) throw err;
+      return { ...viaChub, source: `${source} (from Chub)` };
+    }
+  }
+  try {
+    return await chubCharacter(id);
+  } catch (err) {
+    if (!(err instanceof NotFoundError)) throw err;
+    throw new NotFoundError(`Chub has no character at ${id}. If it's there but hidden where you are (Chub hides NSFL cards in some places), its link on cardbox.moe may work.`);
+  }
 }
 
 /**
