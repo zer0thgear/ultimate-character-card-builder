@@ -38,7 +38,7 @@ import type { CardData } from '@/types/card';
 import type { ChatImage, ChatMessage } from '@/types/project';
 import { uuid } from '@/lib/uuid';
 import { copyText } from '@/lib/clipboard';
-import { HEADING_CLASSES, formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
+import { CODE_BLOCK_CLASS, CODE_CLASS, HEADING_CLASSES, formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
 import { AuthorsNoteDialog } from '@/components/dock/AuthorsNote';
 import { summaryInjection, summarySettings } from '@/lib/chatSummary';
 import { ChatSummaryPanel, useChatSummary } from '@/components/dock/ChatSummaryPanel';
@@ -870,6 +870,14 @@ function renderNodes(nodes: FormatNode[]): React.ReactNode {
       <span key={i} role="heading" aria-level={n.level} className={cx('block font-semibold text-slate-100', HEADING_CLASSES[n.level])}>
         {renderNodes(n.children)}
       </span>
+    ) : n.kind === 'code' ? (
+      <code key={i} className={CODE_CLASS}>
+        {n.text}
+      </code>
+    ) : n.kind === 'codeBlock' ? (
+      <pre key={i} className={CODE_BLOCK_CLASS} title={n.lang || undefined}>
+        <code>{n.text}</code>
+      </pre>
     ) : (
       <q key={i}>{renderNodes(n.children)}</q>
     ),
