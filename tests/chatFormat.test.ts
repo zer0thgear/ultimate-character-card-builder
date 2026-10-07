@@ -90,3 +90,32 @@ describe('headings', () => {
     expect(formatChat('#')).toEqual(['#']);
   });
 });
+
+describe('code', () => {
+  it('shows `inline code` as written, styling characters and all', () => {
+    expect(formatChat('Type `rm -rf *tmp*` to clean up.')).toEqual(['Type ', { kind: 'code', text: 'rm -rf *tmp*' }, ' to clean up.']);
+    expect(formatChat('``a `tick` inside``')).toEqual([{ kind: 'code', text: 'a `tick` inside' }]);
+    expect(formatChat('` `` `')).toEqual([{ kind: 'code', text: '``' }]);
+    // Inside speech or actions too.
+    expect(formatChat('*She types `ls` quietly.*')).toEqual([{ kind: 'em', children: ['She types ', { kind: 'code', text: 'ls' }, ' quietly.'] }]);
+  });
+
+  it('shows a fenced block as written, across lines, with its language', () => {
+    expect(formatChat('Look:\n```js\nconst a = "*b*";\n\nlog(a);\n```\nDone.')).toEqual([
+      'Look:\n',
+      { kind: 'codeBlock', text: 'const a = "*b*";\n\nlog(a);', lang: 'js' },
+      'Done.',
+    ]);
+    expect(formatChat('~~~\nplain\n~~~')).toEqual([{ kind: 'codeBlock', text: 'plain' }]);
+    expect(formatChat('```\n```')).toEqual([{ kind: 'codeBlock', text: '' }]);
+  });
+
+  it('runs a block still being written to the end', () => {
+    expect(formatChat('```py\nprint(1)\nprint(')).toEqual([{ kind: 'codeBlock', text: 'print(1)\nprint(', lang: 'py' }]);
+  });
+
+  it('leaves a lone backtick, and a fence mid-line, alone', () => {
+    expect(formatChat("It's 5` tall.")).toEqual(["It's 5` tall."]);
+    expect(formatChat('Say ```hi``` now')).toEqual(['Say ', { kind: 'code', text: 'hi' }, ' now']);
+  });
+});

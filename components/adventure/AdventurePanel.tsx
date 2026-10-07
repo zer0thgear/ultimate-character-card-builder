@@ -5,7 +5,7 @@ import type { AdventureCtx, UsageTally } from '@/lib/adventure';
 import type { AdventureEntry, AdventureSession } from '@/types/adventure';
 import { callsPerTurn, effectiveWorld, openingMessages, withOverride, runTurn, tallyUsage, undoLastTurn } from '@/lib/adventure';
 import { chatGreeting, loreDefaults, macroExpander } from '@/lib/chatPrompt';
-import { HEADING_CLASSES, formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
+import { CODE_BLOCK_CLASS, CODE_CLASS, HEADING_CLASSES, formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
 import { useProjectStore } from '@/store/projectStore';
 import { useAdventureStore } from '@/store/adventureStore';
 import { useLlmStore } from '@/store/llmStore';
@@ -666,6 +666,14 @@ function render(nodes: FormatNode[]): React.ReactNode {
       <span key={i} role="heading" aria-level={n.level} className={`block font-semibold text-slate-100 ${HEADING_CLASSES[n.level]}`}>
         {render(n.children)}
       </span>
+    ) : n.kind === 'code' ? (
+      <code key={i} className={CODE_CLASS}>
+        {n.text}
+      </code>
+    ) : n.kind === 'codeBlock' ? (
+      <pre key={i} className={CODE_BLOCK_CLASS} title={n.lang || undefined}>
+        <code>{n.text}</code>
+      </pre>
     ) : (
       <q key={i}>{render(n.children)}</q>
     ),
