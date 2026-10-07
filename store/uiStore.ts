@@ -19,6 +19,9 @@ export type DockTab = 'image' | 'gallery' | 'library' | 'chat' | 'assist' | ExtT
  *  building tools out of the way. */
 export type AppMode = 'builder' | 'chat';
 
+/** The card list's width to begin with (and after a double-click on its edge). */
+export const SIDEBAR_WIDTH = 240;
+
 interface UiState {
   appMode: AppMode;
   setAppMode: (m: AppMode) => void;
@@ -43,6 +46,9 @@ interface UiState {
   dockWidth: number;
   setDockWidth: (w: number) => void;
   sidebarOpen: boolean;
+  /** The card list's width on a desktop, in pixels. */
+  sidebarWidth: number;
+  setSidebarWidth: (w: number) => void;
   setSidebarOpen: (open: boolean) => void;
   /** One side fills the window: the card editor, or the dock (whichever
    *  tab is open); the other side makes way (the card list stays as ☰
@@ -75,6 +81,9 @@ interface UiState {
   /** Each mode's tag filter: the cards shown have every one of these. */
   cardTags: Record<AppMode, string[]>;
   setCardTags: (mode: AppMode, tags: string[]) => void;
+  /** Each mode's card lists show only this author's cards ('' for all). */
+  cardAuthor: Record<AppMode, string>;
+  setCardAuthor: (mode: AppMode, author: string) => void;
   /** Local extensions whose buttons on pictures are hidden (by id). */
   hiddenImageActions: string[];
   setImageActionsHidden: (extension: string, hidden: boolean) => void;
@@ -109,6 +118,8 @@ export const useUiStore = create<UiState>()(
       dockWidth: 0.45,
       setDockWidth: (w) => set({ dockWidth: Math.min(0.75, Math.max(0.25, w)) }),
       sidebarOpen: true,
+      sidebarWidth: SIDEBAR_WIDTH,
+      setSidebarWidth: (w) => set({ sidebarWidth: Math.round(Math.min(480, Math.max(180, w))) }),
       fullPane: null,
       setFullPane: (fullPane) => set({ fullPane }),
       chatFullWidth: 0.8,
@@ -130,6 +141,8 @@ export const useUiStore = create<UiState>()(
       setCardSort: (mode, sort) => set((s) => ({ cardSort: { ...s.cardSort, [mode]: sort } })),
       cardTags: { builder: [], chat: [] },
       setCardTags: (mode, tags) => set((s) => ({ cardTags: { ...s.cardTags, [mode]: tags } })),
+      cardAuthor: { builder: '', chat: '' },
+      setCardAuthor: (mode, author) => set((s) => ({ cardAuthor: { ...s.cardAuthor, [mode]: author } })),
       hiddenImageActions: [],
       setImageActionsHidden: (extension, hidden) =>
         set((s) => ({ hiddenImageActions: hidden ? [...new Set([...s.hiddenImageActions, extension])] : s.hiddenImageActions.filter((id) => id !== extension) })),

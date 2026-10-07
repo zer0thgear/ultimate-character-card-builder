@@ -71,3 +71,22 @@ describe('formatChat', () => {
     expect(formatChat('![x](images/a.png) !not an image')).toEqual(['![x](images/a.png) !not an image']);
   });
 });
+
+describe('headings', () => {
+  it('shows # to ###### at the start of a line as headings, taking the line break with them', () => {
+    expect(formatChat('# Day one\nShe waits.')).toEqual([{ kind: 'heading', level: 1, children: ['Day one'] }, 'She waits.']);
+    expect(formatChat('Before.\n### *Chapter* two ##\nAfter.')).toEqual([
+      'Before.\n',
+      { kind: 'heading', level: 3, children: [{ kind: 'em', children: ['Chapter'] }, ' two'] },
+      'After.',
+    ]);
+    expect(formatChat('  ###### Small')).toEqual([{ kind: 'heading', level: 6, children: ['Small'] }]);
+  });
+
+  it('leaves hashtags, sevens and mid-line #s alone', () => {
+    expect(formatChat('#tag and #another')).toEqual(['#tag and #another']);
+    expect(formatChat('####### Too many')).toEqual(['####### Too many']);
+    expect(formatChat('Score: # 1')).toEqual(['Score: # 1']);
+    expect(formatChat('#')).toEqual(['#']);
+  });
+});

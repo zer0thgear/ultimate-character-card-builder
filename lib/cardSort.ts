@@ -1,5 +1,5 @@
-// The card lists' order: by name, when made, when last used (edited or
-// chatted with), or how much it's been chatted with. Each mode keeps its own.
+// The card lists' order: by name, when made, when last used (a message sent
+// or written), or how much it's been chatted with. Each mode keeps its own.
 
 import type { ProjectSummary } from '@/types/project';
 import { formatTokens } from '@/lib/textTokens';
@@ -24,8 +24,10 @@ export const CARD_SORTS: { value: CardSortBy; label: string; /** Which way it go
 
 type Sortable = Pick<ProjectSummary, 'name' | 'createdAt' | 'updatedAt' | 'lastChat' | 'chats' | 'messages' | 'sent' | 'received' | 'tokens'>;
 
-/** When a card was last used: edited, or chatted with. */
-export const lastUsed = (s: Pick<Sortable, 'updatedAt' | 'lastChat'>) => Math.max(s.updatedAt, s.lastChat ?? 0);
+/** When a card was last used: its newest message or version, sent or
+ *  written, in any of its chats (0: never). Opening it, starting a chat or
+ *  editing the card don't count. */
+export const lastUsed = (s: Pick<Sortable, 'lastChat'>) => s.lastChat ?? 0;
 
 const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
@@ -65,7 +67,22 @@ export function sortDetail(s: Sortable, by: CardSortBy): string {
   if (by === 'chats') return `${plural(s.chats ?? 0, 'chat')} · ${plural(s.messages ?? 0, 'message')}`;
   if (by === 'messages') return `${plural(s.messages ?? 0, 'message')} · ${s.sent ?? 0} sent · ${s.received ?? 0} received`;
   if (by === 'tokens') return `${formatTokens(s.tokens ?? 0)} tokens · ${plural(s.messages ?? 0, 'message')}`;
-  return date(lastUsed(s));
+  return lastUsed(s) ? date(lastUsed(s)) : 'Not used yet';
+}
+
+// ─── Search and filters ──────────────────────────────────────────────────────
+
+/** Whether a card matches what's typed in a card list's search: its name,
+ *  a tag or its author. */
+export function cardMatches(s: Pick<ProjectSummary, 'name' | 'tags' | 'creator'>, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  return !q || s.name.toLowerCase().includes(q) || s.tags.some((t) => t.toLowerCase().includes(q)) || !!s.creator?.toLowerCase().includes(q);
+}
+
+/** The cards by `author` (any case; none picked: all of them). */
+export function byAuthor<T extends Pick<ProjectSummary, 'creator'>>(cards: T[], author: string): T[] {
+  const a = author.trim().toLowerCase();
+  return a ? cards.filter((c) => c.creator?.trim().toLowerCase() === a) : cards;
 }
 
 // ─── Tags ────────────────────────────────────────────────────────────────────

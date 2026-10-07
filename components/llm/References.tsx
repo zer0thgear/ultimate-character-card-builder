@@ -13,6 +13,7 @@ import { isPng, readTextChunks } from '@/lib/png';
 import { importCardFile } from '@/lib/cardFile';
 import { imageDataUrl, imageForVision } from '@/lib/visionImage';
 import { hasPictures, type Reference } from '@/lib/references';
+import { cardMatches } from '@/lib/cardSort';
 import type { ProjectSummary } from '@/types/project';
 import { openLightbox } from '@/components/Lightbox';
 import { Button, IconButton, Modal, cx, fileBytes, inputClass, pickFiles } from '@/components/ui';
@@ -200,7 +201,7 @@ function ReferencePicker({ refs, onAdd, onRemove, onClose, title = '📎 Add ref
 
   const cards = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return summaries.filter((s) => s.id !== project?.id && (!q || s.name.toLowerCase().includes(q) || s.tags.some((t) => t.toLowerCase().includes(q))));
+    return summaries.filter((s) => s.id !== project?.id && cardMatches(s, q));
   }, [summaries, project?.id, query]);
 
   const pictures = useMemo(() => {
@@ -286,7 +287,7 @@ function ReferencePicker({ refs, onAdd, onRemove, onClose, title = '📎 Add ref
         <section className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <h3 className="text-xs font-medium tracking-wide text-slate-400 uppercase">Your cards</h3>
-            {summaries.length > 8 && <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" className={cx(inputClass, 'ml-auto h-7 max-w-48 py-0 text-xs')} />}
+            {summaries.length > 8 && <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Name, tag, author" className={cx(inputClass, 'ml-auto h-7 max-w-48 py-0 text-xs')} />}
           </div>
           {cards.length ? (
             <div className="grid max-h-64 grid-cols-4 gap-1 overflow-y-auto sm:grid-cols-6">

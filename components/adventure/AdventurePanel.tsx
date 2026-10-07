@@ -5,7 +5,7 @@ import type { AdventureCtx, UsageTally } from '@/lib/adventure';
 import type { AdventureEntry, AdventureSession } from '@/types/adventure';
 import { callsPerTurn, effectiveWorld, openingMessages, withOverride, runTurn, tallyUsage, undoLastTurn } from '@/lib/adventure';
 import { chatGreeting, loreDefaults, macroExpander } from '@/lib/chatPrompt';
-import { formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
+import { HEADING_CLASSES, formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
 import { useProjectStore } from '@/store/projectStore';
 import { useAdventureStore } from '@/store/adventureStore';
 import { useLlmStore } from '@/store/llmStore';
@@ -662,6 +662,10 @@ function render(nodes: FormatNode[]): React.ReactNode {
     ) : n.kind === 'image' ? (
       // eslint-disable-next-line @next/next/no-img-element
       <img key={i} src={n.src} alt={n.alt} loading="lazy" referrerPolicy="no-referrer" className="my-1 inline-block max-h-96 max-w-full rounded-md align-middle" />
+    ) : n.kind === 'heading' ? (
+      <span key={i} role="heading" aria-level={n.level} className={`block font-semibold text-slate-100 ${HEADING_CLASSES[n.level]}`}>
+        {render(n.children)}
+      </span>
     ) : (
       <q key={i}>{render(n.children)}</q>
     ),

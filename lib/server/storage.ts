@@ -392,7 +392,8 @@ async function chatStats(projectId: string): Promise<Pick<ProjectSummary, 'chats
   );
   const found = stats.filter((s) => !!s);
   if (!found.length) return {};
-  return { chats: found.length, messages: found.reduce((n, s) => n + s.messages, 0), lastChat: Math.max(...found.map((s) => s.updatedAt)), ...sumTallies(found) };
+  const { last, ...tally } = sumTallies(found);
+  return { chats: found.length, messages: found.reduce((n, s) => n + s.messages, 0), ...(last ? { lastChat: last } : {}), ...tally };
 }
 
 export async function getChat(projectId: string, chatId: string): Promise<ChatSession> {

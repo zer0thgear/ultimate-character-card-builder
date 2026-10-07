@@ -16,7 +16,7 @@ import { WritingToolsContext } from '@/components/editor/fieldTools';
 import { openLightbox } from '@/components/Lightbox';
 import { CardListMeta } from '@/components/CardListMeta';
 import { CardSortControl, TagFilter, TagFilterNote, useSortedCards } from '@/components/CardSort';
-import { chatStatsDetail, sortDetail } from '@/lib/cardSort';
+import { cardMatches, chatStatsDetail, sortDetail } from '@/lib/cardSort';
 import { importFromUrl } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
 import { openLorebooks } from '@/components/LorebookBank';
@@ -70,9 +70,9 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
   const [filter, setFilter] = useState('');
   const q = filter.trim().toLowerCase();
   const { sorted, by } = useSortedCards(summaries);
-  const shown = sorted.filter((s) => !q || s.name.toLowerCase().includes(q) || s.tags.some((t) => t.toLowerCase().includes(q)));
+  const shown = sorted.filter((s) => cardMatches(s, q));
   return (
-    <nav className={cx('flex h-full w-60 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950', className)}>
+    <nav className={cx('flex h-full w-60 min-w-0 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950', className)}>
       <div className="flex gap-1.5 p-2">
         <Button size="sm" variant="primary" className="flex-1" onClick={() => void importChatCard().then(() => onPicked?.())} title="Import a PNG, JSON or CHARX card to chat with (or drop one anywhere)">
           Import a card
@@ -83,7 +83,7 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
       </div>
       {summaries.length > 1 && (
         <div className="flex gap-1 px-2 pb-2">
-          {summaries.length > 6 && <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search cards…" className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs')} />}
+          {summaries.length > 6 && <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search name, tag, author…" className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs')} />}
           <CardSortControl className={summaries.length > 6 ? 'w-28' : 'flex-1'} />
         </div>
       )}
