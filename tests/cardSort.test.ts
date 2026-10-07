@@ -27,9 +27,11 @@ describe('sortCards', () => {
     expect(names({ by: 'created', desc: false })).toEqual(['Alpha 10', 'alpha 2', 'beta', '']);
   });
 
-  it('counts a chat as using the card', () => {
+  it('counts only chatting as using the card, not editing it', () => {
     expect(lastUsed(cards[0])).toBe(100);
-    expect(names({ by: 'used', desc: true })).toEqual(['beta', '', 'Alpha 10', 'alpha 2']);
+    // The rest were edited later but never chatted with: by name, after.
+    expect(names({ by: 'used', desc: true })).toEqual(['beta', 'alpha 2', 'Alpha 10', '']);
+    expect(sortDetail(cards[1], 'used')).toBe('Not used yet');
   });
 
   it('sorts by chats and messages, ties by name', () => {
@@ -70,15 +72,16 @@ describe('card list chat counts', { timeout: 30_000 }, () => {
 
   it('lists each card with its chats, messages and last chat', async () => {
     const p = await storage.createProject();
-    const msg = (id: string) => ({ id, role: 'user' as const, swipes: ['hi'], swipe: 0, createdAt: 0 });
+    const msg = (id: string, at = 1000) => ({ id, role: 'user' as const, swipes: ['hi'], swipe: 0, createdAt: at });
     const chat = (id: string, n: number) => ({ id, name: id, greeting: 0, messages: Array.from({ length: n }, (_, i) => msg(`m${i}`)), createdAt: 0, updatedAt: 0 });
     const summary = async () => (await storage.listProjects()).find((s) => s.id === p.id)!;
     expect((await summary()).chats).toBeUndefined();
 
     await storage.saveChat(p.id, chat('11111111-1111-4111-8111-111111111111', 3));
-    const b = await storage.saveChat(p.id, chat('22222222-2222-4222-8222-222222222222', 4));
+    await storage.saveChat(p.id, { ...chat('22222222-2222-4222-8222-222222222222', 3), messages: [...chat('x', 3).messages, msg('late', 5000)] });
     let s = await summary();
-    expect([s.chats, s.messages, s.lastChat]).toEqual([2, 7, b.updatedAt]);
+    // Last used at its newest message, not when its chats were saved.
+    expect([s.chats, s.messages, s.lastChat]).toEqual([2, 7, 5000]);
     // Every message there is a one-token 'hi' sent by you.
     expect([s.sent, s.received, s.tokens]).toEqual([7, 0, 7]);
 

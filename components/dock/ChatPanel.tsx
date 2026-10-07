@@ -38,7 +38,7 @@ import type { CardData } from '@/types/card';
 import type { ChatImage, ChatMessage } from '@/types/project';
 import { uuid } from '@/lib/uuid';
 import { copyText } from '@/lib/clipboard';
-import { formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
+import { HEADING_CLASSES, formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
 import { AuthorsNoteDialog } from '@/components/dock/AuthorsNote';
 import { summaryInjection, summarySettings } from '@/lib/chatSummary';
 import { ChatSummaryPanel, useChatSummary } from '@/components/dock/ChatSummaryPanel';
@@ -866,6 +866,10 @@ function renderNodes(nodes: FormatNode[]): React.ReactNode {
       // An embedded picture, as the card shows it on Chub or SillyTavern.
       // eslint-disable-next-line @next/next/no-img-element
       <img key={i} src={n.src} alt={n.alt} title={n.alt || undefined} loading="lazy" referrerPolicy="no-referrer" className="my-1 inline-block max-h-96 max-w-full rounded-md align-middle" />
+    ) : n.kind === 'heading' ? (
+      <span key={i} role="heading" aria-level={n.level} className={cx('block font-semibold text-slate-100', HEADING_CLASSES[n.level])}>
+        {renderNodes(n.children)}
+      </span>
     ) : (
       <q key={i}>{renderNodes(n.children)}</q>
     ),

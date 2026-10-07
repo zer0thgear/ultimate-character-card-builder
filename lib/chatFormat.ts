@@ -1,10 +1,22 @@
 // Roleplay text as frontends show it: *actions* in italics, **bold**, and
 // "speech" highlighted, nested either way ("We *really* owe you" and
 // *she said "hi"* both work), plus embedded pictures: ![alt](url) and
-// <img src="url">, as cards on Chub and SillyTavern use in greetings. Spans
-// don't cross lines, as in SillyTavern.
+// <img src="url">, as cards on Chub and SillyTavern use in greetings, and
+// Markdown headings (# to ######, at the start of a line). Spans don't cross
+// lines, as in SillyTavern.
 
-export type FormatNode = string | { kind: 'em' | 'strong' | 'quote'; children: FormatNode[] } | { kind: 'image'; src: string; alt: string };
+export type FormatNode =
+  | string
+  | { kind: 'em' | 'strong' | 'quote'; children: FormatNode[] }
+  | { kind: 'image'; src: string; alt: string }
+  | { kind: 'heading'; level: 1 | 2 | 3 | 4 | 5 | 6; children: FormatNode[] };
+
+/** How big each heading level is shown (Tailwind classes). */
+export const HEADING_CLASSES: Record<number, string> = { 1: 'text-xl', 2: 'text-lg', 3: 'text-base', 4: 'text-sm', 5: 'text-sm', 6: 'text-sm text-slate-400' };
+
+/** A heading line: "# Title" (up to three spaces in, closing #s dropped),
+ *  with the line break after it, which the heading's own line stands for. */
+const HEADING = /[ ]{0,3}(#{1,6})[ \t]+([^\n]*?)[ \t]*(?:#+[ \t]*)?(?:\n|$)/y;
 
 const MD_IMAGE = /!\[([^\]\n]*)\]\(\s*<?([^\s)>]+)>?(?:\s+["'][^"'\n]*["'])?\s*\)/y;
 const HTML_IMAGE = /<img\b[^>\n]*?>/iy;
@@ -64,6 +76,17 @@ export function formatChat(text: string, inside: ReadonlySet<string> = new Set()
   while (i < text.length) {
     const ch = text[i];
     let matched = false;
+    if (!inside.size && (i === 0 || text[i - 1] === '\n') && (ch === '#' || ch === ' ')) {
+      HEADING.lastIndex = i;
+      const m = HEADING.exec(text);
+      if (m && m[2]) {
+        if (plain) out.push(plain);
+        plain = '';
+        out.push({ kind: 'heading', level: m[1].length as 1, children: formatChat(m[2], inside) });
+        i += m[0].length;
+        continue;
+      }
+    }
     const image = ch === '!' || ch === '<' ? imageAt(text, i) : null;
     if (image) {
       if (plain) out.push(plain);

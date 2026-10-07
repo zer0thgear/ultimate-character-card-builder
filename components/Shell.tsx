@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { lastCardKey, useProjectStore } from '@/store/projectStore';
-import { useUiStore, useConfigStore, useToastStore, toast } from '@/store/uiStore';
+import { SIDEBAR_WIDTH, useUiStore, useConfigStore, useToastStore, toast } from '@/store/uiStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { usePersonaStore } from '@/store/personaStore';
@@ -29,7 +29,7 @@ import { usePackStore } from '@/store/packStore';
 import { ChatCardActions, ChatCardList, ChatHeaderAvatar, ChatHome, ChatScreen, switchAppMode } from '@/components/chatmode/ChatMode';
 import { CardListMeta } from '@/components/CardListMeta';
 import { CardSortControl, TagFilter, TagFilterNote, useSortedCards } from '@/components/CardSort';
-import { chatStatsDetail, sortDetail } from '@/lib/cardSort';
+import { cardMatches, chatStatsDetail, sortDetail } from '@/lib/cardSort';
 import { importFromUrl, overwriteCard } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
 import { TrashDialog, duplicateCard, openTrash } from '@/components/TrashDialog';
@@ -143,13 +143,21 @@ export function Shell() {
       <div className="flex min-h-0 flex-1">
         {chatMode ? (
           <>
-            {!phone && sidebarOpen && <ChatCardList />}
+            {!phone && sidebarOpen && (
+              <SidebarFrame>
+                <ChatCardList className="w-full" />
+              </SidebarFrame>
+            )}
             <div className="flex min-w-0 flex-1">{project ? <ChatScreen phone={phone} /> : <ChatHome loading={loading} />}</div>
           </>
         ) : (
           <>
             {/* ☰ shows or hides it, whether or not one side fills the window. */}
-            {!phone && sidebarOpen && <ProjectSidebar />}
+            {!phone && sidebarOpen && (
+              <SidebarFrame>
+                <ProjectSidebar className="w-full" />
+              </SidebarFrame>
+            )}
             <div ref={workspace} className="flex min-w-0 flex-1">
               {project && phone ? (
                 // Both stay mounted, so a generation or a reply carries on
@@ -391,6 +399,35 @@ function ModeSwitch({ className }: { className?: string }) {
   );
 }
 
+/** The card list on a desktop, at the width you've dragged its edge to
+ *  (a double-click on the edge puts it back). */
+function SidebarFrame({ children }: { children: React.ReactNode }) {
+  const width = useUiStore((s) => s.sidebarWidth) ?? SIDEBAR_WIDTH;
+  const setWidth = useUiStore((s) => s.setSidebarWidth);
+  const startResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const left = (e.currentTarget.parentElement?.getBoundingClientRect().left ?? 0);
+    const move = (ev: PointerEvent) => setWidth(ev.clientX - left);
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  return (
+    <div className="relative flex flex-shrink-0" style={{ width }}>
+      {children}
+      <div
+        onPointerDown={startResize}
+        onDoubleClick={() => setWidth(SIDEBAR_WIDTH)}
+        className="absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize hover:bg-violet-500/50"
+        title="Drag to resize (double-click for the usual width)"
+      />
+    </div>
+  );
+}
+
 function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; className?: string }) {
   const { summaries: all, project, open: openProject, create: createProject, remove } = useProjectStore();
   // Cards imported in Chat mode stay there until they're added to Builder.
@@ -408,12 +445,12 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
   const [filter, setFilter] = useState('');
   const q = filter.trim().toLowerCase();
   const { sorted, by } = useSortedCards(summaries);
-  const shown = sorted.filter((s) => !q || s.name.toLowerCase().includes(q) || s.tags.some((t) => t.toLowerCase().includes(q)));
+  const shown = sorted.filter((s) => cardMatches(s, q));
   const importFile = async () => {
     if (await importCards()) onPicked?.();
   };
   return (
-    <nav className={cx('flex h-full w-60 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950', className)}>
+    <nav className={cx('flex h-full w-60 min-w-0 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950', className)}>
       {onPicked && project && (
         <button
           type="button"
@@ -439,7 +476,7 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
       </div>
       {summaries.length > 1 && (
         <div className="flex gap-1 px-2 pb-2">
-          {summaries.length > 6 && <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search cards…" className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs')} />}
+          {summaries.length > 6 && <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search name, tag, author…" className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs')} />}
           <CardSortControl className={summaries.length > 6 ? 'w-28' : 'flex-1'} />
         </div>
       )}

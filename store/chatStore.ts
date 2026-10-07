@@ -137,7 +137,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       const now = Date.now();
       const chat: ChatSession = { id: uuid(), name: `Chat ${new Date(now).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}`, greeting, messages: [], createdAt: now, updatedAt: now };
       const saved = await api.saveChat(projectId, chat);
-      set((s) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: 0, sent: 0, received: 0, tokens: 0 }, ...s.list] }));
+      set((s) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: 0, sent: 0, received: 0, tokens: 0, last: 0 }, ...s.list] }));
     },
 
     deleteChat: async (id) => {
@@ -247,12 +247,19 @@ export const useChatStore = create<ChatState>((set, get) => {
   };
 });
 
+/** The card's chat counts from its chats' summaries; it was last used at
+ *  its newest message (none: not yet). */
+function statsOf(list: ChatSummary[]) {
+  const { last, ...tally } = sumTallies(list);
+  return { chats: list.length, messages: list.reduce((n, c) => n + c.messageCount, 0), lastChat: last || undefined, ...tally };
+}
+
 // The card lists' chat counts follow the open card's chats.
 useChatStore.subscribe((s, prev) => {
   if (s.list === prev.list || !s.projectId || s.projectId !== prev.projectId) return;
   const list = s.list;
   useProjectStore.getState().setChatStats(
     s.projectId,
-    list.length ? { chats: list.length, messages: list.reduce((n, c) => n + c.messageCount, 0), lastChat: Math.max(...list.map((c) => c.updatedAt)), ...sumTallies(list) } : {},
+    list.length ? statsOf(list) : {},
   );
 });
