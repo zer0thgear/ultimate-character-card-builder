@@ -39,6 +39,7 @@ import type { ChatImage, ChatMessage } from '@/types/project';
 import { uuid } from '@/lib/uuid';
 import { copyText } from '@/lib/clipboard';
 import { CODE_BLOCK_CLASS, CODE_CLASS, HEADING_CLASSES, formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
+import { ChatLink, ChatMedia, ChatRule } from '@/components/ChatMedia';
 import { AuthorsNoteDialog } from '@/components/dock/AuthorsNote';
 import { summaryInjection, summarySettings } from '@/lib/chatSummary';
 import { ChatSummaryPanel, useChatSummary } from '@/components/dock/ChatSummaryPanel';
@@ -85,6 +86,10 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const [exportOpen, setExportOpen] = useState(false);
   // 📜 The chat's summary.
   const summarizer = useChatSummary();
+  // While the summary's being written, the chat waits for it: many
+  // providers take one request at a time, and a reply sent meanwhile would
+  // queue behind it or fail.
+  const summarizing = summarizer.running;
   const [showSummary, setShowSummary] = useState(false);
   // Search in this chat: the words (null: closed), and which match is shown.
   const [search, setSearch] = useState<string | null>(null);
@@ -315,7 +320,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
 
   /** ↻ Another version of the last continue, beside the old one. */
   const rerollContinue = async (m: ChatMessage) => {
-    if (!chat || running) return;
+    if (!chat || running || summarizing) return;
     const tree = treeOf(m);
     const base = rerollBase(tree);
     if (base === null) return;
@@ -327,7 +332,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const undoLastContinue = (m: ChatMessage) => setTree(m.id, undoContinue(treeOf(m)));
 
   const send = async () => {
-    if (running || !chat) return;
+    if (running || summarizing || !chat) return;
     const text = input.trim();
     const messages = text ? [...chat.messages, newMessage('user', text)] : chat.messages;
     if (text) {
@@ -340,7 +345,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   };
 
   const regenerate = async () => {
-    if (!chat || running) return;
+    if (!chat || running || summarizing) return;
     const last = chat.messages[chat.messages.length - 1];
     if (last?.role === 'assistant') await reply(chat.messages, last);
     else await reply(chat.messages);
@@ -374,7 +379,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   };
 
   const continueLast = async () => {
-    if (!chat || running) return;
+    if (!chat || running || summarizing) return;
     const last = chat.messages[chat.messages.length - 1];
     if (last?.role !== 'assistant') return void (await reply(chat.messages));
     const tree = treeOf(last);
@@ -386,7 +391,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
 
   /** Writes your next message for you, into the box, to edit and send. */
   const impersonate = async () => {
-    if (!chat || running) return;
+    if (!chat || running || summarizing) return;
     setInput('');
     const r = await complete(build(chat.messages, { mode: 'impersonate', guide: takeGuide() }), (full) => setInput(full));
     if (r.error) toast(r.error, 'error');
@@ -398,6 +403,10 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const sendButton = running ? (
     <Button variant="danger" onClick={stop} title="Stop" aria-label="Stop" className="h-10 w-10 flex-shrink-0">
       <span className="text-base leading-none">■</span>
+    </Button>
+  ) : summarizing ? (
+    <Button variant="primary" disabled title="Waiting for the summary (📜) to be written" aria-label="Waiting for the summary" className="h-10 w-10 flex-shrink-0">
+      <span className="animate-pulse text-base leading-none">⏳</span>
     </Button>
   ) : (
     <Button variant="primary" onClick={() => void send()} title="Send (Enter)" aria-label="Send" className="h-10 w-10 flex-shrink-0">
@@ -623,7 +632,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                 count={greetingCount}
                 onSwipe={setGreeting}
                 onEdit={(text) => setGreetingEdit(chat.greeting, text)}
-                busy={!!streamingId}
+                busy={!!streamingId || summarizing}
                 isLast={chat.messages.length === 0}
                 userName={me.name}
                 showId={showIds}
@@ -648,7 +657,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     streaming={streamingId === m.id}
                     streamReasoning={streamingId === m.id ? streamReasoning : ''}
                     isLast={i === chat.messages.length - 1}
-                    busy={running}
+                    busy={running || summarizing}
                     onChange={(patch) => setMessages((ms) => ms.map((x) => (x.id === m.id ? { ...x, ...patch } : x)))}
                     onDelete={() => void deleteMessage(m)}
                     onDeleteAfter={async () => {
@@ -695,7 +704,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
 
       {treeFor && chat && (() => {
         const m = chat.messages.find((x) => x.id === treeFor);
-        return m ? <ContinueTreeDialog message={m} tree={treeOf(m)} busy={running} onChoose={(id) => setTree(m.id, choose(treeOf(m), id))} onClose={() => setTreeFor(null)} /> : null;
+        return m ? <ContinueTreeDialog message={m} tree={treeOf(m)} busy={running || summarizing} onChoose={(id) => setTree(m.id, choose(treeOf(m), id))} onClose={() => setTreeFor(null)} /> : null;
       })()}
       {chat && (
         <div className="flex-shrink-0 border-t border-slate-800 p-2">
@@ -727,6 +736,15 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
               </IconButton>
             </div>
           )}
+          {summarizing && (
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <span className="animate-pulse">📜</span>
+              <span className="min-w-0 flex-1">Writing the chat&apos;s summary… replies wait until it&apos;s done.</span>
+              <button type="button" onClick={summarizer.stop} className="text-slate-400 underline hover:text-slate-200">
+                Stop it
+              </button>
+            </div>
+          )}
           <div className="flex items-start gap-1.5">
             <AutoTextarea
               data-chat-input
@@ -748,13 +766,13 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
           {/* One row on a phone too: the actions as icons (hold one for its
               name). */}
           <div className={cx('mt-1.5 flex items-center gap-1.5', phone ? 'flex-nowrap' : 'flex-wrap')}>
-            <Button size="sm" disabled={running} onClick={() => void regenerate()} title={phone ? 'Regenerate: another version of the last reply' : 'Another version of the last reply'}>
+            <Button size="sm" disabled={running || summarizing} onClick={() => void regenerate()} title={phone ? 'Regenerate: another version of the last reply' : 'Another version of the last reply'}>
               {phone ? <span className="px-1 text-base leading-none">↻</span> : '↻ Regenerate'}
             </Button>
-            <Button size="sm" disabled={running} onClick={() => void continueLast()} title="Continue the last reply">
+            <Button size="sm" disabled={running || summarizing} onClick={() => void continueLast()} title="Continue the last reply">
               {phone ? <span className="px-1 text-base leading-none">→</span> : '→ Continue'}
             </Button>
-            <Button size="sm" disabled={running} onClick={() => void impersonate()} title={phone ? 'Impersonate: write your next message for you (it lands in the box to edit)' : 'Write your next message for you (it lands in the box to edit)'}>
+            <Button size="sm" disabled={running || summarizing} onClick={() => void impersonate()} title={phone ? 'Impersonate: write your next message for you (it lands in the box to edit)' : 'Write your next message for you (it lands in the box to edit)'}>
               {phone ? <span className="px-0.5 text-base leading-none">🎭</span> : '🎭 Impersonate'}
             </Button>
             <Button
@@ -776,7 +794,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
               {chat.authorsNote?.prompt.trim() && !phone ? " Author's note" : ''}
             </Button>
             {!phone && connections.length > 0 && (
-              <Button size="sm" disabled={running} onClick={() => setComparing(true)} title={compareTarget ? 'Compare: the last reply written by two connections or presets at once, side by side, to keep either or both' : 'Compare: the next reply written by two connections or presets at once, side by side, to keep either or both'}>
+              <Button size="sm" disabled={running || summarizing} onClick={() => setComparing(true)} title={compareTarget ? 'Compare: the last reply written by two connections or presets at once, side by side, to keep either or both' : 'Compare: the next reply written by two connections or presets at once, side by side, to keep either or both'}>
                 ⚖ Compare
               </Button>
             )}
@@ -874,6 +892,14 @@ function renderNodes(nodes: FormatNode[]): React.ReactNode {
       <code key={i} className={CODE_CLASS}>
         {n.text}
       </code>
+    ) : n.kind === 'rule' ? (
+      <ChatRule key={i} />
+    ) : n.kind === 'link' ? (
+      <ChatLink key={i} href={n.href}>
+        {renderNodes(n.children)}
+      </ChatLink>
+    ) : n.kind === 'media' ? (
+      <ChatMedia key={i} media={n.media} src={n.src} type={n.type} label={n.label} />
     ) : n.kind === 'codeBlock' ? (
       <pre key={i} className={CODE_BLOCK_CLASS} title={n.lang || undefined}>
         <code>{n.text}</code>

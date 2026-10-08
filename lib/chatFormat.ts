@@ -2,9 +2,12 @@
 // "speech" highlighted, nested either way ("We *really* owe you" and
 // *she said "hi"* both work), plus embedded pictures: ![alt](url) and
 // <img src="url">, as cards on Chub and SillyTavern use in greetings,
-// Markdown headings (# to ######, at the start of a line), and `code`:
-// inline, or a fenced block (``` or ~~~ lines), shown as written. Spans
-// don't cross lines, as in SillyTavern; a code block does.
+// Markdown headings (# to ######, at the start of a line), `code` (inline,
+// or a fenced block of ``` or ~~~ lines, shown as written), horizontal rules
+// (---, *** or ___ alone on a line, or <hr>), links ([text](url) and bare
+// web addresses), and sound and video: <audio>/<video> tags, and links
+// straight to a sound or video file. Spans don't cross lines, as in
+// SillyTavern; a code block does.
 
 export type FormatNode =
   | string
@@ -12,7 +15,10 @@ export type FormatNode =
   | { kind: 'image'; src: string; alt: string }
   | { kind: 'heading'; level: 1 | 2 | 3 | 4 | 5 | 6; children: FormatNode[] }
   | { kind: 'code'; text: string }
-  | { kind: 'codeBlock'; text: string; lang?: string };
+  | { kind: 'codeBlock'; text: string; lang?: string }
+  | { kind: 'rule' }
+  | { kind: 'link'; href: string; children: FormatNode[] }
+  | { kind: 'media'; media: 'audio' | 'video'; src: string; type?: string; label?: string };
 
 /** How big each heading level is shown (Tailwind classes). */
 export const HEADING_CLASSES: Record<number, string> = { 1: 'text-xl', 2: 'text-lg', 3: 'text-base', 4: 'text-sm', 5: 'text-sm', 6: 'text-sm text-slate-400' };
@@ -48,6 +54,78 @@ function codeAt(text: string, i: number, lineStart: boolean): { node: FormatNode
   // As in Markdown, one space each side is padding (for code next to a `).
   const code = /^ .* $/.test(m[2]) && m[2].trim() ? m[2].slice(1, -1) : m[2];
   return { node: { kind: 'code', text: code }, length: m[0].length };
+}
+
+/** A rule: three or more -, * or _ (spaces between allowed) alone on a
+ *  line, with the line break after it. */
+const RULE = /[ ]{0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n|$)/y;
+const HTML_RULE = /<hr\b[^>\n]*>(?:\n)?/iy;
+
+/** Only web links are followed or played. */
+const webUrl = (url: string) => (/^https?:\/\/[^\s]+$/i.test(url) ? url : null);
+
+const AUDIO_EXT = /\.(?:mp3|wav|ogg|oga|m4a|aac|flac|opus)(?:[?#]|$)/i;
+const VIDEO_EXT = /\.(?:mp4|webm|mov|m4v|ogv)(?:[?#]|$)/i;
+/** What a link plays, if it's straight to a sound or video file. */
+export function mediaKind(url: string): 'audio' | 'video' | null {
+  const path = url.replace(/^https?:\/\/[^/]+/i, '');
+  return AUDIO_EXT.test(path) ? 'audio' : VIDEO_EXT.test(path) ? 'video' : null;
+}
+
+/** A YouTube video's id, from any of its link forms (null otherwise). */
+export function youtubeId(url: string): string | null {
+  const m = url.match(/^https?:\/\/(?:www\.|m\.|music\.)?(?:youtube\.com\/(?:watch\?(?:[^#\s]*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([\w-]{11})/i);
+  return m ? m[1] : null;
+}
+
+/** [text](url), and bare web addresses (trailing punctuation left off). */
+const MD_LINK = /\[([^\]\n]+)\]\(\s*<?([^\s)>]+)>?(?:\s+["'][^"'\n]*["'])?\s*\)/y;
+const BARE_URL = /https?:\/\/[^\s<>"'`)\]]*[^\s<>"'`)\].,;:!?*_]/y;
+/** <audio …>…</audio> or <video …>…</video> (or the opening tag alone):
+ *  its src, or its first <source>'s. */
+const HTML_MEDIA = /<(audio|video)\b([^>]*)>(?:([\s\S]*?)<\/\1\s*>)?(?:\n)?/iy;
+
+const attrOf = (tag: string, name: string) => {
+  const m = tag.match(new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i'));
+  return m ? (m[1] ?? m[2] ?? m[3] ?? '') : null;
+};
+
+/** A link, a player or a rule at `i`, if one starts there. */
+function linkAt(text: string, i: number, inside: ReadonlySet<string>): { node: FormatNode; length: number } | null {
+  const ch = text[i];
+  if (ch === '<') {
+    HTML_MEDIA.lastIndex = i;
+    const m = HTML_MEDIA.exec(text);
+    if (m) {
+      const source = m[3]?.match(/<source\b[^>]*>/i)?.[0];
+      const src = webUrl(attrOf(m[2], 'src') ?? (source ? (attrOf(source, 'src') ?? '') : ''));
+      // One with nothing playable stays exactly as written (not read as speech).
+      if (!src) return { node: m[0], length: m[0].length };
+      const type = source ? attrOf(source, 'type') : attrOf(m[2], 'type');
+      return { node: { kind: 'media', media: m[1].toLowerCase() as 'audio', src, ...(type ? { type } : {}) }, length: m[0].length };
+    }
+    HTML_RULE.lastIndex = i;
+    const r = HTML_RULE.exec(text);
+    return r ? { node: { kind: 'rule' }, length: r[0].length } : null;
+  }
+  if (ch === '[') {
+    MD_LINK.lastIndex = i;
+    const m = MD_LINK.exec(text);
+    const href = m && webUrl(m[2]);
+    if (!m || !href) return null;
+    const media = mediaKind(href);
+    if (media) return { node: { kind: 'media', media, src: href, label: m[1] }, length: m[0].length };
+    return { node: { kind: 'link', href, children: formatChat(m[1], new Set(inside).add('link')) }, length: m[0].length };
+  }
+  // A bare address, not one in the middle of a word.
+  if (ch === 'h' && !/[\w/]/.test(text[i - 1] ?? '')) {
+    BARE_URL.lastIndex = i;
+    const m = BARE_URL.exec(text);
+    if (!m) return null;
+    const media = mediaKind(m[0]);
+    return { node: media ? { kind: 'media', media, src: m[0] } : { kind: 'link', href: m[0], children: [m[0]] }, length: m[0].length };
+  }
+  return null;
 }
 
 const MD_IMAGE = /!\[([^\]\n]*)\]\(\s*<?([^\s)>]+)>?(?:\s+["'][^"'\n]*["'])?\s*\)/y;
@@ -115,6 +193,26 @@ export function formatChat(text: string, inside: ReadonlySet<string> = new Set()
       plain = '';
       out.push(code.node);
       i += code.length;
+      continue;
+    }
+    if (lineStart && (ch === '-' || ch === '*' || ch === '_' || ch === ' ')) {
+      RULE.lastIndex = i;
+      const m = RULE.exec(text);
+      if (m) {
+        if (plain) out.push(plain);
+        plain = '';
+        out.push({ kind: 'rule' });
+        i += m[0].length;
+        continue;
+      }
+    }
+    // Links don't go inside links.
+    const link = (ch === '<' || ch === '[' || ch === 'h') && !inside.has('link') ? linkAt(text, i, inside) : null;
+    if (link) {
+      if (plain) out.push(plain);
+      plain = '';
+      out.push(link.node);
+      i += link.length;
       continue;
     }
     if (lineStart && (ch === '#' || ch === ' ')) {
