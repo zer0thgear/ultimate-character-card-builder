@@ -8,12 +8,14 @@ import { offerCardLore } from '@/components/LorebookBank';
 import { fromBase64 } from '@/lib/requestImage';
 import { choiceDialog, confirmDialog, pickFiles, textDialog } from '@/components/ui';
 import type { CardProject } from '@/types/project';
-import type { CharacterCard } from '@/types/card';
+import type { CardData, CharacterCard } from '@/types/card';
+import { splitLinks } from '@/lib/importLinks';
 
-// Import from URL, as SillyTavern has it: paste a Chub (or Cardbox) link and
-// the card comes in with its picture. UCCB's server fetches it (a browser
-// can't reach Chub's API itself), from the sites it knows only. Overwrite
-// takes a card the same way (or from a file) in place of the open one.
+// Import from URL, as SillyTavern has it: paste Chub (or Cardbox) links, one
+// per line, and the cards come in with their pictures. UCCB's server fetches
+// them (a browser can't reach Chub's API itself), from the sites it knows
+// only. Overwrite takes a card the same way (or from a file) in place of the
+// open one.
 
 interface Fetched {
   card: CharacterCard;
@@ -22,9 +24,17 @@ interface Fetched {
   from: string;
 }
 
-/** Asks for a link and fetches the card there: read like any imported card
- *  file (so it's normalised the same way), with the link it came from in its
- *  source (V3). Null if cancelled or it failed (said so). */
+/** Fetches the card at a link: read like any imported card file (so it's
+ *  normalised the same way), with the link it came from in its source (V3). */
+async function fetchCard(link: string): Promise<Fetched> {
+  const found = await api.importUrl(link);
+  const { card } = await importCardFile('import.json', new TextEncoder().encode(JSON.stringify(found.card)));
+  if (found.sourceUrl && !(card.data.source ?? []).includes(found.sourceUrl)) card.data.source = [...(card.data.source ?? []), found.sourceUrl];
+  return { card, avatar: found.avatar ? new Blob([fromBase64(found.avatar) as BlobPart], { type: found.avatarType ?? 'image/png' }) : undefined, from: found.source };
+}
+
+/** Asks for a link and fetches the card there. Null if cancelled or it
+ *  failed (said so). */
 async function fetchFromUrl(title: string, confirmLabel: string): Promise<Fetched | null> {
   const link = await textDialog({
     title,
@@ -35,30 +45,45 @@ async function fetchFromUrl(title: string, confirmLabel: string): Promise<Fetche
   if (!link?.trim()) return null;
   toast('Fetching the card…', 'info');
   try {
-    const found = await api.importUrl(link.trim());
-    const { card } = await importCardFile('import.json', new TextEncoder().encode(JSON.stringify(found.card)));
-    if (found.sourceUrl && !(card.data.source ?? []).includes(found.sourceUrl)) card.data.source = [...(card.data.source ?? []), found.sourceUrl];
-    return { card, avatar: found.avatar ? new Blob([fromBase64(found.avatar) as BlobPart], { type: found.avatarType ?? 'image/png' }) : undefined, from: found.source };
+    return await fetchCard(link.trim());
   } catch (err) {
     toast((err as Error).message, 'error');
     return null;
   }
 }
 
-/** Asks for a link and imports the card from it as a new card (`init`
- *  marks it chat-only in Chat mode). */
+/** Asks for links, one per line as SillyTavern takes them, and imports
+ *  each card as a new one, in turn (`init` marks them chat-only in Chat
+ *  mode); the last one stays open. */
 export async function importFromUrl(init: Partial<CardProject> = {}) {
-  const got = await fetchFromUrl('Import from a URL', 'Import');
-  if (!got) return;
-  try {
-    const { create, setAvatar } = useProjectStore.getState();
-    const project = await create({ ...init, card: got.card });
-    if (got.avatar) await setAvatar(got.avatar);
-    toast(`Imported ${got.card.data.name || 'the card'} from ${got.from}${got.avatar ? '' : ' (no picture)'}.`, 'success');
-    await offerCardLore([{ projectId: project.id, card: got.card.data }]);
-  } catch (err) {
-    toast((err as Error).message, 'error');
+  const text = await textDialog({
+    title: 'Import from a URL',
+    label: 'Chub or Cardbox character links, one per line, e.g. https://chub.ai/characters/creator/name (Ctrl+Enter imports)',
+    placeholder: 'https://chub.ai/characters/…',
+    confirmLabel: 'Import',
+    multiline: true,
+  });
+  const links = splitLinks(text ?? '');
+  if (!links.length) return;
+  const { create, setAvatar } = useProjectStore.getState();
+  const names: string[] = [];
+  const failed: string[] = [];
+  const lore: { projectId: string; card: CardData }[] = [];
+  for (const [i, link] of links.entries()) {
+    toast(links.length === 1 ? 'Fetching the card…' : `Fetching card ${i + 1} of ${links.length}…`, 'info');
+    try {
+      const got = await fetchCard(link);
+      const project = await create({ ...init, card: got.card });
+      if (got.avatar) await setAvatar(got.avatar);
+      lore.push({ projectId: project.id, card: got.card.data });
+      names.push(`${got.card.data.name || 'the card'}${links.length === 1 ? ` from ${got.from}` : ''}${got.avatar ? '' : ' (no picture)'}`);
+    } catch (err) {
+      failed.push(links.length === 1 ? (err as Error).message : `${link}: ${(err as Error).message}`);
+    }
   }
+  if (names.length) toast(names.length === 1 ? `Imported ${names[0]}.` : `Imported ${names.length} cards: ${names.join(', ')}.`, 'success');
+  if (failed.length) toast(failed.length === 1 ? failed[0] : `Couldn't import ${failed.length} links: ${failed.join('; ')}`, 'error');
+  await offerCardLore(lore);
 }
 
 /** Replaces the open card's text with another card's, from a file or a link
