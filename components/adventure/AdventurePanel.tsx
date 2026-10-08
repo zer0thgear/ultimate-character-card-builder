@@ -6,6 +6,7 @@ import type { AdventureEntry, AdventureSession } from '@/types/adventure';
 import { callsPerTurn, effectiveWorld, openingMessages, withOverride, runTurn, tallyUsage, undoLastTurn } from '@/lib/adventure';
 import { chatGreeting, loreDefaults, macroExpander } from '@/lib/chatPrompt';
 import { CODE_BLOCK_CLASS, CODE_CLASS, HEADING_CLASSES, formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
+import { ChatLink, ChatMedia, ChatRule } from '@/components/ChatMedia';
 import { useProjectStore } from '@/store/projectStore';
 import { useAdventureStore } from '@/store/adventureStore';
 import { useLlmStore } from '@/store/llmStore';
@@ -670,6 +671,14 @@ function render(nodes: FormatNode[]): React.ReactNode {
       <code key={i} className={CODE_CLASS}>
         {n.text}
       </code>
+    ) : n.kind === 'rule' ? (
+      <ChatRule key={i} />
+    ) : n.kind === 'link' ? (
+      <ChatLink key={i} href={n.href}>
+        {render(n.children)}
+      </ChatLink>
+    ) : n.kind === 'media' ? (
+      <ChatMedia key={i} media={n.media} src={n.src} type={n.type} label={n.label} />
     ) : n.kind === 'codeBlock' ? (
       <pre key={i} className={CODE_BLOCK_CLASS} title={n.lang || undefined}>
         <code>{n.text}</code>

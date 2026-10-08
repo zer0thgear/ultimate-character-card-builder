@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatChat, hideComments } from '@/lib/chatFormat';
+import { formatChat, hideComments, mediaKind, youtubeId } from '@/lib/chatFormat';
 
 describe('hideComments', () => {
   it('leaves out <!-- comments -->, and the lines they leave empty', () => {
@@ -117,5 +117,52 @@ describe('code', () => {
   it('leaves a lone backtick, and a fence mid-line, alone', () => {
     expect(formatChat("It's 5` tall.")).toEqual(["It's 5` tall."]);
     expect(formatChat('Say ```hi``` now')).toEqual(['Say ', { kind: 'code', text: 'hi' }, ' now']);
+  });
+});
+
+describe('rules', () => {
+  it('shows ---, *** and ___ alone on a line, and <hr>, as a rule', () => {
+    expect(formatChat('Act one.\n---\nAct two.')).toEqual(['Act one.\n', { kind: 'rule' }, 'Act two.']);
+    expect(formatChat('* * *')).toEqual([{ kind: 'rule' }]);
+    expect(formatChat('a<hr>b')).toEqual(['a', { kind: 'rule' }, 'b']);
+  });
+
+  it('leaves dashes in a sentence, and bold, alone', () => {
+    expect(formatChat('Wait -- no --- stop.')).toEqual(['Wait -- no --- stop.']);
+    expect(formatChat('**bold**')).toEqual([{ kind: 'strong', children: ['bold'] }]);
+    expect(formatChat('--')).toEqual(['--']);
+  });
+});
+
+describe('links and media', () => {
+  it('makes [text](url) and bare addresses links, web ones only', () => {
+    expect(formatChat('Hear [the *song*](https://example.com/a) now')).toEqual(['Hear ', { kind: 'link', href: 'https://example.com/a', children: ['the ', { kind: 'em', children: ['song'] }] }, ' now']);
+    expect(formatChat('See https://example.com/x_y.')).toEqual(['See ', { kind: 'link', href: 'https://example.com/x_y', children: ['https://example.com/x_y'] }, '.']);
+    expect(formatChat('[no](javascript:alert(1))')).toEqual(['[no](javascript:alert(1))']);
+    expect(formatChat('ahttps://x.y')).toEqual(['ahttps://x.y']);
+  });
+
+  it('plays <audio> and <video> tags, as Chub cards write them', () => {
+    expect(formatChat('Intro\n<audio controls=""><source type="audio/mpeg" src="https://files.catbox.moe/ffytyf.mp3"></audio>\n\nDawn.')).toEqual([
+      'Intro\n',
+      { kind: 'media', media: 'audio', src: 'https://files.catbox.moe/ffytyf.mp3', type: 'audio/mpeg' },
+      '\nDawn.',
+    ]);
+    expect(formatChat('<video controls src="https://x.y/clip.webm"></video>')).toEqual([{ kind: 'media', media: 'video', src: 'https://x.y/clip.webm' }]);
+    // Nothing playable (or not from the web): left as written.
+    expect(formatChat('<audio src="file:///x.mp3"></audio>')).toEqual(['<audio src="file:///x.mp3"></audio>']);
+  });
+
+  it('plays links straight to a sound or video file', () => {
+    expect(formatChat('[Theme](https://x.y/theme.mp3?dl=1)')).toEqual([{ kind: 'media', media: 'audio', src: 'https://x.y/theme.mp3?dl=1', label: 'Theme' }]);
+    expect(formatChat('https://x.y/a.mp4')).toEqual([{ kind: 'media', media: 'video', src: 'https://x.y/a.mp4' }]);
+    expect(mediaKind('https://mp3.example.com/page')).toBeNull();
+  });
+
+  it('knows a YouTube link from its forms', () => {
+    expect(youtubeId('https://www.youtube.com/watch?v=ftFTm7ElIns')).toBe('ftFTm7ElIns');
+    expect(youtubeId('https://youtu.be/ftFTm7ElIns?t=3')).toBe('ftFTm7ElIns');
+    expect(youtubeId('https://youtube.com/watch?list=x&v=ftFTm7ElIns')).toBe('ftFTm7ElIns');
+    expect(youtubeId('https://notyoutube.com/watch?v=ftFTm7ElIns')).toBeNull();
   });
 });
