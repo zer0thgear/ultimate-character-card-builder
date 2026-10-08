@@ -59,6 +59,13 @@ export interface ChatPromptSettings {
   showTimestamps?: boolean;
   /** How the chat shows avatars, as SillyTavern's choice does. */
   avatarShape: AvatarShape;
+  /** Which side the character's and your portraits sit on; SillyTavern
+   *  puts both on the left. */
+  charSide?: ChatSide;
+  userSide?: ChatSide;
+  /** Bubbles, or Flat (messages in one column, no bubbles), as
+   *  SillyTavern's Chat Style. */
+  chatStyle?: ChatStyle;
   /** On a touch screen, swiping the last reply (or the greeting) sideways
    *  changes its version, as SillyTavern's phone layout does. */
   swipeGesture: boolean;
@@ -84,6 +91,14 @@ export const loreDefaults = (s: Pick<ChatPromptSettings, 'loreScanDepth' | 'lore
 });
 
 export type AvatarShape = 'circle' | 'square' | 'rectangle' | 'none';
+export type ChatSide = 'left' | 'right';
+export type ChatStyle = 'bubbles' | 'flat';
+
+/** Where a message's portrait sits and how it's drawn. */
+export function messageLayout(s: Pick<ChatPromptSettings, 'charSide' | 'userSide' | 'chatStyle'>, role: 'user' | 'assistant' | 'system'): { right: boolean; flat: boolean } {
+  const side = role === 'user' ? s.userSide : s.charSide;
+  return { right: (side ?? 'left') === 'right', flat: s.chatStyle === 'flat' };
+}
 
 /** A guided generation's instruction, as SillyTavern's Guided Generations
  *  extension words it. */
@@ -114,6 +129,9 @@ export const DEFAULT_CHAT_SETTINGS: ChatPromptSettings = {
   showMessageIds: true,
   showTimestamps: true,
   avatarShape: 'circle',
+  charSide: 'left',
+  userSide: 'left',
+  chatStyle: 'bubbles',
   swipeGesture: true,
   guideTemplate: DEFAULT_GUIDE_TEMPLATE,
   useCardRegex: true,

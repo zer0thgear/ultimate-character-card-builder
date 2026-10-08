@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildChatPrompt, chatGreeting, DEFAULT_CHAT_SETTINGS, newMessage, exampleBlocks } from '@/lib/chatPrompt';
+import { buildChatPrompt, chatGreeting, DEFAULT_CHAT_SETTINGS, newMessage, exampleBlocks, messageLayout } from '@/lib/chatPrompt';
 import { newCard, newEntry, newLorebook } from '@/lib/cardSpec';
 
 const card = () => {
@@ -121,5 +121,19 @@ describe('hidden messages', () => {
     expect(parts.map((p) => p.content)).not.toContain('Nice sword.');
     expect(parts.map((p) => p.content)).toContain('Bye.');
     expect(lore.active).toHaveLength(0);
+  });
+});
+
+describe('messageLayout', () => {
+  it('puts both portraits on the left by default, as SillyTavern does', () => {
+    expect(messageLayout(DEFAULT_CHAT_SETTINGS, 'user')).toEqual({ right: false, flat: false });
+    expect(messageLayout(DEFAULT_CHAT_SETTINGS, 'assistant')).toEqual({ right: false, flat: false });
+  });
+
+  it('follows each side and the chat style', () => {
+    const s = { charSide: 'left', userSide: 'right', chatStyle: 'flat' } as const;
+    expect(messageLayout(s, 'user')).toEqual({ right: true, flat: true });
+    expect(messageLayout(s, 'assistant')).toEqual({ right: false, flat: true });
+    expect(messageLayout({}, 'user')).toEqual({ right: false, flat: false });
   });
 });
