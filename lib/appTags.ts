@@ -181,6 +181,23 @@ export function addTagsToCard(data: AppTagData, cardId: string, names: string[],
   return { ...data, tags, map: { ...data.map, [cardId]: ids } };
 }
 
+/** Puts a tag on every one of these cards, or (`on` false) takes it off
+ *  them all: tagging many cards at once. */
+export function setTagOnCards(data: AppTagData, cardIds: Iterable<string>, tagId: string, on: boolean): AppTagData {
+  const map = { ...data.map };
+  for (const id of cardIds) {
+    const has = map[id] ?? [];
+    if (on) {
+      if (!has.includes(tagId)) map[id] = [...has, tagId];
+    } else if (has.includes(tagId)) {
+      const left = has.filter((t) => t !== tagId);
+      if (left.length) map[id] = left;
+      else delete map[id];
+    }
+  }
+  return { ...data, map };
+}
+
 /** Reads a saved tag file (or anything else) into a sound one: bad
  *  entries dropped, missing fields filled in, the map pruned to known tags. */
 export function cleanTagData(raw: unknown): AppTagData {

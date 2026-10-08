@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **☑ Select cards** to tag many at once: over each card list, pick cards (one by one, the whole page, or every card shown), then 🏷 Tag… puts any of your tags on them all or takes it off them all, and can make a new tag for them.
+- **Hide the tag list in the sidebars**, as SillyTavern's toggle: ▴ next to ⚙ tucks the My tags chips away (remembered between visits), leaving a 🏷 My tags ▸ line that still says when tags are filtering, with Clear.
 - **🏷 My tags and folders**, as SillyTavern's tags: your own tags, kept apart from the tags written in the cards. Filter the card lists on them (show only, or hide), colour and order them in ⚙ Manage tags, and set some as open or closed folders that show in the lists. Imported cards can bring their own tags across (asks by default), and a SillyTavern tag backup can be imported.
 - **Chat style and portrait sides**, as SillyTavern's: Chat settings → Chat style picks Bubbles or Flat (one column of messages, no bubbles, the time beside the name), and each portrait (the character's, yours) can sit on the left or the right. Both now start on the left, as in SillyTavern; set yours to the right to get the old layout back.
 - **Pages of cards**: the card lists and home screens show a page at a time past 25 cards, with 25, 50, 100, 250 or All to a page, as SillyTavern's character list does.

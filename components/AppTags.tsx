@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { api } from '@/lib/api';
 import { uuid } from '@/lib/uuid';
 import { NO_TAG_FILTER, cycleFilter, importCandidates, isFolder, mergeTagBackup, openFolders, parseTagBackup, sortTags, tagUse, tagsOf, type AppTag, type FolderEntry, type TagFolder, type TagImport } from '@/lib/appTags';
@@ -40,6 +41,12 @@ export function TagChip({ tag, className, children, onClick, title }: { tag: App
 
 // ─── The filter bar ──────────────────────────────────────────────────────────
 
+/** Whether the sidebars' tag chips are tucked away (SillyTavern's "show tag
+ *  list" toggle), kept between visits. */
+const useSidebarTagsHidden = create<{ hidden: boolean; toggle: () => void }>()(
+  persist((set) => ({ hidden: false, toggle: () => set((s) => ({ hidden: !s.hidden })) }), { name: 'uccb-sidebar-tags', storage: createJSONStorage(() => localStorage) }),
+);
+
 /** Over a card list: your app tags to filter on (a click shows only cards
  *  with it, a second hides them, a third lets them be), the folders you're
  *  in as a path back out, and Manage tags. `cards` are the list's cards,
@@ -50,6 +57,7 @@ export function AppTagBar({ cards, compact, className }: { cards: Pick<ProjectSu
   const map = useAppTagStore((s) => s.map);
   const folders = useAppTagStore((s) => s.folders);
   const { filter, set } = useAppTagFilter();
+  const { hidden: tucked, toggle: toggleTucked } = useSidebarTagsHidden();
   const use = useMemo(() => tagUse({ tags, map }, cards.map((c) => c.id)), [tags, map, cards]);
   const path = openFolders({ tags, folders }, filter);
   // Folders show as folders in the list; the bar has the rest (and any
@@ -72,6 +80,21 @@ export function AppTagBar({ cards, compact, className }: { cards: Pick<ProjectSu
   };
   const state = (id: string) => (filter.include.includes(id) ? 'in' : filter.exclude.includes(id) ? 'out' : null);
   const any = filter.include.length + filter.exclude.length > 0;
+  const tagList = compact && tucked ? (
+    <div className="flex items-center gap-2 text-xs text-slate-500">
+      <button type="button" onClick={toggleTucked} className="rounded px-1 hover:bg-slate-800 hover:text-slate-300" title="Show the tag list">
+        🏷 My tags ▸
+      </button>
+      {any && (
+        <>
+          <span className="text-violet-300">{filter.include.length + filter.exclude.length} filtering</span>
+          <button type="button" onClick={() => set(NO_TAG_FILTER)} className="underline hover:text-slate-200" title="Show every card, out of every folder">
+            Clear
+          </button>
+        </>
+      )}
+    </div>
+  ) : null;
   return (
     <div className={cx('flex flex-col gap-1.5', className)}>
       {path.length > 0 && (
@@ -87,31 +110,38 @@ export function AppTagBar({ cards, compact, className }: { cards: Pick<ProjectSu
           ))}
         </div>
       )}
-      <div className={cx('flex flex-wrap items-center gap-1', compact && 'max-h-24 overflow-y-auto')}>
-        {!compact && <span className="text-xs text-slate-500">My tags:</span>}
-        {chips.map((t) => {
-          const s = state(t.id);
-          return (
-            <TagChip
-              key={t.id}
-              tag={t}
-              onClick={() => set(cycleFilter(filter, t.id))}
-              title={s === 'in' ? `Only cards tagged "${t.name}". Click to hide them instead.` : s === 'out' ? `Hiding cards tagged "${t.name}". Click to stop.` : `Only cards tagged "${t.name}" (click again to hide them)`}
-              className={cx(compact ? 'text-[11px]' : '', s === 'in' && 'ring-2 ring-violet-400', s === 'out' && 'line-through opacity-60 ring-2 ring-red-400/70', !s && 'opacity-90 hover:opacity-100')}
-            >
-              {s === 'in' ? '✓' : s === 'out' ? '⊘' : <span className="opacity-60">{use.get(t.id) ?? 0}</span>}
-            </TagChip>
-          );
-        })}
-        {any && (
-          <button type="button" onClick={() => set(NO_TAG_FILTER)} className="text-xs text-slate-400 underline hover:text-slate-200" title="Show every card, out of every folder">
-            Clear
-          </button>
-        )}
-        <IconButton title="Manage tags" onClick={() => openManageTags()} className="h-6 min-w-6 text-xs">
-          ⚙
-        </IconButton>
-      </div>
+      {tagList ?? (
+        <div className={cx('flex flex-wrap items-center gap-1', compact && 'max-h-24 overflow-y-auto')}>
+          {!compact && <span className="text-xs text-slate-500">My tags:</span>}
+          {chips.map((t) => {
+            const s = state(t.id);
+            return (
+              <TagChip
+                key={t.id}
+                tag={t}
+                onClick={() => set(cycleFilter(filter, t.id))}
+                title={s === 'in' ? `Only cards tagged "${t.name}". Click to hide them instead.` : s === 'out' ? `Hiding cards tagged "${t.name}". Click to stop.` : `Only cards tagged "${t.name}" (click again to hide them)`}
+                className={cx(compact ? 'text-[11px]' : '', s === 'in' && 'ring-2 ring-violet-400', s === 'out' && 'line-through opacity-60 ring-2 ring-red-400/70', !s && 'opacity-90 hover:opacity-100')}
+              >
+                {s === 'in' ? '✓' : s === 'out' ? '⊘' : <span className="opacity-60">{use.get(t.id) ?? 0}</span>}
+              </TagChip>
+            );
+          })}
+          {any && (
+            <button type="button" onClick={() => set(NO_TAG_FILTER)} className="text-xs text-slate-400 underline hover:text-slate-200" title="Show every card, out of every folder">
+              Clear
+            </button>
+          )}
+          <IconButton title="Manage tags" onClick={() => openManageTags()} className="h-6 min-w-6 text-xs">
+            ⚙
+          </IconButton>
+          {compact && (
+            <IconButton title="Hide the tag list" onClick={toggleTucked} className="h-6 min-w-6 text-xs">
+              ▴
+            </IconButton>
+          )}
+        </div>
+      )}
     </div>
   );
 }

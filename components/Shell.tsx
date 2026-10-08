@@ -31,6 +31,7 @@ import { CardListMeta } from '@/components/CardListMeta';
 import { CardPager, useCardPage } from '@/components/CardPager';
 import { CardSortControl, TagFilter, TagFilterNote, useSortedCards } from '@/components/CardSort';
 import { AppTagBar, AppTagHosts, FolderRow, FolderTile, openCardTags } from '@/components/AppTags';
+import { CardSelectBar, CardSelectHost, PickMark, useCardPicks } from '@/components/CardSelect';
 import { cardMatches, chatStatsDetail, sortDetail } from '@/lib/cardSort';
 import { importFromUrl, overwriteCard } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
@@ -204,6 +205,7 @@ export function Shell() {
       <ConfirmHost />
       <TrashDialog />
       <AppTagHosts />
+      <CardSelectHost />
       <LorebooksDialog />
       <LoreWizardHost />
       <VersionsDialog />
@@ -450,6 +452,7 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
   const { sorted, folders, by } = useSortedCards(summaries);
   const shown = sorted.filter((s) => cardMatches(s, q));
   const { pager, listRef } = useCardPage(shown, { query: q, focusId: project?.id });
+  const picks = useCardPicks();
   const importFile = async () => {
     if (await importCards()) onPicked?.();
   };
@@ -486,13 +489,16 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
       )}
       <TagFilterNote className="mx-2 mb-2" />
       <AppTagBar cards={summaries} compact className="mx-2 mb-2" />
+      <CardSelectBar shown={shown} page={pager.items} compact className="mx-2 mb-2" />
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
         {!q && pager.page === 0 && folders.map((f) => <FolderRow key={f.tag.id} folder={f} />)}
         {pager.items.map((s) => {
           const url = api.avatarUrl(s.id, s.avatar);
+          const picked = picks.picked(s.id);
           return (
-            <div key={s.id} className={cx('group flex items-center gap-2 rounded-md px-1.5 py-1.5', project?.id === s.id ? 'bg-violet-500/15' : 'hover:bg-slate-900')}>
-              <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => void open(s.id)}>
+            <div key={s.id} className={cx('group flex items-center gap-2 rounded-md px-1.5 py-1.5', picked ? 'bg-violet-500/25' : project?.id === s.id && !picks.picking ? 'bg-violet-500/15' : 'hover:bg-slate-900')}>
+              <button type="button" aria-pressed={picks.picking ? picked : undefined} className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => picks.click(s.id, () => void open(s.id))}>
+                {picks.picking && <PickMark picked={picked} />}
                 <span className="h-10 w-7 flex-shrink-0 overflow-hidden rounded bg-slate-800">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   {url && <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />}
@@ -560,6 +566,7 @@ function CardsHome() {
   const builderCards = useMemo(() => all.filter((s) => !s.chatOnly), [all]);
   const { sorted: summaries, folders, by, total } = useSortedCards(builderCards);
   const { pager, listRef } = useCardPage(summaries);
+  const picks = useCardPicks();
   const setHomeTab = useUiStore((s) => s.setHomeTab);
   const importFile = () => importCards();
   return (
@@ -598,6 +605,7 @@ function CardsHome() {
         <FirstRunChecklist onNewCard={() => void create()} />
         <TagFilter cards={builderCards} />
         <AppTagBar cards={builderCards} />
+        <CardSelectBar shown={summaries} page={pager.items} />
         {summaries.length === 0 && folders.length === 0 ? (
           <p className="text-sm text-slate-500">{total ? 'No cards match those tags.' : 'No cards yet. Start one, import one, or drop a PNG, JSON or CHARX card anywhere. You can also start one from a picture in the gen library.'}</p>
         ) : (
@@ -608,8 +616,10 @@ function CardsHome() {
               ))}
             {pager.items.map((s) => {
               const url = api.avatarUrl(s.id, s.avatar);
+              const picked = picks.picked(s.id);
               return (
-                <button key={s.id} type="button" onClick={() => void open(s.id)} className="group flex flex-col overflow-hidden rounded-md border border-slate-800 bg-slate-900 text-left hover:border-violet-500">
+                <button key={s.id} type="button" aria-pressed={picks.picking ? picked : undefined} onClick={() => picks.click(s.id, () => void open(s.id))} className={cx('group relative flex flex-col overflow-hidden rounded-md border bg-slate-900 text-left hover:border-violet-500', picked ? 'border-violet-400 ring-2 ring-violet-400' : 'border-slate-800')}>
+                  {picks.picking && <PickMark picked={picked} className="absolute left-1.5 top-1.5 z-10" />}
                   <div className="checker aspect-[2/3] w-full">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {url ? <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" /> : <div className="flex h-full items-center justify-center text-3xl text-slate-600">{(s.name.trim()[0] ?? '?').toUpperCase()}</div>}

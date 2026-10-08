@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
 import { uuid } from '@/lib/uuid';
-import { EMPTY_TAG_DATA, addTagsToCard, copyCardTags, findTag, newTag, removeTag, type AppTag, type AppTagData } from '@/lib/appTags';
+import { EMPTY_TAG_DATA, addTagsToCard, copyCardTags, findTag, newTag, removeTag, setTagOnCards, type AppTag, type AppTagData } from '@/lib/appTags';
 
 // Your app tags (lib/appTags.ts): SillyTavern's tags, kept by UCCB rather
 // than in the cards. Saved on the local server (data/tags.json) a moment
@@ -27,6 +27,8 @@ interface AppTagState extends AppTagData {
   /** Gives the card these tags (by name; new names make new tags). */
   addToCard: (cardId: string, names: string[], onlyExisting?: boolean) => void;
   setCardTags: (cardId: string, ids: string[]) => void;
+  /** Puts a tag on all these cards, or takes it off them all. */
+  setTagOnCards: (cardIds: string[], tagId: string, on: boolean) => void;
   copyCard: (from: string, to: string) => void;
   setOptions: (patch: Partial<Pick<AppTagData, 'folders' | 'importMode'>>) => void;
   /** Replaces everything (a backup merged in). */
@@ -86,6 +88,7 @@ export const useAppTagStore = create<AppTagState>((set, get) => {
         else delete map[cardId];
         return { ...s, map };
       }),
+    setTagOnCards: (cardIds, tagId, on) => change((s) => setTagOnCards(s, cardIds, tagId, on)),
     copyCard: (from, to) => change((s) => copyCardTags(s, from, to)),
     setOptions: (patch) => change((s) => ({ ...s, ...patch })),
     replace: (data) => change(() => dataOf(data)),
