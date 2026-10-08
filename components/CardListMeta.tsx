@@ -3,17 +3,19 @@
 import { useUiStore } from '@/store/uiStore';
 import { cx } from '@/components/ui';
 import type { ProjectSummary } from '@/types/project';
+import { CardAppTags } from '@/components/AppTags';
 
 /** Under a card's name in a list: its author and the start of its
  *  creator's notes, as SillyTavern's list shows them (each can be switched
  *  off in Settings → General). */
-export function CardListMeta({ summary, className }: { summary: Pick<ProjectSummary, 'creator' | 'notes'>; className?: string }) {
+export function CardListMeta({ summary, className }: { summary: Pick<ProjectSummary, 'id' | 'creator' | 'notes'>; className?: string }) {
   const showCreator = useUiStore((s) => s.listShowsCreator);
   const setCardAuthor = useUiStore((s) => s.setCardAuthor);
   const showNotes = useUiStore((s) => s.listShowsNotes);
   const creator = showCreator && summary.creator;
   const notes = showNotes && summary.notes;
-  if (!creator && !notes) return null;
+  // Your app tags (components/AppTags.tsx) show either way.
+  if (!creator && !notes) return <CardAppTags cardId={summary.id} className={className} />;
   return (
     <>
       {creator && (
@@ -38,6 +40,7 @@ export function CardListMeta({ summary, className }: { summary: Pick<ProjectSumm
           {notes}
         </span>
       )}
+      <CardAppTags cardId={summary.id} className={className} />
     </>
   );
 }

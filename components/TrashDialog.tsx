@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import type { ProjectSummary, TrashedProject } from '@/types/project';
 import { api } from '@/lib/api';
 import { useProjectStore } from '@/store/projectStore';
+import { useAppTagStore } from '@/store/appTagStore';
 import { toast } from '@/store/uiStore';
 import { Button, Empty, IconButton, Modal, choiceDialog, confirmDialog } from '@/components/ui';
 
@@ -33,6 +34,7 @@ export async function duplicateCard(s: Pick<ProjectSummary, 'id' | 'name' | 'cha
   if (!which) return;
   try {
     const p = await useProjectStore.getState().duplicate(s.id, which === 'chats');
+    useAppTagStore.getState().copyCard(s.id, p.id);
     toast(`Opened the copy: "${p.card.data.name || 'Unnamed'}".`, 'success');
   } catch (err) {
     toast(`Couldn't duplicate it: ${(err as Error).message}`, 'error');

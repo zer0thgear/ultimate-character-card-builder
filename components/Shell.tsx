@@ -29,6 +29,7 @@ import { usePackStore } from '@/store/packStore';
 import { ChatCardActions, ChatCardList, ChatHeaderAvatar, ChatHome, ChatScreen, switchAppMode } from '@/components/chatmode/ChatMode';
 import { CardListMeta } from '@/components/CardListMeta';
 import { CardSortControl, TagFilter, TagFilterNote, useSortedCards } from '@/components/CardSort';
+import { AppTagBar, AppTagHosts, FolderRow, FolderTile, openCardTags } from '@/components/AppTags';
 import { cardMatches, chatStatsDetail, sortDetail } from '@/lib/cardSort';
 import { importFromUrl, overwriteCard } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
@@ -201,6 +202,7 @@ export function Shell() {
       <FieldToolsHost />
       <ConfirmHost />
       <TrashDialog />
+      <AppTagHosts />
       <LorebooksDialog />
       <LoreWizardHost />
       <VersionsDialog />
@@ -444,7 +446,7 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
   };
   const [filter, setFilter] = useState('');
   const q = filter.trim().toLowerCase();
-  const { sorted, by } = useSortedCards(summaries);
+  const { sorted, folders, by } = useSortedCards(summaries);
   const shown = sorted.filter((s) => cardMatches(s, q));
   const importFile = async () => {
     if (await importCards()) onPicked?.();
@@ -481,7 +483,9 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
         </div>
       )}
       <TagFilterNote className="mx-2 mb-2" />
+      <AppTagBar cards={summaries} compact className="mx-2 mb-2" />
       <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
+        {!q && folders.map((f) => <FolderRow key={f.tag.id} folder={f} />)}
         {shown.map((s) => {
           const url = api.avatarUrl(s.id, s.avatar);
           return (
@@ -497,6 +501,9 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
                   <span className="block truncate text-[10px] text-slate-500" title={s.chats ? chatStatsDetail(s) : undefined}>{sortDetail(s, by)}</span>
                 </span>
               </button>
+              <IconButton title="Tags" className="opacity-0 group-hover:opacity-100 touch:opacity-100" onClick={() => openCardTags(s)}>
+                🏷
+              </IconButton>
               <IconButton title="Duplicate card" className="opacity-0 group-hover:opacity-100 touch:opacity-100" onClick={() => void duplicateCard(s).then(() => onPicked?.())}>
                 ⧉
               </IconButton>
@@ -548,7 +555,7 @@ function Home({ loading }: { loading: boolean }) {
 function CardsHome() {
   const { summaries: all, open, create } = useProjectStore();
   const builderCards = useMemo(() => all.filter((s) => !s.chatOnly), [all]);
-  const { sorted: summaries, by, total } = useSortedCards(builderCards);
+  const { sorted: summaries, folders, by, total } = useSortedCards(builderCards);
   const setHomeTab = useUiStore((s) => s.setHomeTab);
   const importFile = () => importCards();
   return (
@@ -586,10 +593,14 @@ function CardsHome() {
         </div>
         <FirstRunChecklist onNewCard={() => void create()} />
         <TagFilter cards={builderCards} />
-        {summaries.length === 0 ? (
-          <p className="text-sm text-slate-500">{total ? 'No cards have all of those tags.' : 'No cards yet. Start one, import one, or drop a PNG, JSON or CHARX card anywhere. You can also start one from a picture in the gen library.'}</p>
+        <AppTagBar cards={builderCards} />
+        {summaries.length === 0 && folders.length === 0 ? (
+          <p className="text-sm text-slate-500">{total ? 'No cards match those tags.' : 'No cards yet. Start one, import one, or drop a PNG, JSON or CHARX card anywhere. You can also start one from a picture in the gen library.'}</p>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3 phone:grid-cols-[repeat(auto-fill,minmax(104px,1fr))] phone:gap-2">
+            {folders.map((f) => (
+              <FolderTile key={f.tag.id} folder={f} cards={builderCards} />
+            ))}
             {summaries.map((s) => {
               const url = api.avatarUrl(s.id, s.avatar);
               return (

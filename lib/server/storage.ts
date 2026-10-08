@@ -2,6 +2,7 @@ import 'server-only';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { cleanTagData, type AppTagData } from '@/lib/appTags';
 import type { AppConfig, BankLorebook, CardProject, ChatSession, ChatSummary, Persona, ProjectSummary, StorySession, StorySummary, TrashedProject } from '@/types/project';
 import { DEFAULT_CONFIG } from '@/types/project';
 import type { AdventureSession, AdventureSummary } from '@/types/adventure';
@@ -509,6 +510,21 @@ export function updatePersonas(change: (list: Persona[]) => Persona[] | Promise<
 }
 
 export const personaAvatarPath = (id: string) => path.join(PERSONAS, `${checkId(id)}.png`);
+
+// ─── App tags ────────────────────────────────────────────────────────────────
+//   data/tags.json   AppTagData (lib/appTags.ts): your tags, which cards have them
+
+const TAGS_FILE = path.join(DATA_DIR, 'tags.json');
+
+export async function readAppTags(): Promise<AppTagData> {
+  return cleanTagData(await readJson<unknown>(TAGS_FILE));
+}
+
+export async function saveAppTags(data: unknown): Promise<AppTagData> {
+  const clean = cleanTagData(data);
+  await writeFileAtomic(TAGS_FILE, JSON.stringify(clean, null, 2));
+  return clean;
+}
 
 // ─── Lorebooks (the bank) ────────────────────────────────────────────────────
 //   data/lorebooks/<id>.json   BankLorebook

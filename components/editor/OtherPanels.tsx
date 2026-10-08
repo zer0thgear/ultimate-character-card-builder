@@ -6,6 +6,7 @@ import { useLlmStore } from '@/store/llmStore';
 import { toast } from '@/store/uiStore';
 import { CardTextField, useCardField, useWritingTools } from '@/components/editor/fieldTools';
 import { SourceList } from '@/components/CardSource';
+import { AppTagEditor } from '@/components/AppTags';
 import { RegexScriptsPanel } from '@/components/editor/RegexScripts';
 import { AutoTextarea, Button, ChipInput, NumberInput, Section, TokenBadge, Toggle, confirmDialog, cx, inputClass } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
@@ -71,6 +72,7 @@ function CharacterNote() {
 
 export function CreatorPanel() {
   const card = useProjectStore((s) => s.project?.card.data);
+  const projectId = useProjectStore((s) => s.project?.id);
   const updateCard = useProjectStore((s) => s.updateCard);
   const [creator, setCreator] = useCardField('creator');
   const [version, setVersion] = useCardField('character_version');
@@ -113,6 +115,11 @@ export function CreatorPanel() {
         <ChipInput values={card.tags} onChange={(tags) => updateCard((d) => ({ ...d, tags }))} placeholder="Type a tag and press Enter" />
         {writing && <ConnectionPicker value={assistConnectionId} onChange={setAssistConnection} label="Assistant connection" />}
       </Section>
+      {projectId && (
+        <Section title="My tags" actions={<span className="text-[11px] text-slate-500 normal-case">yours, not written into the card</span>}>
+          <AppTagEditor cardId={projectId} cardTags={card.tags} />
+        </Section>
+      )}
       <CardTextField path="creator_notes" label="Creator's notes" hint="Shown to people, not the model" minRows={5} />
       {/* Read-only: the V3 spec leaves recording it to the app (Import from
           URL adds the link it came from). */}

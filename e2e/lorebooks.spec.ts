@@ -32,24 +32,24 @@ test("lorebooks from the bank go into the chat beside the card's", async ({ page
   await page.keyboard.press('Escape');
 
   // A card with a lorebook: importing it offers the lorebook to the bank.
-  const card = { spec: 'chara_card_v3', spec_version: '3.0', data: { name: 'Keeper', description: 'Keeps the inn.', first_mes: 'Welcome.', character_book: { extensions: {}, entries: [entry(['cellar'], 'The cellar hides a door.')] } } };
+  const card = { spec: 'chara_card_v3', spec_version: '3.0', data: { name: 'Innkeeper', description: 'Keeps the inn.', first_mes: 'Welcome.', character_book: { extensions: {}, entries: [entry(['cellar'], 'The cellar hides a door.')] } } };
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Import a card…' }).click()]);
-  await chooser.setFiles({ name: 'keeper.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(card)) });
-  await expect(page.getByText('Keeper has a lorebook. Add it to your Lorebooks?')).toBeVisible();
+  await chooser.setFiles({ name: 'innkeeper.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(card)) });
+  await expect(page.getByText('Innkeeper has a lorebook. Add it to your Lorebooks?')).toBeVisible();
   await page.getByRole('button', { name: 'Add it' }).click();
-  await expect(page.getByText(`Added "Keeper's Lorebook" to Lorebooks.`)).toBeVisible();
+  await expect(page.getByText(`Added "Innkeeper's Lorebook" to Lorebooks.`)).toBeVisible();
   const books = await (await request.get('/api/lorebooks')).json();
-  expect(books.map((b: { book: { name: string } }) => b.book.name)).toEqual(['Ship lore', 'World', "Keeper's Lorebook"]);
+  expect(books.map((b: { book: { name: string } }) => b.book.name)).toEqual(['Ship lore', 'World', "Innkeeper's Lorebook"]);
 
   // The chat scans the card's lorebook and the global one; the card's own
   // copy in the bank isn't read twice, even switched on globally.
   await page.getByRole('button', { name: 'Close this card (back to the home screen)' }).click();
   await page.getByRole('button', { name: '📖 Lorebooks' }).click();
-  const copyRow = dialog.locator('div.rounded-md').filter({ hasText: "Keeper's Lorebook" }).filter({ has: page.getByRole('button', { name: 'Global' }) });
+  const copyRow = dialog.locator('div.rounded-md').filter({ hasText: "Innkeeper's Lorebook" }).filter({ has: page.getByRole('button', { name: 'Global' }) });
   await copyRow.getByRole('button', { name: 'Global' }).click();
   await expect(copyRow.getByRole('button', { name: '🌐 Global' })).toBeVisible();
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: /Keeper/ }).first().click();
+  await page.getByRole('button', { name: /Innkeeper/ }).first().click();
   await page.getByRole('tab', { name: '💬 Test chat' }).click();
   await page.getByRole('button', { name: 'Start a chat' }).click();
   const box = page.locator('[data-chat-input]');
