@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { EMPTY_TAG_DATA, addTagsToCard, applyAppTags, cleanTagData, cycleFilter, importCandidates, mergeTagBackup, openFolders, parseTagBackup, removeTag, tagUse, type AppTag, type AppTagData } from '@/lib/appTags';
+import { EMPTY_TAG_DATA, addTagsToCard, applyAppTags, cleanTagData, cycleFilter, importCandidates, mergeTagBackup, openFolders, parseTagBackup, removeTag, setTagOnCards, tagUse, type AppTag, type AppTagData } from '@/lib/appTags';
 import { routeFetch } from './helpers/routes';
 
 const tag = (id: string, folder: AppTag['folder'] = 'none', order = 0): AppTag => ({ id, name: id.toUpperCase(), folder, order, createdAt: 0 });
@@ -154,5 +154,17 @@ describe('tags route', { timeout: 30_000 }, () => {
     const got = (await (await fetch('/api/tags')).json()) as AppTagData;
     expect(got.map).toEqual({ a: ['fantasy'] });
     expect(got.tags.map((t) => t.id)).toEqual(['fantasy', 'nsfw']);
+  });
+});
+
+describe('tagging many cards at once', () => {
+  it('puts a tag on every card, once', () => {
+    const next = setTagOnCards(data(), ['a', 'c', 'd'], 'fantasy', true);
+    expect(next.map).toEqual({ a: ['fantasy'], b: ['fantasy', 'nsfw'], c: ['nsfw', 'fantasy'], d: ['fantasy'] });
+  });
+
+  it('takes a tag off every card, dropping cards left with none', () => {
+    const next = setTagOnCards(data(), ['a', 'b', 'd'], 'fantasy', false);
+    expect(next.map).toEqual({ b: ['nsfw'], c: ['nsfw'] });
   });
 });

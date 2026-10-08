@@ -18,6 +18,7 @@ import { CardListMeta } from '@/components/CardListMeta';
 import { CardPager, useCardPage } from '@/components/CardPager';
 import { CardSortControl, TagFilter, TagFilterNote, useSortedCards } from '@/components/CardSort';
 import { AppTagBar, FolderRow, FolderTile, openCardTags } from '@/components/AppTags';
+import { CardSelectBar, PickMark, useCardPicks } from '@/components/CardSelect';
 import { cardMatches, chatStatsDetail, sortDetail } from '@/lib/cardSort';
 import { importFromUrl } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
@@ -74,6 +75,7 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
   const { sorted, folders, by } = useSortedCards(summaries);
   const shown = sorted.filter((s) => cardMatches(s, q));
   const { pager, listRef } = useCardPage(shown, { query: q, focusId: project?.id });
+  const picks = useCardPicks();
   return (
     <nav className={cx('flex h-full w-60 min-w-0 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950', className)}>
       <div className="flex gap-1.5 p-2">
@@ -92,20 +94,26 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
       )}
       <TagFilterNote className="mx-2 mb-2" />
       <AppTagBar cards={summaries} compact className="mx-2 mb-2" />
+      <CardSelectBar shown={shown} page={pager.items} compact className="mx-2 mb-2" />
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
         {!q && pager.page === 0 && folders.map((f) => <FolderRow key={f.tag.id} folder={f} />)}
         {pager.items.map((s) => {
           const url = avatarOf(s);
+          const picked = picks.picked(s.id);
           return (
-            <div key={s.id} className={cx('group flex items-center gap-2 rounded-md px-1.5 py-1.5', project?.id === s.id ? 'bg-violet-500/15' : 'hover:bg-slate-900')}>
+            <div key={s.id} className={cx('group flex items-center gap-2 rounded-md px-1.5 py-1.5', picked ? 'bg-violet-500/25' : project?.id === s.id && !picks.picking ? 'bg-violet-500/15' : 'hover:bg-slate-900')}>
               <button
                 type="button"
+                aria-pressed={picks.picking ? picked : undefined}
                 className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                onClick={async () => {
-                  await open(s.id);
-                  onPicked?.();
-                }}
+                onClick={() =>
+                  picks.click(s.id, async () => {
+                    await open(s.id);
+                    onPicked?.();
+                  })
+                }
               >
+                {picks.picking && <PickMark picked={picked} />}
                 <span className="h-10 w-7 flex-shrink-0 overflow-hidden rounded bg-slate-800">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   {url && <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />}
@@ -149,6 +157,7 @@ export function ChatHome({ loading }: { loading: boolean }) {
   const { summaries: all, open } = useProjectStore();
   const { sorted: summaries, folders, by, total } = useSortedCards(all);
   const { pager, listRef } = useCardPage(summaries);
+  const picks = useCardPicks();
   if (loading) return <div className="flex flex-1 items-center justify-center text-slate-500">Opening…</div>;
   return (
     <div ref={listRef} className="h-full min-w-0 flex-1 overflow-y-auto p-4 phone:p-3">
@@ -174,6 +183,7 @@ export function ChatHome({ loading }: { loading: boolean }) {
         </div>
         <TagFilter cards={all} />
         <AppTagBar cards={all} />
+        <CardSelectBar shown={summaries} page={pager.items} />
         {summaries.length === 0 && folders.length === 0 ? (
           <p className="text-sm text-slate-500">{total ? 'No cards match those tags.' : 'No cards yet. Import a PNG, JSON or CHARX card, or drop one anywhere.'}</p>
         ) : (
@@ -184,8 +194,10 @@ export function ChatHome({ loading }: { loading: boolean }) {
               ))}
             {pager.items.map((s) => {
               const url = avatarOf(s);
+              const picked = picks.picked(s.id);
               return (
-                <button key={s.id} type="button" onClick={() => void open(s.id)} className="group flex flex-col overflow-hidden rounded-md border border-slate-800 bg-slate-900 text-left hover:border-violet-500">
+                <button key={s.id} type="button" aria-pressed={picks.picking ? picked : undefined} onClick={() => picks.click(s.id, () => void open(s.id))} className={cx('group relative flex flex-col overflow-hidden rounded-md border bg-slate-900 text-left hover:border-violet-500', picked ? 'border-violet-400 ring-2 ring-violet-400' : 'border-slate-800')}>
+                  {picks.picking && <PickMark picked={picked} className="absolute left-1.5 top-1.5 z-10" />}
                   <div className="checker aspect-[2/3] w-full">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {url ? <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" /> : <div className="flex h-full items-center justify-center text-3xl text-slate-600">{(s.name.trim()[0] ?? '?').toUpperCase()}</div>}
