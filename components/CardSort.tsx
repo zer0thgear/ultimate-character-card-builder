@@ -1,18 +1,25 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useUiStore } from '@/store/uiStore';
 import { CARD_SORTS, byAuthor, sortCards, tagCounts, withTags, type CardSortBy } from '@/lib/cardSort';
 import { IconButton, Select, cx } from '@/components/ui';
 import type { ProjectSummary } from '@/types/project';
+import { NO_TAG_FILTER, applyAppTags } from '@/lib/appTags';
+import { ensureAppTags, useAppTagStore } from '@/store/appTagStore';
 
 /** The cards in the order this mode's lists are sorted by, and what by. */
 export function useSortedCards<T extends ProjectSummary>(cards: T[]) {
   const sort = useUiStore((s) => s.cardSort[s.appMode]);
   const tags = useUiStore((s) => s.cardTags?.[s.appMode]) ?? NO_TAGS;
   const author = useUiStore((s) => s.cardAuthor?.[s.appMode]) ?? '';
-  const sorted = useMemo(() => sortCards(byAuthor(withTags(cards, tags), author), sort), [cards, sort, tags, author]);
-  return { sorted, by: sort.by, filtered: tags.length > 0 || !!author, total: cards.length };
+  const appTags = useUiStore((s) => s.cardAppTags?.[s.appMode]) ?? NO_TAG_FILTER;
+  const tagData = useAppTagStore(useShallow((s) => ({ tags: s.tags, map: s.map, folders: s.folders, importMode: s.importMode })));
+  useEffect(ensureAppTags, []);
+  // Your app tags filter too, and set folders above the cards (lib/appTags.ts).
+  const { cards: sorted, folders } = useMemo(() => applyAppTags(sortCards(byAuthor(withTags(cards, tags), author), sort), tagData, appTags), [cards, sort, tags, author, tagData, appTags]);
+  return { sorted, folders, by: sort.by, filtered: tags.length > 0 || !!author || appTags.include.length + appTags.exclude.length > 0, total: cards.length };
 }
 
 const NO_TAGS: string[] = [];

@@ -5,6 +5,7 @@ import { toast } from '@/store/uiStore';
 import { api } from '@/lib/api';
 import { importCardFile } from '@/lib/cardFile';
 import { offerCardLore } from '@/components/LorebookBank';
+import { offerCardTags } from '@/components/AppTags';
 import { fromBase64 } from '@/lib/requestImage';
 import { choiceDialog, confirmDialog, pickFiles, textDialog } from '@/components/ui';
 import type { CardProject } from '@/types/project';
@@ -83,6 +84,7 @@ export async function importFromUrl(init: Partial<CardProject> = {}) {
   }
   if (names.length) toast(names.length === 1 ? `Imported ${names[0]}.` : `Imported ${names.length} cards: ${names.join(', ')}.`, 'success');
   if (failed.length) toast(failed.length === 1 ? failed[0] : `Couldn't import ${failed.length} links: ${failed.join('; ')}`, 'error');
+  await offerCardTags(lore);
   await offerCardLore(lore);
 }
 

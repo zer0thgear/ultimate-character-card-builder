@@ -1,3 +1,4 @@
+import type { AppTagData } from '@/lib/appTags';
 import type { AppConfig, CardProject, CardVersion, CardVersionInfo, TrashedProject, BankLorebook, ChatSession, ChatSummary, StorySession, StorySummary, KeptImage, Persona, ProjectSummary, AvatarInfo } from '@/types/project';
 import type { LlmEvent, LlmRequest } from '@/types/llm';
 import type { Lorebook } from '@/types/card';
@@ -109,6 +110,9 @@ export const api = {
   personaAvatarUrl: (p: Persona) => (p.avatar ? `/api/personas/${p.id}/avatar?v=${p.avatar.version}` : null),
   setPersonaAvatar: (id: string, image: Blob) => call<AvatarInfo>(`/api/personas/${id}/avatar`, { method: 'PUT', body: image }),
   clearPersonaAvatar: (id: string) => call<{ ok: true }>(`/api/personas/${id}/avatar`, { method: 'DELETE' }),
+
+  getAppTags: () => call<AppTagData>('/api/tags'),
+  saveAppTags: (data: AppTagData) => call<AppTagData>('/api/tags', json('PUT', data)),
 
   importStPersonas: (folder: string) =>
     call<{ added: number; skipped: number; pictures: number; from: string; defaultName: string | null }>('/api/personas/import-st', json('POST', { folder })),

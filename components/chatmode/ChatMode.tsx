@@ -17,6 +17,7 @@ import { openLightbox } from '@/components/Lightbox';
 import { CardListMeta } from '@/components/CardListMeta';
 import { CardPager, useCardPage } from '@/components/CardPager';
 import { CardSortControl, TagFilter, TagFilterNote, useSortedCards } from '@/components/CardSort';
+import { AppTagBar, FolderRow, FolderTile, openCardTags } from '@/components/AppTags';
 import { cardMatches, chatStatsDetail, sortDetail } from '@/lib/cardSort';
 import { importFromUrl } from '@/components/ImportUrl';
 import { importCards } from '@/components/ImportCards';
@@ -70,7 +71,7 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
   const { summaries, project, open, remove } = useProjectStore();
   const [filter, setFilter] = useState('');
   const q = filter.trim().toLowerCase();
-  const { sorted, by } = useSortedCards(summaries);
+  const { sorted, folders, by } = useSortedCards(summaries);
   const shown = sorted.filter((s) => cardMatches(s, q));
   const { pager, listRef } = useCardPage(shown, { query: q, focusId: project?.id });
   return (
@@ -90,7 +91,9 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
         </div>
       )}
       <TagFilterNote className="mx-2 mb-2" />
+      <AppTagBar cards={summaries} compact className="mx-2 mb-2" />
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
+        {!q && pager.page === 0 && folders.map((f) => <FolderRow key={f.tag.id} folder={f} />)}
         {pager.items.map((s) => {
           const url = avatarOf(s);
           return (
@@ -116,6 +119,9 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
                   </span>
                 </span>
               </button>
+              <IconButton title="Tags" className="opacity-0 group-hover:opacity-100 touch:opacity-100" onClick={() => openCardTags(s)}>
+                🏷
+              </IconButton>
               {s.chatOnly && (
                 <IconButton
                   title="Delete card"
@@ -141,7 +147,7 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
 /** No card open in Chat mode: every card to pick from. */
 export function ChatHome({ loading }: { loading: boolean }) {
   const { summaries: all, open } = useProjectStore();
-  const { sorted: summaries, by, total } = useSortedCards(all);
+  const { sorted: summaries, folders, by, total } = useSortedCards(all);
   const { pager, listRef } = useCardPage(summaries);
   if (loading) return <div className="flex flex-1 items-center justify-center text-slate-500">Opening…</div>;
   return (
@@ -167,10 +173,15 @@ export function ChatHome({ loading }: { loading: boolean }) {
           {total > 1 && <CardSortControl className="ml-auto w-44" />}
         </div>
         <TagFilter cards={all} />
-        {summaries.length === 0 ? (
-          <p className="text-sm text-slate-500">{total ? 'No cards have all of those tags.' : 'No cards yet. Import a PNG, JSON or CHARX card, or drop one anywhere.'}</p>
+        <AppTagBar cards={all} />
+        {summaries.length === 0 && folders.length === 0 ? (
+          <p className="text-sm text-slate-500">{total ? 'No cards match those tags.' : 'No cards yet. Import a PNG, JSON or CHARX card, or drop one anywhere.'}</p>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3 phone:grid-cols-[repeat(auto-fill,minmax(104px,1fr))] phone:gap-2">
+            {pager.page === 0 &&
+              folders.map((f) => (
+                <FolderTile key={f.tag.id} folder={f} cards={all} />
+              ))}
             {pager.items.map((s) => {
               const url = avatarOf(s);
               return (

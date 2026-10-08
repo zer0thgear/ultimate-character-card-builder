@@ -17,7 +17,7 @@ const usePageSize = create<{ size: number; setSize: (size: number) => void }>()(
 const NO_TAGS: string[] = [];
 
 /** A page of these cards. It goes back to the first page when the sort,
- *  the tag or author filter or `query` changes, and to the page with
+ *  the tag, my-tag or author filter or `query` changes, and to the page with
  *  `focusId` on it when that changes (another card opened). Put `listRef`
  *  on the list's scroller, so a new page starts at the top. */
 export function useCardPage<T extends { id: string }>(cards: T[], { query = '', focusId }: { query?: string; focusId?: string } = {}) {
@@ -25,7 +25,8 @@ export function useCardPage<T extends { id: string }>(cards: T[], { query = '', 
   const sort = useUiStore((s) => s.cardSort[s.appMode]);
   const tags = useUiStore((s) => s.cardTags?.[s.appMode]) ?? NO_TAGS;
   const author = useUiStore((s) => s.cardAuthor?.[s.appMode]) ?? '';
-  const key = JSON.stringify([sort, tags, author, query, size]);
+  const appTags = useUiStore((s) => s.cardAppTags?.[s.appMode]);
+  const key = JSON.stringify([sort, tags, author, appTags, query, size]);
   const [at, setAt] = useState({ page: 0, key, focusId });
   let page = at.page;
   if (at.key !== key || at.focusId !== focusId) {
