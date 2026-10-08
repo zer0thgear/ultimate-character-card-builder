@@ -30,6 +30,7 @@ const ROUTES: [string, () => Promise<RouteModule>][] = [
   ['/api/projects/:id/adventures/:adventureId', () => import('@/app/api/projects/[id]/adventures/[adventureId]/route')],
   ['/api/projects/:id/chat-images/:file', () => import('@/app/api/projects/[id]/chat-images/[file]/route')],
   ['/api/personas', () => import('@/app/api/personas/route')],
+  ['/api/tags', () => import('@/app/api/tags/route')],
   ['/api/lorebooks', () => import('@/app/api/lorebooks/route')],
   ['/api/lorebooks/:id', () => import('@/app/api/lorebooks/[id]/route')],
   ['/api/packs', () => import('@/app/api/packs/route')],

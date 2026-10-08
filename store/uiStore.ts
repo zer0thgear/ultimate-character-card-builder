@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { DEFAULT_CARD_SORT, type CardSort } from '@/lib/cardSort';
+import { NO_TAG_FILTER, type AppTagFilter } from '@/lib/appTags';
 import type { AppConfig } from '@/types/project';
 import { DEFAULT_CONFIG } from '@/types/project';
 import { api } from '@/lib/api';
@@ -84,6 +85,10 @@ interface UiState {
   /** Each mode's card lists show only this author's cards ('' for all). */
   cardAuthor: Record<AppMode, string>;
   setCardAuthor: (mode: AppMode, author: string) => void;
+  /** Each mode's filter on your app tags (lib/appTags.ts); the folders
+   *  you're in are among its "show only" tags. */
+  cardAppTags: Record<AppMode, AppTagFilter>;
+  setCardAppTags: (mode: AppMode, filter: AppTagFilter) => void;
   /** Local extensions whose buttons on pictures are hidden (by id). */
   hiddenImageActions: string[];
   setImageActionsHidden: (extension: string, hidden: boolean) => void;
@@ -143,6 +148,8 @@ export const useUiStore = create<UiState>()(
       setCardTags: (mode, tags) => set((s) => ({ cardTags: { ...s.cardTags, [mode]: tags } })),
       cardAuthor: { builder: '', chat: '' },
       setCardAuthor: (mode, author) => set((s) => ({ cardAuthor: { ...s.cardAuthor, [mode]: author } })),
+      cardAppTags: { builder: NO_TAG_FILTER, chat: NO_TAG_FILTER },
+      setCardAppTags: (mode, filter) => set((s) => ({ cardAppTags: { ...s.cardAppTags, [mode]: filter } })),
       hiddenImageActions: [],
       setImageActionsHidden: (extension, hidden) =>
         set((s) => ({ hiddenImageActions: hidden ? [...new Set([...s.hiddenImageActions, extension])] : s.hiddenImageActions.filter((id) => id !== extension) })),
