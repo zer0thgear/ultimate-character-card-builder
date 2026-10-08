@@ -461,6 +461,8 @@ interface TextRequest {
   initial?: string;
   placeholder?: string;
   confirmLabel?: string;
+  /** Several lines (Enter makes a new one; Ctrl+Enter confirms). */
+  multiline?: boolean;
   resolve: (text: string | null) => void;
 }
 
@@ -543,15 +545,27 @@ function TextPromptHost() {
     >
       <label className="flex flex-col gap-1 text-xs text-slate-400">
         {req?.label}
-        <input
-          autoFocus
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onFocus={(e) => e.target.select()}
-          onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && close(text)}
-          placeholder={req?.placeholder}
-          className={inputClass}
-        />
+        {req?.multiline ? (
+          <textarea
+            autoFocus
+            rows={5}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing && close(text)}
+            placeholder={req.placeholder}
+            className={cx(inputClass, 'resize-y font-mono text-xs')}
+          />
+        ) : (
+          <input
+            autoFocus
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onFocus={(e) => e.target.select()}
+            onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && close(text)}
+            placeholder={req?.placeholder}
+            className={inputClass}
+          />
+        )}
       </label>
     </Modal>
   );

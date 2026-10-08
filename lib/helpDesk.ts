@@ -226,7 +226,7 @@ Regex scripts also take {{match}} and $1 in their replacement.`;
 /** Short answers to the questions people ask first. */
 export const QUICK_ANSWERS = `- Settings: ⚙ Settings in the header, or Settings on the home screen. LLM connections, image backends, presets, personas, templates, folders, versions and extensions are all tabs there.
 - Home screen: ⌂ in the header closes the open card and comes back here.
-- Card formats: imports and exports PNG (V1/V2/V3 cards), JSON and CHARX; drop a file anywhere to import. 🔗 Import from a URL takes Chub or Cardbox links.
+- Card formats: imports and exports PNG (V1/V2/V3 cards), JSON and CHARX; drop a file anywhere to import. 🔗 Import from a URL takes Chub or Cardbox links, several at once one per line. Past 25 cards the card lists go a page at a time, with how many to a page beside the page buttons.
 - The ✨ on a text field: the writing assistant (Rewrite, Draft, Expand, Tighten, Polish, Continue), using the assistant connection.
 - Undo: ↶ ↷ in the header or Ctrl+Z / Ctrl+Y outside text boxes. 🕘 beside undo is version history.
 - Everything saves by itself; Ctrl+S saves now. Data lives in the data/ folder next to the app.

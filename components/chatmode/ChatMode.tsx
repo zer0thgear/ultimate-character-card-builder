@@ -15,6 +15,7 @@ import { SourceButton } from '@/components/CardSource';
 import { WritingToolsContext } from '@/components/editor/fieldTools';
 import { openLightbox } from '@/components/Lightbox';
 import { CardListMeta } from '@/components/CardListMeta';
+import { CardPager, useCardPage } from '@/components/CardPager';
 import { CardSortControl, TagFilter, TagFilterNote, useSortedCards } from '@/components/CardSort';
 import { AppTagBar, FolderRow, FolderTile, openCardTags } from '@/components/AppTags';
 import { cardMatches, chatStatsDetail, sortDetail } from '@/lib/cardSort';
@@ -72,6 +73,7 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
   const q = filter.trim().toLowerCase();
   const { sorted, folders, by } = useSortedCards(summaries);
   const shown = sorted.filter((s) => cardMatches(s, q));
+  const { pager, listRef } = useCardPage(shown, { query: q, focusId: project?.id });
   return (
     <nav className={cx('flex h-full w-60 min-w-0 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950', className)}>
       <div className="flex gap-1.5 p-2">
@@ -90,9 +92,9 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
       )}
       <TagFilterNote className="mx-2 mb-2" />
       <AppTagBar cards={summaries} compact className="mx-2 mb-2" />
-      <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
-        {!q && folders.map((f) => <FolderRow key={f.tag.id} folder={f} />)}
-        {shown.map((s) => {
+      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
+        {!q && pager.page === 0 && folders.map((f) => <FolderRow key={f.tag.id} folder={f} />)}
+        {pager.items.map((s) => {
           const url = avatarOf(s);
           return (
             <div key={s.id} className={cx('group flex items-center gap-2 rounded-md px-1.5 py-1.5', project?.id === s.id ? 'bg-violet-500/15' : 'hover:bg-slate-900')}>
@@ -137,6 +139,7 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
         })}
         {summaries.length === 0 && <p className="px-2 py-4 text-xs text-slate-500">No cards yet. Import one, or drop a card file anywhere.</p>}
       </div>
+      <CardPager pager={pager} compact className="px-2 pb-1" />
     </nav>
   );
 }
@@ -145,9 +148,10 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
 export function ChatHome({ loading }: { loading: boolean }) {
   const { summaries: all, open } = useProjectStore();
   const { sorted: summaries, folders, by, total } = useSortedCards(all);
+  const { pager, listRef } = useCardPage(summaries);
   if (loading) return <div className="flex flex-1 items-center justify-center text-slate-500">Opening…</div>;
   return (
-    <div className="h-full min-w-0 flex-1 overflow-y-auto p-4 phone:p-3">
+    <div ref={listRef} className="h-full min-w-0 flex-1 overflow-y-auto p-4 phone:p-3">
       <div className="mx-auto flex max-w-5xl flex-col gap-4">
         <div>
           <h1 className="text-xl font-semibold text-slate-100">Chat</h1>
@@ -174,10 +178,11 @@ export function ChatHome({ loading }: { loading: boolean }) {
           <p className="text-sm text-slate-500">{total ? 'No cards match those tags.' : 'No cards yet. Import a PNG, JSON or CHARX card, or drop one anywhere.'}</p>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3 phone:grid-cols-[repeat(auto-fill,minmax(104px,1fr))] phone:gap-2">
-            {folders.map((f) => (
-              <FolderTile key={f.tag.id} folder={f} cards={all} />
-            ))}
-            {summaries.map((s) => {
+            {pager.page === 0 &&
+              folders.map((f) => (
+                <FolderTile key={f.tag.id} folder={f} cards={all} />
+              ))}
+            {pager.items.map((s) => {
               const url = avatarOf(s);
               return (
                 <button key={s.id} type="button" onClick={() => void open(s.id)} className="group flex flex-col overflow-hidden rounded-md border border-slate-800 bg-slate-900 text-left hover:border-violet-500">
@@ -198,6 +203,7 @@ export function ChatHome({ loading }: { loading: boolean }) {
             })}
           </div>
         )}
+        <CardPager pager={pager} />
       </div>
     </div>
   );

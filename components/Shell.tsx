@@ -28,6 +28,7 @@ import { ReferencePickHost } from '@/components/llm/References';
 import { usePackStore } from '@/store/packStore';
 import { ChatCardActions, ChatCardList, ChatHeaderAvatar, ChatHome, ChatScreen, switchAppMode } from '@/components/chatmode/ChatMode';
 import { CardListMeta } from '@/components/CardListMeta';
+import { CardPager, useCardPage } from '@/components/CardPager';
 import { CardSortControl, TagFilter, TagFilterNote, useSortedCards } from '@/components/CardSort';
 import { AppTagBar, AppTagHosts, FolderRow, FolderTile, openCardTags } from '@/components/AppTags';
 import { cardMatches, chatStatsDetail, sortDetail } from '@/lib/cardSort';
@@ -448,6 +449,7 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
   const q = filter.trim().toLowerCase();
   const { sorted, folders, by } = useSortedCards(summaries);
   const shown = sorted.filter((s) => cardMatches(s, q));
+  const { pager, listRef } = useCardPage(shown, { query: q, focusId: project?.id });
   const importFile = async () => {
     if (await importCards()) onPicked?.();
   };
@@ -484,9 +486,9 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
       )}
       <TagFilterNote className="mx-2 mb-2" />
       <AppTagBar cards={summaries} compact className="mx-2 mb-2" />
-      <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
-        {!q && folders.map((f) => <FolderRow key={f.tag.id} folder={f} />)}
-        {shown.map((s) => {
+      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
+        {!q && pager.page === 0 && folders.map((f) => <FolderRow key={f.tag.id} folder={f} />)}
+        {pager.items.map((s) => {
           const url = api.avatarUrl(s.id, s.avatar);
           return (
             <div key={s.id} className={cx('group flex items-center gap-2 rounded-md px-1.5 py-1.5', project?.id === s.id ? 'bg-violet-500/15' : 'hover:bg-slate-900')}>
@@ -524,6 +526,7 @@ function ProjectSidebar({ onPicked, className }: { onPicked?: () => void; classN
         })}
         {summaries.length === 0 && <p className="px-2 py-4 text-xs text-slate-500">No cards yet. Make a new one, or drop a card file anywhere.</p>}
       </div>
+      <CardPager pager={pager} compact className="px-2 pb-1" />
       <button type="button" className="mx-2 mb-2 rounded-md px-2 py-1 text-left text-xs text-slate-500 hover:bg-slate-900 hover:text-slate-300" onClick={openTrash} title="Deleted cards, to restore or delete for good">
         🗑 Trash
       </button>
@@ -556,10 +559,11 @@ function CardsHome() {
   const { summaries: all, open, create } = useProjectStore();
   const builderCards = useMemo(() => all.filter((s) => !s.chatOnly), [all]);
   const { sorted: summaries, folders, by, total } = useSortedCards(builderCards);
+  const { pager, listRef } = useCardPage(summaries);
   const setHomeTab = useUiStore((s) => s.setHomeTab);
   const importFile = () => importCards();
   return (
-    <div className="h-full overflow-y-auto p-4 phone:p-3">
+    <div ref={listRef} className="h-full overflow-y-auto p-4 phone:p-3">
       <div className="mx-auto flex max-w-5xl flex-col gap-4">
         <div>
           <h1 className="text-xl font-semibold text-slate-100">Ultimate Character Card Builder</h1>
@@ -598,10 +602,11 @@ function CardsHome() {
           <p className="text-sm text-slate-500">{total ? 'No cards match those tags.' : 'No cards yet. Start one, import one, or drop a PNG, JSON or CHARX card anywhere. You can also start one from a picture in the gen library.'}</p>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3 phone:grid-cols-[repeat(auto-fill,minmax(104px,1fr))] phone:gap-2">
-            {folders.map((f) => (
-              <FolderTile key={f.tag.id} folder={f} cards={builderCards} />
-            ))}
-            {summaries.map((s) => {
+            {pager.page === 0 &&
+              folders.map((f) => (
+                <FolderTile key={f.tag.id} folder={f} cards={builderCards} />
+              ))}
+            {pager.items.map((s) => {
               const url = api.avatarUrl(s.id, s.avatar);
               return (
                 <button key={s.id} type="button" onClick={() => void open(s.id)} className="group flex flex-col overflow-hidden rounded-md border border-slate-800 bg-slate-900 text-left hover:border-violet-500">
@@ -619,6 +624,7 @@ function CardsHome() {
             })}
           </div>
         )}
+        <CardPager pager={pager} />
       </div>
     </div>
   );
