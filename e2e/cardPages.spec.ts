@@ -66,3 +66,22 @@ test('picking cards to tag them all at once', async ({ page, request }) => {
   await expect(grid(new RegExp(`Picked ${stamp} three.*batch-${stamp}`))).toBeVisible();
   await expect(grid(new RegExp(`Picked ${stamp} two.*batch-${stamp}`))).toHaveCount(0);
 });
+
+test("the sidebar's tag list can be tucked away", async ({ page, request }) => {
+  const res = await request.post('/api/projects', { data: { card: { spec: 'chara_card_v3', spec_version: '3.0', data: { name: `Tucked ${stamp}` } } } });
+  expect(res.ok()).toBeTruthy();
+  const { id } = (await res.json()) as { id: string };
+  const tags = await (await request.get('/api/tags')).json();
+  const tagId = `tuck-${stamp}`;
+  await request.put('/api/tags', { data: { ...tags, tags: [...tags.tags, { id: tagId, name: tagId, folder: 'none', order: 99, createdAt: 0 }], map: { ...tags.map, [id]: [tagId] } } });
+  await page.goto('/');
+  const nav = page.getByRole('navigation');
+  const chip = nav.getByRole('button', { name: new RegExp(`^${tagId}`) });
+  await expect(chip).toBeVisible();
+  await nav.getByTitle('Hide the tag list').click();
+  await expect(chip).toHaveCount(0);
+  await page.reload();
+  await expect(nav.getByRole('button', { name: '🏷 My tags ▸' })).toBeVisible();
+  await nav.getByRole('button', { name: '🏷 My tags ▸' }).click();
+  await expect(chip).toBeVisible();
+});
