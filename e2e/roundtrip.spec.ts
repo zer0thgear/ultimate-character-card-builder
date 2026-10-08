@@ -55,7 +55,9 @@ async function expectCard(page: Page) {
 
   await tab(page, 'Creator');
   await expect(page.getByLabel('Creator', { exact: true })).toHaveValue(card.creator);
-  await expect(page.getByText(card.tag, { exact: true })).toBeVisible();
+  // The card's own tag (its chip's ✕), not the same name among your tags.
+  await expect(page.getByRole('button', { name: `Remove ${card.tag}`, exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: `Take off ${card.tag}`, exact: true })).toBeVisible();
 }
 
 // A tab's name can carry a count after it ("Greetings1").
@@ -73,6 +75,9 @@ async function importFile(page: Page, file: { name: string; bytes: Buffer }, mim
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Import a card…' }).click()]);
   await chooser.setFiles({ name: file.name, mimeType, buffer: file.bytes });
   await expect(page.getByText(`Imported ${card.name}.`)).toBeVisible();
+  // Its tags can become your own tags, as SillyTavern asks.
+  await expect(page.getByText(`Add ${card.name}'s tags to your tags?`)).toBeVisible();
+  await page.getByRole('button', { name: 'Add them all' }).click();
 }
 
 /** The tEXt chunks of a PNG, by keyword. */
