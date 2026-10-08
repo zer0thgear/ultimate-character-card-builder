@@ -12,6 +12,7 @@ import { notesSnippet } from '@/lib/cardSummary';
 import { PackError, validatePack, type InstalledPack } from '@/lib/extensionPack';
 import { countTokens } from 'gpt-tokenizer';
 import { sumTallies, tallyChat, type ChatTally } from '@/lib/chatStats';
+import { cardStats, type CardStats } from '@/lib/cardStats';
 
 // Everything UCCB saves lives under data/ (gitignored):
 //   data/config.json                    AppConfig
@@ -345,7 +346,8 @@ export function chatImagePath(id: string, file: string) {
 
 const chatPath = (projectId: string, chatId: string) => path.join(projectDir(projectId), 'chats', `${checkId(chatId)}.json`);
 
-export async function listChats(projectId: string): Promise<ChatSummary[]> {
+/** Every chat of a card, whole (a damaged one left out). */
+async function readChats(projectId: string): Promise<ChatSession[]> {
   const dir = path.join(projectDir(projectId), 'chats');
   let files: string[];
   try {
@@ -356,8 +358,17 @@ export async function listChats(projectId: string): Promise<ChatSummary[]> {
   const chats = await Promise.all(
     files.filter((f) => f.endsWith('.json')).map((f) => readJson<ChatSession>(path.join(dir, f)).catch(() => null)),
   );
-  return chats
-    .filter((c): c is ChatSession => !!c)
+  return chats.filter((c): c is ChatSession => !!c);
+}
+
+/** 📊 A card's numbers across its chats (lib/cardStats.ts). */
+export async function projectStats(projectId: string): Promise<CardStats> {
+  await getProject(projectId);
+  return cardStats(await readChats(projectId), countText);
+}
+
+export async function listChats(projectId: string): Promise<ChatSummary[]> {
+  return (await readChats(projectId))
     .map((c) => ({ id: c.id, name: c.name, createdAt: c.createdAt, updatedAt: c.updatedAt, messageCount: c.messages.length, ...tallyChat(c.messages, countText) }))
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }

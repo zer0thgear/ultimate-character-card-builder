@@ -1,4 +1,5 @@
 import type { AppTagData } from '@/lib/appTags';
+import type { CardStats } from '@/lib/cardStats';
 import type { AppConfig, CardProject, CardVersion, CardVersionInfo, TrashedProject, BankLorebook, ChatSession, ChatSummary, StorySession, StorySummary, KeptImage, Persona, ProjectSummary, AvatarInfo } from '@/types/project';
 import type { LlmEvent, LlmRequest } from '@/types/llm';
 import type { Lorebook } from '@/types/card';
@@ -75,6 +76,7 @@ export const api = {
   /** A character card from a link (Chub, or a site a local extension adds). */
   importUrl: (url: string) => call<{ card: unknown; source: string; sourceUrl?: string; avatar?: string; avatarType?: string }>('/api/import-url', json('POST', { url })),
   listChats: (id: string) => call<ChatSummary[]>(`/api/projects/${id}/chats`),
+  cardStats: (id: string) => call<CardStats>(`/api/projects/${id}/stats`),
   getChat: (id: string, chatId: string) => call<ChatSession>(`/api/projects/${id}/chats/${chatId}`),
   saveChat: (id: string, chat: ChatSession) => call<ChatSession>(`/api/projects/${id}/chats/${chat.id}`, json('PUT', chat)),
   deleteChat: (id: string, chatId: string) => call<{ ok: true }>(`/api/projects/${id}/chats/${chatId}`, { method: 'DELETE' }),

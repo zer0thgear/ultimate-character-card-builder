@@ -12,6 +12,7 @@ import { CreatorPanel, NotesPanel, PromptsPanel, ToolsPanel } from '@/components
 import { openVisionWrite } from '@/components/VisionWriteDialog';
 import { ExtensionImageActions } from '@/components/ExtensionSlots';
 import { FullPaneButton } from '@/components/FullPaneButton';
+import { StatsPanel } from '@/components/editor/StatsPanel';
 import { SourceButton } from '@/components/CardSource';
 import { SandboxFrame } from '@/components/extensions/SandboxFrame';
 import { usePackStore } from '@/store/packStore';
@@ -32,6 +33,7 @@ export function CardEditor() {
     { value: 'creator', label: 'Creator' },
     { value: 'notes', label: 'Notes' },
     { value: 'tools', label: 'Tools' },
+    { value: 'stats', label: '📊 Stats' },
     ...extTabs.map((u) => ({ value: `ext:${u.packId}.${u.id}` as const, label: `${u.icon ?? '🧩'} ${u.label}` })),
   ];
   return (
@@ -50,6 +52,7 @@ export function CardEditor() {
           {editorTab === 'creator' && <CreatorPanel />}
           {editorTab === 'notes' && <NotesPanel />}
           {editorTab === 'tools' && <ToolsPanel />}
+          {editorTab === 'stats' && <StatsPanel />}
           {extTab && <SandboxFrame key={`${extTab.packId}.${extTab.id}`} ui={extTab} />}
         </div>
       </div>

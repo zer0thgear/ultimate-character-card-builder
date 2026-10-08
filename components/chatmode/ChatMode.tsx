@@ -1,5 +1,6 @@
 'use client';
 
+import { StatsPanel } from '@/components/editor/StatsPanel';
 import { useState } from 'react';
 import { lastCardKey, useProjectStore } from '@/store/projectStore';
 import { toast, useUiStore, type AppMode } from '@/store/uiStore';
@@ -334,7 +335,7 @@ export function ChatScreen({ phone }: { phone: boolean }) {
   );
 }
 
-type DrawerTab = 'basics' | 'greetings' | 'lorebook' | 'prompts' | 'creator';
+type DrawerTab = 'basics' | 'greetings' | 'lorebook' | 'prompts' | 'creator' | 'stats';
 
 /** The card's definitions and lorebook, editable, without the writing
  *  tools (Builder has those). Edits save to the card, with undo. */
@@ -364,6 +365,7 @@ function CardDrawer({ onClose }: { onClose: () => void }) {
             { value: 'lorebook', label: 'Lorebook', badge: card.character_book?.entries.length },
             { value: 'prompts', label: 'Prompts' },
             { value: 'creator', label: 'Creator' },
+            { value: 'stats', label: '📊 Stats' },
           ]}
         />
         <IconButton title="Close" onClick={onClose}>
@@ -376,6 +378,7 @@ function CardDrawer({ onClose }: { onClose: () => void }) {
         {tab === 'lorebook' && <LorebookPanel />}
         {tab === 'prompts' && <PromptsPanel />}
         {tab === 'creator' && <CreatorPanel />}
+        {tab === 'stats' && <StatsPanel />}
       </div>
     </WritingToolsContext.Provider>
   );

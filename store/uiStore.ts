@@ -12,7 +12,7 @@ import { api } from '@/lib/api';
 
 /** `ext:<pack>.<ui>`: an extension's tab (components/extensions/). */
 export type ExtTab = `ext:${string}`;
-export type EditorTab = 'basics' | 'greetings' | 'lorebook' | 'prompts' | 'creator' | 'notes' | 'tools' | ExtTab;
+export type EditorTab = 'basics' | 'greetings' | 'lorebook' | 'prompts' | 'creator' | 'notes' | 'tools' | 'stats' | ExtTab;
 export type HomeTab = 'cards' | 'library' | 'helper';
 export type DockTab = 'image' | 'gallery' | 'library' | 'chat' | 'assist' | ExtTab;
 
