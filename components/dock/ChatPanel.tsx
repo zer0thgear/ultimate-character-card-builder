@@ -8,7 +8,7 @@ import { textTemplates, useLlmStore } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
-import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, withoutSwipe, buildChatPrompt, displayText, shownText, chatGreeting, greetingText, messageText, newMessage, withShownText, type AvatarShape, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
+import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, withoutSwipe, buildChatPrompt, displayText, shownText, chatGreeting, greetingText, messageText, newMessage, withShownText, type AvatarShape, type ChatSide, type ChatStyle, messageLayout, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
 import { buildPresetPrompt } from '@/lib/presetPrompt';
 import { buildTextPrompt } from '@/lib/textCompletion';
 import { CompareDialog, type KeptReply } from '@/components/dock/CompareReplies';
@@ -1012,12 +1012,27 @@ function useSwipeGesture(onNext: (() => void) | null, onPrev: (() => void) | nul
 
 /** A message's number, SillyTavern style. */
 /** When a message was written, in the viewer's time zone, under its name. */
-function MessageTime({ time, className }: { time: number; className?: string }) {
+function MessageTime({ time, className, inline }: { time: number; className?: string; inline?: boolean }) {
+  // Flat chats show it beside the name, as SillyTavern does.
+  if (inline)
+    return (
+      <span className={cx('flex-shrink-0 text-[10px] whitespace-nowrap text-slate-600 tabular-nums', className)} title={new Date(time).toLocaleString()}>
+        {formatMessageTime(time)}
+      </span>
+    );
   return (
     <div className={cx('-mt-1 mb-1 text-[10px] text-slate-600 tabular-nums', className)} title={new Date(time).toLocaleString()}>
       {formatMessageTime(time)}
     </div>
   );
+}
+
+/** Where a message's portrait sits and whether the chat is Flat. */
+function useMessageLayout(role: 'user' | 'assistant' | 'system') {
+  const charSide = useLlmStore((s) => s.chatSettings.charSide);
+  const userSide = useLlmStore((s) => s.chatSettings.userSide);
+  const chatStyle = useLlmStore((s) => s.chatSettings.chatStyle);
+  return messageLayout({ charSide, userSide, chatStyle }, role);
 }
 
 function MessageId({ id, className }: { id: number; className?: string }) {
@@ -1064,6 +1079,7 @@ function GreetingBubble({
   // As the model gets it: {{char}} and {{user}} filled in.
   const tokens = useTextTokens(shown, 400);
   const [editing, setEditing] = useState<string | null>(null);
+  const { right, flat } = useMessageLayout('assistant');
   const next = count > 1 && editing === null ? () => onSwipe(index >= count - 1 ? 0 : index + 1) : null;
   const prev = count > 1 && editing === null ? () => onSwipe(index <= 0 ? count - 1 : index - 1) : null;
   const swipe = useSwipeGesture(next, prev);
@@ -1084,10 +1100,10 @@ function GreetingBubble({
     if (await confirmDialog({ title: "Use the card's greeting again?", body: "This chat's wording of the greeting is let go, and the card's (as it is now) shows in its place.", confirmLabel: "Use the card's" })) onEdit(undefined);
   };
   return (
-    <div ref={box} className="group flex gap-2">
+    <div ref={box} className={cx('group flex gap-2', right && 'flex-row-reverse', flat && 'border-b border-slate-800/70 pb-3')}>
       <Avatar role="assistant" />
-      <div className="min-w-0 flex-1 rounded-lg bg-slate-900 px-3 py-2" {...swipe.props} style={swipe.style}>
-        <div className="mb-1 flex items-center gap-2 text-xs">
+      <div className={cx('min-w-0 flex-1', flat ? 'px-1' : 'rounded-lg bg-slate-900 px-3 py-2')} {...swipe.props} style={swipe.style}>
+        <div className={cx('mb-1 flex items-center gap-2 text-xs', right && !flat && 'flex-row-reverse')}>
           <span className="max-w-[50%] flex-shrink-0 truncate font-semibold text-slate-200">{card.nickname || card.name || 'Character'}</span>
           {edited !== undefined ? (
             <span className="min-w-0 truncate text-amber-400/80" title="Edited in this chat: changes to the card's greeting don't show here until you go back to the card's">
@@ -1101,7 +1117,8 @@ function GreetingBubble({
               {formatTokens(tokens)} tok
             </span>
           )}
-          <span className="ml-auto flex flex-shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 touch:opacity-100">
+          {flat && date !== undefined && <MessageTime time={date} inline />}
+          <span className={cx('flex flex-shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 touch:opacity-100', right && !flat ? 'mr-auto' : 'ml-auto')}>
             <IconButton title="Edit the greeting (for this chat, or on the card)" disabled={busy || editing !== null} onClick={() => setEditing(text)}>
               ✎
             </IconButton>
@@ -1126,7 +1143,7 @@ function GreetingBubble({
             </span>
           )}
         </div>
-        {date !== undefined && <MessageTime time={date} />}
+        {!flat && date !== undefined && <MessageTime time={date} className={right ? 'text-right' : undefined} />}
         {editing !== null ? (
           <div className="flex flex-col gap-1.5">
             <AutoTextarea autoFocus value={editing} onChange={(e) => setEditing(e.target.value)} minRows={3} maxRows={20} />
@@ -1205,6 +1222,9 @@ function Bubble({
   const tokens = useTextTokens(text, 800);
   const reasoning = streaming ? streamReasoning : m.reasoning?.[m.swipe];
   const isUser = m.role === 'user';
+  const { right, flat } = useMessageLayout(m.role);
+  // Bubbles mirror their header to the portrait's side; Flat keeps one line.
+  const mirror = right && !flat;
   // This swipe's continues, when it has any and they still match its text.
   const tree = !isUser && m.continues?.[m.swipe] && pathText(m.continues[m.swipe]!) === text ? m.continues[m.swipe] : undefined;
   // Only the last reply has versions to swipe through, as its buttons do.
@@ -1215,18 +1235,19 @@ function Bubble({
   const box = useRef<HTMLDivElement>(null);
   useArrowSwipe(box, next, prev);
   return (
-    <div ref={box} className={cx('group flex gap-2', isUser && 'flex-row-reverse')}>
+    <div ref={box} className={cx('group flex gap-2', right && 'flex-row-reverse', flat && 'border-b border-slate-800/70 pb-3')}>
       <Avatar role={m.role} persona={persona} />
-      <div className={cx('min-w-0 flex-1 rounded-lg px-3 py-2', isUser ? 'bg-sky-500/10' : 'bg-slate-900', m.hidden && 'border border-dashed border-slate-700 opacity-60')} {...swipe.props} style={swipe.style}>
-        <div className={cx('mb-1 flex items-center gap-2 text-xs', isUser && 'flex-row-reverse')}>
+      <div className={cx('min-w-0 flex-1', flat ? 'px-1' : cx('rounded-lg px-3 py-2', isUser ? 'bg-sky-500/10' : 'bg-slate-900'), m.hidden && 'rounded-lg border border-dashed border-slate-700 opacity-60')} {...swipe.props} style={swipe.style}>
+        <div className={cx('mb-1 flex items-center gap-2 text-xs', mirror && 'flex-row-reverse')}>
           <span className="font-semibold text-slate-200">{isUser ? userName || 'User' : card.nickname || card.name || 'Character'}</span>
+          {flat && showTime && <MessageTime time={swipeDate(m)} inline />}
           {m.hidden && (
             <button type="button" className="rounded bg-slate-700/60 px-1.5 text-[10px] text-slate-300 hover:bg-slate-600" title="Left out of the prompt: the model doesn't see it. Click to put it back." onClick={() => onChange({ hidden: undefined })}>
               🙈 hidden
             </button>
           )}
           {m.model && !isUser && <span className="truncate text-slate-600">{m.model}</span>}
-          <span className={cx('flex items-center gap-0.5 opacity-0 group-hover:opacity-100 touch:opacity-100', isUser ? 'mr-auto' : 'ml-auto')}>
+          <span className={cx('flex items-center gap-0.5 opacity-0 group-hover:opacity-100 touch:opacity-100', mirror ? 'mr-auto' : 'ml-auto')}>
             <span className="mr-1 text-[10px] text-slate-600">{formatTokens(tokens)} tok</span>
             <IconButton title="Edit" disabled={busy} onClick={() => setEditing(text)}>
               ✎
@@ -1250,7 +1271,7 @@ function Bubble({
             </IconButton>
           </span>
         </div>
-        {showTime && <MessageTime time={swipeDate(m)} className={isUser ? 'text-right' : undefined} />}
+        {!flat && showTime && <MessageTime time={swipeDate(m)} className={mirror ? 'text-right' : undefined} />}
         {reasoning && (
           <details className="mb-1 text-xs text-slate-500" open={streaming && !text}>
             <summary className="cursor-pointer">Reasoning</summary>
@@ -1283,8 +1304,8 @@ function Bubble({
           <span className="animate-pulse text-sm text-slate-500">…</span>
         )}
         {((!isUser && isLast) || messageId !== undefined) && (
-          <div className={cx('mt-1.5 flex items-center justify-end gap-1 text-xs text-slate-400', isUser && 'flex-row-reverse')}>
-            {messageId !== undefined && <MessageId id={messageId} className={isUser ? 'ml-auto' : 'mr-auto'} />}
+          <div className={cx('mt-1.5 flex items-center justify-end gap-1 text-xs text-slate-400', mirror && 'flex-row-reverse')}>
+            {messageId !== undefined && <MessageId id={messageId} className={mirror ? 'ml-auto' : 'mr-auto'} />}
             {!isUser && isLast && (
               <>
             {tree && pathDepth(tree) > 0 && (
@@ -1500,6 +1521,25 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
             <option value="square">Squares</option>
             <option value="rectangle">Rectangles (portrait)</option>
             <option value="none">None</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-xs text-slate-400" title="Bubbles, or Flat: one column of messages with no bubbles, as SillyTavern's Chat Style">
+          Chat style
+          <select value={s.chatStyle ?? 'bubbles'} onChange={(e) => setChatSettings({ chatStyle: e.target.value as ChatStyle })} className={cx(inputClass, 'w-auto py-0.5 text-xs')}>
+            <option value="bubbles">Bubbles</option>
+            <option value="flat">Flat</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-xs text-slate-400" title="Which side each portrait sits on (SillyTavern puts both on the left)">
+          Character on the
+          <select aria-label="Character's portrait side" value={s.charSide ?? 'left'} onChange={(e) => setChatSettings({ charSide: e.target.value as ChatSide })} className={cx(inputClass, 'w-auto py-0.5 text-xs')}>
+            <option value="left">left</option>
+            <option value="right">right</option>
+          </select>
+          you on the
+          <select aria-label="Your portrait side" value={s.userSide ?? 'left'} onChange={(e) => setChatSettings({ userSide: e.target.value as ChatSide })} className={cx(inputClass, 'w-auto py-0.5 text-xs')}>
+            <option value="left">left</option>
+            <option value="right">right</option>
           </select>
         </label>
       </div>
