@@ -36,6 +36,7 @@ test('text completion, hiding a message and searching the chat', async ({ page, 
   // Hide the question: the next prompt leaves it out.
   const question = page.locator('[data-msg]').filter({ hasText: 'Where is the secret cellar?' });
   await question.hover();
+  await question.getByRole('button', { name: /^More:/ }).click();
   await question.getByRole('button', { name: /Hide from the prompt/ }).click();
   await expect(question.getByRole('button', { name: '🙈 hidden' })).toBeVisible();
   await box.fill('And the key?');

@@ -57,6 +57,11 @@ export interface ChatPromptSettings {
   /** When each message (each version of a reply) was written, as
    *  SillyTavern shows it. */
   showTimestamps?: boolean;
+  /** Under each portrait, as SillyTavern shows them: the message's token
+   *  count, how long a reply took to write, and its tokens a second. */
+  showTokenCounts?: boolean;
+  showGenTime?: boolean;
+  showTokensPerSecond?: boolean;
   /** How the chat shows avatars, as SillyTavern's choice does. */
   avatarShape: AvatarShape;
   /** Which side the character's and your portraits sit on; SillyTavern
@@ -128,6 +133,9 @@ export const DEFAULT_CHAT_SETTINGS: ChatPromptSettings = {
   presetSamplers: true,
   showMessageIds: true,
   showTimestamps: true,
+  showTokenCounts: true,
+  showGenTime: true,
+  showTokensPerSecond: true,
   avatarShape: 'circle',
   charSide: 'left',
   userSide: 'left',
@@ -488,7 +496,7 @@ export function newMessage(role: ChatMessage['role'], text: string, model?: stri
 }
 
 /** A message without one of its versions (and that version's reasoning,
- *  continues and time). The one showing stays showing if it's another;
+ *  continues, time and generation stats). The one showing stays showing if it's another;
  *  if it's the one removed, the next takes its place (or the last). */
 export function withoutSwipe(m: ChatMessage, i: number): ChatMessage {
   if (m.swipes.length < 2 || i < 0 || i >= m.swipes.length) return m;
@@ -501,6 +509,7 @@ export function withoutSwipe(m: ChatMessage, i: number): ChatMessage {
     swipe: Math.min(m.swipe > i ? m.swipe - 1 : m.swipe, m.swipes.length - 2),
     reasoning: drop(m.reasoning),
     continues: drop(m.continues),
+    gen: drop(m.gen),
     swipeDates: drop(dates),
   };
 }

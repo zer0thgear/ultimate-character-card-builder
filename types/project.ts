@@ -120,9 +120,22 @@ export interface ChatMessage {
   /** Per swipe, its continues as a tree (lib/continueTree.ts), once it's
    *  been continued; that swipe's text is the tree's chosen path. */
   continues?: (ContinueNode | undefined)[];
+  /** Per swipe, how its latest generation went (lib/genStats.ts). */
+  gen?: (GenStats | undefined)[];
   /** Left out of the prompt (and the lorebook's scan), but kept in the
    *  chat: SillyTavern's hidden messages (is_system). */
   hidden?: boolean;
+}
+
+/** How long a reply took to write: SillyTavern's message timer, with the
+ *  wait for its first token as well. */
+export interface GenStats {
+  /** From sending the request to the last token, in ms. */
+  ms: number;
+  /** From sending the request to the first token (text or reasoning). */
+  ttft?: number;
+  /** Tokens written: the provider's count, or an estimate. */
+  tokens?: number;
 }
 
 /** Where an author's note goes, as SillyTavern's choices: in the chat at a

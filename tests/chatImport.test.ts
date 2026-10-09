@@ -41,6 +41,14 @@ describe('parseChatFile', () => {
     expect(back.name).toBe('Ann - 2026 (imported)');
   });
 
+  it("keeps how long each version took, as SillyTavern's message timer", () => {
+    const reply = { ...newMessage('assistant', 'one'), swipes: ['one', 'two', 'three'], swipe: 2, gen: [{ ms: 4200, ttft: 900, tokens: 120 }, undefined, { ms: 1500, tokens: 30 }] };
+    const chat: ChatSession = { id: 'c', name: 'C', greeting: 0, messages: [reply], createdAt: 0, updatedAt: 0 };
+    const back = parseChatFile(chatToStJsonl(chat, card(), 'Bo'), card(), 'Bo');
+    // The wait for the first token isn't something SillyTavern keeps.
+    expect(back.messages[0].gen).toEqual([{ ms: 4200, tokens: 120 }, undefined, { ms: 1500, tokens: 30 }]);
+  });
+
   it("keeps a greeting the card doesn't have as this chat's wording", () => {
     const file = [
       JSON.stringify({ user_name: 'Bo', character_name: 'Ann', create_date: '2026-09-26@14h51m03s', chat_metadata: {} }),
