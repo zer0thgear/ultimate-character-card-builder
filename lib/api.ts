@@ -1,6 +1,6 @@
 import type { AppTagData } from '@/lib/appTags';
 import type { CardStats } from '@/lib/cardStats';
-import type { AppConfig, CardProject, CardVersion, CardVersionInfo, TrashedProject, BankLorebook, ChatSession, ChatSummary, StorySession, StorySummary, KeptImage, Persona, ProjectSummary, AvatarInfo } from '@/types/project';
+import type { AppConfig, CardProject, CardVersion, CardVersionInfo, TrashedProject, BankLorebook, ChatSession, ChatSummary, StorySession, StorySummary, KeptImage, Persona, ProjectSummary, AvatarInfo, BrainstormSession, BrainstormSummary } from '@/types/project';
 import type { LlmEvent, LlmRequest } from '@/types/llm';
 import type { Lorebook } from '@/types/card';
 import type { InstalledPack } from '@/lib/extensionPack';
@@ -80,6 +80,10 @@ export const api = {
   getChat: (id: string, chatId: string) => call<ChatSession>(`/api/projects/${id}/chats/${chatId}`),
   saveChat: (id: string, chat: ChatSession) => call<ChatSession>(`/api/projects/${id}/chats/${chat.id}`, json('PUT', chat)),
   deleteChat: (id: string, chatId: string) => call<{ ok: true }>(`/api/projects/${id}/chats/${chatId}`, { method: 'DELETE' }),
+  listBrainstorms: (id: string) => call<BrainstormSummary[]>(`/api/projects/${id}/brainstorms`),
+  getBrainstorm: (id: string, sessionId: string) => call<BrainstormSession>(`/api/projects/${id}/brainstorms/${sessionId}`),
+  saveBrainstorm: (id: string, session: BrainstormSession) => call<BrainstormSession>(`/api/projects/${id}/brainstorms/${session.id}`, json('PUT', session)),
+  deleteBrainstorm: (id: string, sessionId: string) => call<{ ok: true }>(`/api/projects/${id}/brainstorms/${sessionId}`, { method: 'DELETE' }),
   listStories: (id: string) => call<StorySummary[]>(`/api/projects/${id}/stories`),
   getStory: (id: string, storyId: string) => call<StorySession>(`/api/projects/${id}/stories/${storyId}`),
   saveStory: (id: string, story: StorySession) => call<StorySession>(`/api/projects/${id}/stories/${story.id}`, json('PUT', story)),

@@ -89,6 +89,9 @@ interface UiState {
    *  you're in are among its "show only" tags. */
   cardAppTags: Record<AppMode, AppTagFilter>;
   setCardAppTags: (mode: AppMode, filter: AppTagFilter) => void;
+  /** Brainstorm sends the card's whole lorebook (off: only entries you attach). */
+  brainstormLorebook: boolean;
+  setBrainstormLorebook: (on: boolean) => void;
   /** Local extensions whose buttons on pictures are hidden (by id). */
   hiddenImageActions: string[];
   setImageActionsHidden: (extension: string, hidden: boolean) => void;
@@ -150,6 +153,8 @@ export const useUiStore = create<UiState>()(
       setCardAuthor: (mode, author) => set((s) => ({ cardAuthor: { ...s.cardAuthor, [mode]: author } })),
       cardAppTags: { builder: NO_TAG_FILTER, chat: NO_TAG_FILTER },
       setCardAppTags: (mode, filter) => set((s) => ({ cardAppTags: { ...s.cardAppTags, [mode]: filter } })),
+      brainstormLorebook: true,
+      setBrainstormLorebook: (brainstormLorebook) => set({ brainstormLorebook }),
       hiddenImageActions: [],
       setImageActionsHidden: (extension, hidden) =>
         set((s) => ({ hiddenImageActions: hidden ? [...new Set([...s.hiddenImageActions, extension])] : s.hiddenImageActions.filter((id) => id !== extension) })),
