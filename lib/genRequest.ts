@@ -10,7 +10,7 @@ import { takeDatasetTags } from '@/lib/assist';
 import { hasInpaintStrength, toInpaintingModel } from '@/lib/inpaint';
 import { varietySigma } from '@/lib/variety';
 import type { ParsedNaiMetadata } from '@/lib/naiMetadata';
-import { MODELS } from '@/lib/models';
+import { MODELS, splitEffort, withEffort } from '@/lib/models';
 import { SAMPLERS } from '@/lib/samplers';
 import { uuid } from '@/lib/uuid';
 import { composeBackendPrompts } from '@/lib/imageBackends';
@@ -38,7 +38,9 @@ export function buildGenerateRequest(form: FormSettings, seed: number, base?: Im
   // An inpaint goes to the model's inpainting model, whose presets are the
   // ones that apply (V5 Curated's is V4.5 Curated's).
   const inpainting = !!base?.mask;
-  const model = inpainting ? toInpaintingModel(form.model) : form.model;
+  // V5 Full's Effort picks its model (Medium is a model of its own).
+  const chosen = withEffort(form.model, form.effort);
+  const model = inpainting ? toInpaintingModel(chosen) : chosen;
   const { input, negativePrompt } = composeFinalPrompts({ ...form, model }, resolved);
   const size = base ? { width: base.width, height: base.height } : null;
   const request: NovelAIGenerateRequest = buildImageRequest({
@@ -99,7 +101,7 @@ export function buildEnhanceRequest(form: FormSettings, image: Pick<GeneratedIma
   const request: NovelAIGenerateRequest = buildImageRequest({
     input: addEnhancePrompt(composed.input, form.model, scale),
     negativePrompt: composed.negativePrompt,
-    model: form.model,
+    model: withEffort(form.model, form.effort),
     action: 'img2img',
     characters: resolved.characters,
     useCoords: form.useCoords,
@@ -196,7 +198,8 @@ export function reuseFromMetadata(
       smea: m.smea,
       smeaDyn: m.smeaDyn,
       ...(m.sampler && SAMPLERS.some((s) => s.value === m.sampler) ? { sampler: m.sampler as NovelAISampler } : {}),
-      ...(m.guessedModel && MODELS.some((x) => x.value === m.guessedModel) ? { model: m.guessedModel as NovelAIModel } : {}),
+      // A Medium effort image reads back as V5 Full at Medium.
+      ...(m.guessedModel && MODELS.some((x) => x.value === splitEffort(m.guessedModel as NovelAIModel).model) ? splitEffort(m.guessedModel as NovelAIModel) : {}),
       ...(m.modifiers ?? {}),
     });
   }
