@@ -115,6 +115,9 @@ export interface ChatMessage {
   swipeDates?: (number | undefined)[];
   /** The model or connection that wrote an assistant message, for comparing. */
   model?: string;
+  /** The connection, SillyTavern preset and (over text completion) instruct
+   *  template that wrote it, shown with its model. */
+  sentWith?: { connection: string; preset?: string; instruct?: string };
   /** Reasoning the model returned alongside its reply, per swipe. */
   reasoning?: (string | undefined)[];
   /** Per swipe, its continues as a tree (lib/continueTree.ts), once it's

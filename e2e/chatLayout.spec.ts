@@ -66,6 +66,11 @@ test('numbers under the portrait, buttons behind ⋯, no sideways scroll on a ph
   await expect(reply.getByText(/t\/s$/)).toBeVisible();
   await expect(reply.getByText('#2')).toBeVisible();
   await expect(reply.getByRole('button', { name: 'Copy', exact: true })).toHaveCount(0);
+  // Its model says what wrote it: the connection and preset too.
+  await expect(reply.getByText('a-rather-long-model-name-for-the-header')).toHaveAttribute('title', /Connection: Local\nPreset: none/);
+  // SillyTavern's order: ⋯, then Edit.
+  const order = await reply.locator('button[title="Edit"], button[aria-expanded]').evaluateAll((els) => els.map((e) => e.getAttribute('title')));
+  expect(order).toEqual([expect.stringMatching(/^More:/), 'Edit']);
   await reply.hover();
   await reply.getByRole('button', { name: /^More:/ }).click();
   await expect(reply.getByRole('button', { name: 'Copy', exact: true })).toBeVisible();
