@@ -10,7 +10,7 @@ import { useGenerate } from '@/hooks/useGenerate';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useTokenCounts } from '@/hooks/useTokenCounts';
 import { useLlmStream } from '@/hooks/useLlmStream';
-import { MODELS, maxCharacters } from '@/lib/models';
+import { MODELS, maxCharacters, hasEffort, isMediumEffort, MEDIUM_EFFORT, withEffort } from '@/lib/models';
 import { SAMPLERS } from '@/lib/samplers';
 import { getAvailableQualityLevels, getAvailableUcLevels, QUALITY_LEVEL_LABELS, UC_LEVEL_LABELS } from '@/lib/naiPresets';
 import { isV3Model, promptSource, randomSeed } from '@/lib/imageRequest';
@@ -124,8 +124,12 @@ function PromptForm() {
   const basePrompt = form.basePrompts.find((p) => p.selected) ?? form.basePrompts[0];
   const setBasePrompt = (text: string) => set('basePrompts', form.basePrompts.map((p) => (p.id === basePrompt?.id ? { ...p, text } : p)));
 
+  // V5 Full's Effort: Medium is a model of its own, with fixed settings.
+  const effortModel = withEffort(form.model, form.effort);
+  // (NovelAI's settings show with no connection set up too.)
+  const medium = (nai || !connection) && isMediumEffort(effortModel);
   const anlas = calculateAnlasCost({
-    model: inpainting ? toInpaintingModel(form.model) : form.model,
+    model: inpainting ? toInpaintingModel(effortModel) : effortModel,
     width: source?.width ?? form.width,
     height: source?.height ?? form.height,
     steps: form.steps,
@@ -359,6 +363,7 @@ function PromptForm() {
       <div className="flex flex-col gap-1">
         <span className="text-xs font-semibold tracking-wide text-slate-300 uppercase">Negative prompt</span>
         <TagAutocompleteField value={form.negativePrompt} onChange={(v) => set('negativePrompt', v)} model={form.model} apiKey={apiKey} className={promptClass} rows={3} />
+        {medium && <p className="text-[11px] text-amber-300/80">Not sent at Medium effort: NovelAI uses its Heavy UC preset instead.</p>}
         <TidbitList tidbits={form.negativeTidbits} onChange={(v) => set('negativeTidbits', v)} model={form.model} apiKey={apiKey} placeholder="tags kept out when on" />
         {nai && counts && <TokenMeter own={counts.negative} others={counts.characterUcTotal} budget={counts.budget} othersLabel="Character negatives" />}
         {form.negativePrompt !== (nai || !connection ? DEFAULT_NEGATIVE : SD_DEFAULT_NEGATIVE) && (
@@ -388,6 +393,32 @@ function PromptForm() {
             ))}
           </select>
         </label>
+        {hasEffort(form.model) && (
+          <div className="col-span-2 flex flex-col gap-1 text-xs text-slate-400">
+            <div className="flex items-center gap-2">
+              <span title="NovelAI's Effort toggle for V5 Full: Medium is a faster, cheaper model of its own">Effort</span>
+              <div className="flex overflow-hidden rounded-md border border-slate-700" role="radiogroup" aria-label="Effort">
+                {(['medium', 'high'] as const).map((e) => (
+                  <button
+                    key={e}
+                    type="button"
+                    role="radio"
+                    aria-checked={form.effort === e}
+                    onClick={() => set('effort', e)}
+                    className={cx('px-3 py-1', form.effort === e ? 'bg-violet-600 text-white' : 'text-slate-300 hover:bg-slate-800')}
+                  >
+                    {e === 'medium' ? 'Medium' : 'High'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {medium && (
+              <p className="text-[11px] text-slate-500">
+                Medium is NovelAI&apos;s faster, cheaper V5 Full. It always uses {MEDIUM_EFFORT.steps} steps, Euler Ancestral and the Heavy UC preset, and your negative prompt (and characters&apos;) isn&apos;t sent. Your High settings are kept for when you switch back.
+              </p>
+            )}
+          </div>
+        )}
         <label className="flex flex-col gap-0.5 text-xs text-slate-400">
           Size
           <select
@@ -431,7 +462,7 @@ function PromptForm() {
         </label>
         <label className="flex flex-col gap-0.5 text-xs text-slate-400">
           UC preset
-          <select value={form.ucPreset} onChange={(e) => set('ucPreset', e.target.value as typeof form.ucPreset)} className={cx(inputClass, 'py-1')}>
+          <select value={medium ? MEDIUM_EFFORT.ucPreset : form.ucPreset} disabled={medium} title={medium ? 'Medium effort always uses Heavy' : undefined} onChange={(e) => set('ucPreset', e.target.value as typeof form.ucPreset)} className={cx(inputClass, 'py-1 disabled:opacity-50')}>
             {getAvailableUcLevels(form.model).map((l) => (
               <option key={l} value={l}>
                 {UC_LEVEL_LABELS[l]}
@@ -441,7 +472,7 @@ function PromptForm() {
         </label>
         <label className="flex flex-col gap-0.5 text-xs text-slate-400">
           Steps
-          <NumberInput value={form.steps} onChange={(v) => set('steps', v ?? 28)} min={1} max={50} step={1} />
+          {medium ? <input value={MEDIUM_EFFORT.steps} disabled title="Medium effort always uses 14 steps" className={cx(inputClass, 'py-1 opacity-50')} /> : <NumberInput value={form.steps} onChange={(v) => set('steps', v ?? 28)} min={1} max={50} step={1} />}
         </label>
         <label className="flex flex-col gap-0.5 text-xs text-slate-400">
           Prompt guidance (CFG)
@@ -458,7 +489,7 @@ function PromptForm() {
         </label>
         <label className="flex flex-col gap-0.5 text-xs text-slate-400">
           Sampler
-          <select value={form.sampler} onChange={(e) => set('sampler', e.target.value as typeof form.sampler)} className={cx(inputClass, 'py-1')}>
+          <select value={medium ? MEDIUM_EFFORT.sampler : form.sampler} disabled={medium} title={medium ? 'Medium effort always uses Euler Ancestral' : undefined} onChange={(e) => set('sampler', e.target.value as typeof form.sampler)} className={cx(inputClass, 'py-1 disabled:opacity-50')}>
             {SAMPLERS.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
@@ -477,7 +508,7 @@ function PromptForm() {
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-0.5 text-xs text-slate-400">
             CFG rescale
-            <NumberInput value={form.cfgRescale} onChange={(v) => set('cfgRescale', v ?? 0)} min={0} max={1} step={0.02} />
+            {medium ? <input value="—" disabled title="Medium effort has no CFG rescale" className={cx(inputClass, 'py-1 opacity-50')} /> : <NumberInput value={form.cfgRescale} onChange={(v) => set('cfgRescale', v ?? 0)} min={0} max={1} step={0.02} />}
           </label>
           <label className="flex flex-col gap-0.5 text-xs text-slate-400">
             Noise schedule

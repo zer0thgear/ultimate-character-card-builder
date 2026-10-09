@@ -1,5 +1,6 @@
 'use client';
 
+import { withEffort } from '@/lib/models';
 import { useEffect, useState } from 'react';
 import { imageBlob, useSessionStore, type SessionImage } from '@/store/sessionStore';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -167,7 +168,7 @@ function EnhancePanel({ image, onEnhance }: { image: SessionImage; onEnhance: (l
   const scale = choice !== null && options.includes(choice) ? choice : (rememberedScale(w * h, options) ?? options[0] ?? null);
   const price = scale !== null ? enhancePriceSize(w, h, scale) : null;
   const cost = price
-    ? calculateAnlasCost({ model: form.model, width: price.width, height: price.height, steps: form.steps, smea: false, smeaDyn: false, strength: ENHANCE_LEVELS[level - 1].strength, ...opusStatus(subscription) })
+    ? calculateAnlasCost({ model: withEffort(form.model, form.effort), width: price.width, height: price.height, steps: form.steps, smea: false, smeaDyn: false, strength: ENHANCE_LEVELS[level - 1].strength, ...opusStatus(subscription) })
     : 0;
 
   if (!options.length) {

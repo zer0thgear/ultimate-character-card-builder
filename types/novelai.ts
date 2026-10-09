@@ -51,9 +51,16 @@ export type PromptMode = 'single' | 'batch';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** V5 Full's Effort toggle. */
+export type Effort = 'medium' | 'high';
+
 export type NovelAIModel =
   | 'nai-diffusion-5-full'
   | 'nai-diffusion-5-full-inpainting'
+  // V5 Full at Medium effort: a distilled model of its own, picked with the
+  // Effort toggle rather than from the model list (see lib/models.ts).
+  | 'nai-diffusion-5-full-medium'
+  | 'nai-diffusion-5-full-medium-inpainting'
   | 'nai-diffusion-5-curated'
   | 'nai-diffusion-4-5-full'
   | 'nai-diffusion-4-5-full-inpainting'
@@ -169,7 +176,8 @@ export interface NovelAIParameters {
   controlnet_strength: number;
   legacy: boolean;
   add_original_image: boolean;
-  cfg_rescale: number;
+  /** Absent at Medium effort, which has no CFG Rescale. */
+  cfg_rescale?: number;
   noise_schedule: NovelAINoiseSchedule;
   /** NovelAI's "Variety+" boost. Omit (or null) for the API's default, off:
    *  a nonzero value forces increased output variance and is resolution/

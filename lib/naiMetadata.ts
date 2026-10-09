@@ -88,7 +88,7 @@ export function metadataFromImage(image: GeneratedImage): ParsedNaiMetadata {
     noiseSchedule: p.noise_schedule,
     smea: p.sm ?? false,
     smeaDyn: p.sm_dyn ?? false,
-    cfgRescale: p.cfg_rescale,
+    cfgRescale: p.cfg_rescale ?? 0,
     variety: varietyWasOn(p.skip_cfg_above_sigma),
     guessedModel: image.model,
     modifiers: image.source?.modifiers,
@@ -129,10 +129,23 @@ function readPngTextChunks(bytes: Uint8Array): Record<string, string> {
   return out;
 }
 
+// V5 images name their model by a hash in "Source", as NovelAI's client reads
+// them (2026-10-08): each pair is a model and its inpainting model; any other
+// V5 hash it takes as V5 Curated.
+const V5_SOURCES: Record<string, NovelAIModel> = {
+  '657484a5': 'nai-diffusion-5-full',
+  '0adf9ab7': 'nai-diffusion-5-full',
+  '93f4bd30': 'nai-diffusion-5-full-medium',
+  '70ab5786': 'nai-diffusion-5-full-medium',
+  db276663: 'nai-diffusion-5-curated',
+};
+
 function guessModel(sourceOrModelName: string | undefined): NovelAIModel | undefined {
   if (!sourceOrModelName) return undefined;
   const s = sourceOrModelName.toLowerCase();
   if (s.includes('furry')) return 'nai-diffusion-furry-3';
+  const v5 = s.match(/novelai diffusion v5 ([0-9a-f]{8})/);
+  if (v5) return V5_SOURCES[v5[1]] ?? 'nai-diffusion-5-curated';
   if (s.includes('v5')) return 'nai-diffusion-5-full';
   if (s.includes('v4.5') || s.includes('4-5')) return 'nai-diffusion-4-5-full';
   if (s.includes('v4')) return 'nai-diffusion-4-full';

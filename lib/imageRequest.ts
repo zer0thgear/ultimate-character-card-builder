@@ -11,6 +11,7 @@ import {
 } from '@/types/novelai';
 import { resolveRequestPrompts, ResolvedRequestPrompts } from '@/lib/wildcards';
 import { joinPromptParts } from '@/lib/promptText';
+import { isMediumEffort, MEDIUM_EFFORT } from '@/lib/models';
 import { addAutoText, hasAutoText } from '@/lib/autoText';
 import { hasVariety, varietySigma } from '@/lib/variety';
 import {
@@ -216,10 +217,25 @@ export function buildImageRequest(args: {
   presets?: { quality: QualityLevel; uc: UcLevel };
   parameters: Omit<NovelAIParameters, SharedKey>;
 }): NovelAIGenerateRequest {
-  const { negativePrompt, model, action, characters, useCoords, presets, parameters } = args;
+  const { model, action, useCoords, presets, parameters } = args;
+  let { negativePrompt, characters } = args;
   // Variety+ is carried in `parameters`, but only some models have the field
   // at all, so it's taken out here and put back below for the ones that do.
-  const { skip_cfg_above_sigma: variety, ...rest } = parameters;
+  const { skip_cfg_above_sigma: variety, ...sampling } = parameters;
+  let rest = sampling;
+  // Medium effort fixes some settings, whatever the flow asked for, as
+  // NovelAI's request prep does: steps and sampler, no `cfg_rescale` field
+  // at all (the model has no CFG Rescale), and the Heavy UC preset's text
+  // with no custom Undesired Content (characters' too). Its UC preset
+  // fields say Heavy.
+  const medium = isMediumEffort(model);
+  if (medium) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { cfg_rescale, ...kept } = rest;
+    rest = { ...kept, steps: MEDIUM_EFFORT.steps, sampler: MEDIUM_EFFORT.sampler };
+    negativePrompt = composeNegativeWithUc('', model, MEDIUM_EFFORT.ucPreset, args.input);
+    characters = characters.map((c) => ({ ...c, uc: '' }));
+  }
   const isV3 = isV3Model(model);
   // V5 gathers quoted text into a "teXt:" section, as NovelAI's client does
   // just before sending (after quality tags and any Enhance addition).
@@ -234,6 +250,7 @@ export function buildImageRequest(args: {
       ...(isV3 ? {} : { autoSmea: false, normalize_reference_strength_multiple: true }),
       ...(model.startsWith('nai-diffusion-5') ? { straight_alpha: true } : {}),
       ...(presets ? presetFields(model, presets) : {}),
+      ...(medium ? { ucPresetId: MEDIUM_EFFORT.ucPreset, tag_hint_uc_preset: PRESET_HINT[MEDIUM_EFFORT.ucPreset] } : {}),
       ...rest,
       // As NovelAI does: models that don't offer Variety+ don't carry the
       // field at all, and the ones that do send null when it's off.

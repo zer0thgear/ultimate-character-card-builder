@@ -1,4 +1,5 @@
 import { NovelAIModel, NovelAISubscription } from '@/types/novelai';
+import { isMediumEffort, MEDIUM_EFFORT } from '@/lib/models';
 
 // NovelAI's own Anlas price formulas, as its web client computes them (read
 // from novelai.net's bundle on 2026-09-18 and checked against the prices its
@@ -11,6 +12,9 @@ import { NovelAIModel, NovelAISubscription } from '@/types/novelai';
 const PER_PIXEL = 2951823174884865e-21;
 const PER_PIXEL_STEP = 5753298233447344e-22;
 const SMEA_FACTOR = 1.2;
+/** Medium effort scales the per-step part of the price by this (NovelAI's
+ *  client, 2026-10-08), on top of its fixed 14 steps. */
+const MEDIUM_EFFORT_STEP_FACTOR = 1 / 1.06521739;
 const SMEA_DYN_FACTOR = 1.4;
 /** The free Opus allowance covers images up to this size at ≤ 28 steps. */
 const OPUS_FREE_PIXELS = 1048576;
@@ -50,7 +54,11 @@ export function calculateAnlasCost({
   const pixels = width * height;
   const isV5 = model.startsWith('nai-diffusion-5');
   const smeaFactor = smea && smeaDyn ? SMEA_DYN_FACTOR : smea ? SMEA_FACTOR : 1;
-  let perSample = Math.ceil(PER_PIXEL * pixels + PER_PIXEL_STEP * pixels * steps) * smeaFactor;
+  // Medium effort always runs its own fixed step count, whatever's asked.
+  const medium = isMediumEffort(model);
+  if (medium) steps = MEDIUM_EFFORT.steps;
+  const stepFactor = medium ? MEDIUM_EFFORT_STEP_FACTOR : 1;
+  let perSample = Math.ceil(PER_PIXEL * pixels + PER_PIXEL_STEP * pixels * steps * stepFactor) * smeaFactor;
   if (isV5) perSample *= 1.5;
   perSample = Math.max(Math.ceil(perSample * strength), 2);
 

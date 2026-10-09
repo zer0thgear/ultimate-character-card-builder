@@ -9,6 +9,7 @@ import {
   NovelAINoiseSchedule,
   PromptMode,
   PromptTidbit,
+  type Effort,
 } from '@/types/novelai';
 import { QualityLevel, UcLevel } from '@/lib/naiPresets';
 import { serverStorage } from '@/lib/serverSettings';
@@ -41,6 +42,9 @@ export interface FormSettings {
    *  hands over its own (cards each had one before). */
   negativeShared: boolean;
   model: NovelAIModel;
+  /** V5 Full's Effort toggle; the request's model follows it (see
+   *  withEffort in lib/models.ts). Ignored by other models. */
+  effort: Effort;
   width: number;
   height: number;
   steps: number;
@@ -94,6 +98,7 @@ export const GEN_DEFAULTS: FormSettings = {
   negativeTidbits: [],
   negativeShared: false,
   model: 'nai-diffusion-4-5-full',
+  effort: 'high',
   width: 832,
   height: 1216,
   steps: 28,
