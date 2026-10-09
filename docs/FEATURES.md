@@ -250,6 +250,9 @@ Your persona is the player character (the one picked for the adventure, which th
 
 **✨ Brainstorm** is a free-form chat with the writing assistant, which always sees the card as it is right now. Replies can be copied or added to the card's Notes.
 
+- **Sessions are saved** with the card: the first message starts one, named after it, and it's kept as you go. Pick an earlier one from the list over the chat, **✎** to rename, **🗑** to delete, **+ New** to start another (the one before stays saved).
+- **📖 Lorebook** (on by default) sends the card's whole lorebook with every message. Turn it off to save tokens and attach just the entries a question is about, with 📎 → **From this card**.
+
 Extension packs can add **wizards** here, as buttons beside the assistant picker: guided processes of their own (see [Extension packs](EXTENSIONS.md)). A wizard takes the tab's place until **← Brainstorm**, and keeps its place while you go back to the chat.
 
 ## The helper
@@ -260,7 +263,7 @@ Pick a **personality** to have it ham up a trope while it helps: Helpful (plain)
 
 ## References
 
-**📎 References** attaches other cards and pictures to an assistant request, for "write her sister", "match this card's style" or "set a greeting here". It's on ✨ for fields, ✨ New greeting, ✨ Lorebook entry and Brainstorm. The picker offers your other cards, this card's own picture, its kept gens and your recent gens, or a file: a PNG, JSON or CHARX card, or any picture. You can also paste a picture into the request's text box, or drop files on 📎.
+**📎 References** attaches other cards and pictures to an assistant request, for "write her sister", "match this card's style" or "set a greeting here". It's on ✨ for fields, ✨ New greeting, ✨ Lorebook entry and Brainstorm. The picker offers **pieces of this card** (its alternate greetings, which the assistant doesn't otherwise see, and each lorebook entry, sent with that request only), your other cards (sorted by last used, name, created, chats, messages or tokens, with ↑/↓), this card's own picture, its kept gens and your recent gens, or a file: a PNG, JSON or CHARX card, or any picture. You can also paste a picture into the request's text box, or drop files on 📎.
 
 - **🖼 on a card** in the picker attaches that card's picture rather than its text, without keeping it anywhere first.
 - **Cards** go in as text, the way the card being worked on is sent (8,000 characters each, shared out when there are several), under a note saying they're for reference, not the card itself. A PNG counts as a card when it has card data in it; otherwise it's a picture.

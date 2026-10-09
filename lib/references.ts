@@ -3,13 +3,16 @@ import type { LlmImage, LlmMessage } from '@/types/llm';
 import { cardContext, referencesText } from '@/lib/assist';
 
 // References: other cards and pictures attached to an assistant request
-// ("write her sister, in the style of this card", "a greeting set here").
-// Cards go in as text, like the card being worked on; pictures go with the
-// message, for a vision model.
+// ("write her sister, in the style of this card", "a greeting set here"),
+// and pieces of this card the assistant doesn't otherwise get (alternate
+// greetings) or that you'd rather send one at a time (lorebook entries).
+// Cards and pieces go in as text, like the card being worked on; pictures
+// go with the message, for a vision model.
 
 export type Reference =
   | { id: string; kind: 'card'; name: string; card: CardData; thumb?: string }
-  | { id: string; kind: 'image'; name: string; image: LlmImage; thumb: string };
+  | { id: string; kind: 'image'; name: string; image: LlmImage; thumb: string }
+  | { id: string; kind: 'text'; name: string; text: string; thumb?: undefined };
 
 /** How much of each card goes in: 8000 characters, shared out when there
  *  are several. */
@@ -19,10 +22,15 @@ const cardBudget = (n: number) => Math.max(3000, Math.min(8000, Math.floor(20000
 export function referenceBlock(refs: Reference[]): string {
   const cards = refs.filter((r) => r.kind === 'card');
   const pictures = refs.filter((r) => r.kind === 'image');
-  if (!cards.length && !pictures.length) return '';
+  const texts = refs.filter((r) => r.kind === 'text');
+  if (!cards.length && !pictures.length && !texts.length) return '';
   const budget = cardBudget(cards.length);
+  const attr = (s: string) => s.replace(/"/g, "'");
   return referencesText({
-    cards: cards.map((r) => `<reference_card name="${r.name.replace(/"/g, "'")}">\n${cardContext(r.card, undefined, budget)}\n</reference_card>`).join('\n\n'),
+    cards: [
+      ...cards.map((r) => `<reference_card name="${attr(r.name)}">\n${cardContext(r.card, undefined, budget)}\n</reference_card>`),
+      ...texts.map((r) => `<reference name="${attr(r.name)}">\n${r.text.trim()}\n</reference>`),
+    ].join('\n\n'),
     pictures: pictures.length
       ? `${pictures.length === 1 ? 'One picture is' : `${pictures.length} pictures are`} attached: ${pictures.map((p) => p.name).join(', ')}.`
       : '',

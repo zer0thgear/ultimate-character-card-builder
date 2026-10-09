@@ -242,6 +242,29 @@ export interface StorySession {
 
 export type StorySummary = Pick<StorySession, 'id' | 'name' | 'createdAt' | 'updatedAt'> & { words: number };
 
+// ─── Brainstorm sessions ─────────────────────────────────────────────────────
+
+/** A Brainstorm message: yours (with what you attached to it) or the
+ *  assistant's (with the assist-log run that wrote it, while it's kept). */
+export interface BrainstormThought {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  runId?: string;
+  /** References attached (lib/references.ts), kept so later turns see them. */
+  refs?: unknown[];
+}
+
+/** A saved Brainstorm conversation about a card. */
+export interface BrainstormSession {
+  id: string;
+  name: string;
+  messages: BrainstormThought[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type BrainstormSummary = Pick<BrainstormSession, 'id' | 'name' | 'createdAt' | 'updatedAt'> & { messageCount: number };
+
 /** Why a version of a card was kept: the start of an editing session, a
  *  change to many fields at once, a restore, or by hand. */
 export type VersionReason = 'session' | 'overwrite' | 'macro' | 'assistant' | 'restore' | 'manual';

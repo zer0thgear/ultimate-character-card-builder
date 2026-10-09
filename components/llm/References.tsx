@@ -13,10 +13,11 @@ import { isPng, readTextChunks } from '@/lib/png';
 import { importCardFile } from '@/lib/cardFile';
 import { imageDataUrl, imageForVision } from '@/lib/visionImage';
 import { hasPictures, type Reference } from '@/lib/references';
-import { cardMatches } from '@/lib/cardSort';
+import { CARD_SORTS, DEFAULT_CARD_SORT, cardMatches, sortCards, type CardSort } from '@/lib/cardSort';
+import { entryName } from '@/lib/cardSpec';
 import type { ProjectSummary } from '@/types/project';
 import { openLightbox } from '@/components/Lightbox';
-import { Button, IconButton, Modal, cx, fileBytes, inputClass, pickFiles } from '@/components/ui';
+import { Button, IconButton, Modal, cx, fileBytes, inputClass, pickFiles, Select } from '@/components/ui';
 
 // 📎 References for the writing assistant: other cards (yours in UCCB, or
 // a card file) and pictures (gens, kept images, or any image file). Cards
@@ -119,7 +120,7 @@ export function ReferenceTray({ refs, onAdd, onRemove, className, label = 'Refer
           📎 {refs.length ? 'Add' : label}
         </Button>
         {refs.map((r) => (
-          <span key={r.id} className="flex max-w-48 items-center gap-1 rounded-md bg-slate-800 py-0.5 pr-0.5 pl-1 text-xs text-slate-300" title={r.kind === 'card' ? `Card: ${r.name}` : `Picture: ${r.name}`}>
+          <span key={r.id} className="flex max-w-48 items-center gap-1 rounded-md bg-slate-800 py-0.5 pr-0.5 pl-1 text-xs text-slate-300" title={r.kind === 'card' ? `Card: ${r.name}` : r.kind === 'text' ? `From this card: ${r.name}` : `Picture: ${r.name}`}>
             {r.thumb ? (
               <img
                 src={r.thumb}
@@ -128,7 +129,7 @@ export function ReferenceTray({ refs, onAdd, onRemove, className, label = 'Refer
                 onClick={() => r.kind === 'image' && openLightbox(images.map((i) => i.thumb!), images.indexOf(r))}
               />
             ) : (
-              <span>{r.kind === 'card' ? '🪪' : '🖼'}</span>
+              <span>{r.kind === 'card' ? '🪪' : r.kind === 'text' ? '📄' : '🖼'}</span>
             )}
             <span className="truncate">{r.name}</span>
             <IconButton title="Remove" onClick={() => onRemove(r.id)} className="!h-5 !w-5 text-[10px]">
@@ -199,10 +200,46 @@ function ReferencePicker({ refs, onAdd, onRemove, onClose, title = '📎 Add ref
   const [busy, setBusy] = useState<string | null>(null);
   const has = (id: string) => refs.some((r) => r.id === id);
 
+  // Its own order (the card lists keep theirs): last used first to begin with.
+  const [sort, setSort] = useState<CardSort>(DEFAULT_CARD_SORT);
   const cards = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return summaries.filter((s) => s.id !== project?.id && cardMatches(s, q));
-  }, [summaries, project?.id, query]);
+    return sortCards(
+      summaries.filter((s) => s.id !== project?.id && cardMatches(s, q)),
+      sort,
+    );
+  }, [summaries, project?.id, query, sort]);
+  const others = summaries.filter((s) => s.id !== project?.id).length;
+
+  // Pieces of the open card the assistant doesn't get unless you attach
+  // them: its alternate greetings, and each lorebook entry on its own.
+  const pieces = useMemo(() => {
+    const data = project?.card.data;
+    if (!data) return { greetings: [], entries: [] };
+    return {
+      greetings: data.alternate_greetings
+        .map((text, i) => ({ id: `greeting:${i}`, name: `Greeting ${i + 2}`, text }))
+        .filter((g) => g.text.trim()),
+      entries: (data.character_book?.entries ?? [])
+        .map((e, i) => ({ id: `entry:${i}`, name: `Lorebook: ${entryName(e) || e.keys[0] || `entry ${i + 1}`}`, text: e.content, off: e.enabled === false }))
+        .filter((e) => e.text.trim()),
+    };
+  }, [project?.card.data]);
+  const togglePiece = (p: { id: string; name: string; text: string }) => (has(p.id) ? onRemove(p.id) : onAdd([{ id: p.id, kind: 'text', name: p.name, text: p.text }]));
+  const piece = (p: { id: string; name: string; text: string; off?: boolean }) => (
+    <button
+      key={p.id}
+      type="button"
+      onClick={() => togglePiece(p)}
+      aria-pressed={has(p.id)}
+      title={`${p.text.trim().slice(0, 400)}${p.text.trim().length > 400 ? '…' : ''}`}
+      className={cx('flex max-w-full min-w-0 items-center gap-1 rounded-md px-2 py-1 text-left text-xs', has(p.id) ? 'bg-violet-500/20 text-violet-100 ring-1 ring-violet-500/50' : 'bg-slate-800 text-slate-300 hover:bg-slate-700')}
+    >
+      <span className="truncate">{p.name.replace(/^Lorebook: /, '')}</span>
+      {p.off && <span className="text-[10px] text-slate-500">(off)</span>}
+      {has(p.id) && <span className="text-[10px]">✓</span>}
+    </button>
+  );
 
   const pictures = useMemo(() => {
     const kept = (project?.kept ?? []).map((k) => ({ id: `kept:${project!.id}:${k.file}`, name: k.label || 'Kept image', thumb: api.keptUrl(project!.id, k.file), blob: () => fetch(api.keptUrl(project!.id, k.file)).then((r) => r.blob()) }));
@@ -284,10 +321,39 @@ function ReferencePicker({ refs, onAdd, onRemove, onClose, title = '📎 Add ref
           <span className="text-xs text-slate-500">PNG/JSON/CHARX cards, or any picture. You can also paste or drop pictures on 📎. 🖼 on a card attaches its picture instead of its text.</span>
         </div>
 
+        {(pieces.greetings.length > 0 || pieces.entries.length > 0) && (
+          <section className="flex flex-col gap-2">
+            <h3 className="text-xs font-medium tracking-wide text-slate-400 uppercase">From this card</h3>
+            <p className="-mt-1 text-[11px] text-slate-500">Sent with this request only. The assistant doesn&apos;t otherwise see alternate greetings, so this is how to talk about one.</p>
+            {pieces.greetings.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="mr-1 text-[11px] text-slate-500">Greetings</span>
+                {pieces.greetings.map(piece)}
+              </div>
+            )}
+            {pieces.entries.length > 0 && (
+              <div className="flex max-h-32 flex-wrap items-center gap-1 overflow-y-auto">
+                <span className="mr-1 text-[11px] text-slate-500">Lorebook</span>
+                {pieces.entries.map(piece)}
+              </div>
+            )}
+          </section>
+        )}
+
         <section className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-xs font-medium tracking-wide text-slate-400 uppercase">Your cards</h3>
-            {summaries.length > 8 && <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Name, tag, author" className={cx(inputClass, 'ml-auto h-7 max-w-48 py-0 text-xs')} />}
+            <span className="ml-auto flex items-center gap-1">
+              {others > 1 && (
+                <>
+                  <Select value={sort.by} onChange={(by) => setSort({ by, desc: CARD_SORTS.find((o) => o.value === by)?.desc ?? false })} options={CARD_SORTS} title="Sort the cards by" className="h-7 py-0 text-xs" />
+                  <IconButton title="Reverse the order" onClick={() => setSort({ ...sort, desc: !sort.desc })}>
+                    {sort.desc ? '↓' : '↑'}
+                  </IconButton>
+                </>
+              )}
+              {others > 8 && <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Name, tag, author" className={cx(inputClass, 'h-7 max-w-48 py-0 text-xs')} />}
+            </span>
           </div>
           {cards.length ? (
             <div className="grid max-h-64 grid-cols-4 gap-1 overflow-y-auto sm:grid-cols-6">

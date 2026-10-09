@@ -40,6 +40,14 @@ describe('references', () => {
     expect(referencesById([sister, pic], 'c1')).toEqual([]);
   });
 
+  it('sends a piece of this card (a greeting, a lorebook entry) as text', () => {
+    const greeting: Reference = { id: 'greeting:0', kind: 'text', name: 'Greeting 2', text: '  *She waves from the dock.*  ' };
+    const block = referenceBlock([sister, greeting]);
+    expect(block).toContain('<reference_card name="Ada">');
+    expect(block).toContain('<reference name="Greeting 2">\n*She waves from the dock.*\n</reference>');
+    expect(referenceBlock([greeting])).not.toMatch(/picture/);
+  });
+
   it('uses your edited wording', () => {
     setTemplateOverrides({ 'references.user': 'REFS:\n\n{{cards}}' });
     expect(referenceBlock([sister])).toMatch(/^REFS:\n\n<reference_card/);

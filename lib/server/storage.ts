@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { cleanTagData, type AppTagData } from '@/lib/appTags';
-import type { AppConfig, BankLorebook, CardProject, ChatSession, ChatSummary, Persona, ProjectSummary, StorySession, StorySummary, TrashedProject } from '@/types/project';
+import type { AppConfig, BankLorebook, CardProject, ChatSession, ChatSummary, Persona, ProjectSummary, StorySession, StorySummary, TrashedProject, BrainstormSession, BrainstormSummary } from '@/types/project';
 import { DEFAULT_CONFIG } from '@/types/project';
 import type { AdventureSession, AdventureSummary } from '@/types/adventure';
 import { newCard } from '@/lib/cardSpec';
@@ -458,6 +458,38 @@ export async function saveStory(projectId: string, story: StorySession): Promise
 
 export async function deleteStory(projectId: string, storyId: string) {
   await removeJson(storyPath(projectId, storyId));
+}
+
+// ─── Brainstorm sessions ─────────────────────────────────────────────────────
+//   data/projects/<id>/brainstorms/<sessionId>.json   BrainstormSession
+
+const brainstormPath = (projectId: string, sessionId: string) => path.join(projectDir(projectId), 'brainstorms', `${checkId(sessionId)}.json`);
+
+export async function listBrainstorms(projectId: string): Promise<BrainstormSummary[]> {
+  const dir = path.join(projectDir(projectId), 'brainstorms');
+  const files = await fs.readdir(dir).catch(() => [] as string[]);
+  const all = await Promise.all(files.filter((f) => f.endsWith('.json')).map((f) => readJson<BrainstormSession>(path.join(dir, f)).catch(() => null)));
+  return all
+    .filter((s): s is BrainstormSession => !!s)
+    .map((s) => ({ id: s.id, name: s.name, createdAt: s.createdAt, updatedAt: s.updatedAt, messageCount: Array.isArray(s.messages) ? s.messages.length : 0 }))
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export async function getBrainstorm(projectId: string, sessionId: string): Promise<BrainstormSession> {
+  const s = await readJson<BrainstormSession>(brainstormPath(projectId, sessionId));
+  if (!s) throw new NotFoundError(`No brainstorm ${sessionId}`);
+  return { ...s, messages: Array.isArray(s.messages) ? s.messages : [] };
+}
+
+export async function saveBrainstorm(projectId: string, session: BrainstormSession): Promise<BrainstormSession> {
+  if (!Array.isArray(session.messages)) throw new BadRequestError('A brainstorm needs its messages');
+  const saved = { ...session, name: String(session.name ?? '').slice(0, 200) || 'Brainstorm', updatedAt: Date.now() };
+  await writeFileAtomic(brainstormPath(projectId, session.id), JSON.stringify(saved));
+  return saved;
+}
+
+export async function deleteBrainstorm(projectId: string, sessionId: string) {
+  await removeJson(brainstormPath(projectId, sessionId));
 }
 
 // ─── Adventures ──────────────────────────────────────────────────────────────

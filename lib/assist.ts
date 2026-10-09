@@ -550,7 +550,7 @@ const job = (name: string, vars: Record<string, string>, systemOf = name): LlmMe
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
 /** The card as context, skipping the field being worked on. */
-export function cardContext(card: CardData, skipPath?: string, budget = 12000): string {
+export function cardContext(card: CardData, skipPath?: string, budget = 12000, opts: { lorebook?: boolean } = {}): string {
   const parts: string[] = [];
   const add = (path: string, label: string, max: number) => {
     if (path === skipPath) return;
@@ -566,7 +566,7 @@ export function cardContext(card: CardData, skipPath?: string, budget = 12000): 
   add('mes_example', 'example_messages', budget * 0.1);
   add('system_prompt', 'system_prompt', budget * 0.05);
   add(CHARACTER_NOTE_PATH, 'character_note', budget * 0.05);
-  const lore = lorebookContext(card, skipPath, budget * 0.35);
+  const lore = opts.lorebook === false ? '' : lorebookContext(card, skipPath, budget * 0.35);
   if (lore) parts.push(lore);
   return parts.join('\n\n') || '(The card is still empty.)';
 }
@@ -722,8 +722,10 @@ export function referencesText(vars: { cards: string; pictures: string }): strin
 export const artReferenceNote = () => template('references.art');
 
 /** Brainstorm (the Ideas tab): a free-form chat that always sees the card. */
-export function brainstormMessages(card: CardData, thread: LlmMessage[]): LlmMessage[] {
-  const system = fillTemplate(template('brainstorm.system'), { card: cardContext(card, undefined, 20000) });
+/** Brainstorm's request. Without the lorebook (`lorebook: false`), its
+ *  entries go only as references you attach. */
+export function brainstormMessages(card: CardData, thread: LlmMessage[], opts: { lorebook?: boolean } = {}): LlmMessage[] {
+  const system = fillTemplate(template('brainstorm.system'), { card: cardContext(card, undefined, 20000, opts) });
   return [...(system ? [{ role: 'system' as const, content: system }] : []), ...thread];
 }
 
