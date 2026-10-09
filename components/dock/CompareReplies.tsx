@@ -4,11 +4,11 @@ import { useState } from 'react';
 import type { LlmConnection, SamplerParams } from '@/types/llm';
 import type { ChatPreset } from '@/lib/stPreset';
 import type { BuiltPrompt } from '@/lib/chatPrompt';
-import { useLlmStore } from '@/store/llmStore';
+import { useLlmStore, writtenBy } from '@/store/llmStore';
 import { useLlmStream, type StreamResult } from '@/hooks/useLlmStream';
 import { useTextTokens, formatTokens, countTextNow } from '@/lib/textTokens';
 import { genStats } from '@/lib/genStats';
-import type { GenStats } from '@/types/project';
+import type { ChatMessage, GenStats } from '@/types/project';
 import { Button, Modal, cx, inputClass } from '@/components/ui';
 
 // ⚖ Compare: the next reply written by two connections (or presets) at
@@ -24,6 +24,7 @@ export interface KeptReply {
   reasoning?: string;
   model?: string;
   gen?: GenStats;
+  sentWith?: ChatMessage['sentWith'];
 }
 
 interface SidePick {
@@ -54,7 +55,7 @@ export function CompareDialog({
   const a = useLlmStream();
   const b = useLlmStream();
   const streams = [a, b] as const;
-  const [results, setResults] = useState<[(StreamResult & { ms: number; model?: string }) | null, (StreamResult & { ms: number; model?: string }) | null]>([null, null]);
+  const [results, setResults] = useState<[(StreamResult & { ms: number; model?: string; sentWith?: ChatMessage['sentWith'] }) | null, (StreamResult & { ms: number; model?: string; sentWith?: ChatMessage['sentWith'] }) | null]>([null, null]);
   const [started, setStarted] = useState(false);
   const running = a.running || b.running;
 
@@ -72,14 +73,14 @@ export function CompareDialog({
       const t0 = performance.now();
       void streams[i]
         .run(side.connection, messages, undefined, { prefill: built.prefill !== undefined, params, text: built.text !== undefined ? { prompt: built.text, stop: built.stop ?? [] } : undefined })
-        .then((r) => setResults((rs) => (i === 0 ? [{ ...r, ms: performance.now() - t0, model: side.connection?.model }, rs[1]] : [rs[0], { ...r, ms: performance.now() - t0, model: side.connection?.model }])));
+        .then((r) => setResults((rs) => (i === 0 ? [{ ...r, ms: performance.now() - t0, model: side.connection?.model, sentWith: side.connection ? writtenBy(side.connection, side.preset) : undefined }, rs[1]] : [rs[0], { ...r, ms: performance.now() - t0, model: side.connection?.model, sentWith: side.connection ? writtenBy(side.connection, side.preset) : undefined }])));
     });
   };
   const stop = () => streams.forEach((s) => s.stop());
   const keep = (which: number[]) => {
     const kept = which.map((i) => results[i]).filter((r): r is NonNullable<typeof r> => !!r && !!r.text.trim());
     if (!kept.length) return;
-    onKeep(kept.map((r) => ({ text: r.text, reasoning: r.reasoning || undefined, model: r.model, gen: genStats(r.timing, r.outputTokens, () => countTextNow(r.text)) })));
+    onKeep(kept.map((r) => ({ text: r.text, reasoning: r.reasoning || undefined, model: r.model, sentWith: r.sentWith, gen: genStats(r.timing, r.outputTokens, () => countTextNow(r.text)) })));
     onClose();
   };
   const set = (i: number, patch: Partial<SidePick>) => setPicks((ps) => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)) as [SidePick, SidePick]);

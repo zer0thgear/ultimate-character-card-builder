@@ -6,6 +6,7 @@ import type { LlmConnection, ProviderKind } from '@/types/llm';
 import { DEFAULT_PARAMS } from '@/types/llm';
 import { DEFAULT_CHAT_SETTINGS, type ChatPromptSettings } from '@/lib/chatPrompt';
 import type { ChatPreset } from '@/lib/stPreset';
+import type { ChatMessage } from '@/types/project';
 import { useSessionStore } from '@/store/sessionStore';
 import { serverStorage } from '@/lib/serverSettings';
 import { uuid } from '@/lib/uuid';
@@ -211,4 +212,10 @@ export function textTemplates(c: LlmConnection | null, s: Pick<LlmState, 'instru
   const instruct = allInstruct(s).find((t) => t.id === c.instructId) ?? BUILTIN_INSTRUCT[0];
   const context = allContext(s).find((t) => t.id === c.contextId) ?? BUILTIN_CONTEXT[0];
   return { instruct, context };
+}
+
+/** What a reply was written with, kept on it beside its model. */
+export function writtenBy(connection: LlmConnection, preset: ChatPreset | null): NonNullable<ChatMessage['sentWith']> {
+  const text = textTemplates(connection);
+  return { connection: connection.name, ...(preset ? { preset: preset.name } : {}), ...(text ? { instruct: text.instruct.name } : {}) };
 }

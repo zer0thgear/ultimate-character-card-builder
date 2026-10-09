@@ -4,7 +4,7 @@ import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useMem
 import { chatMatches, splitMatches } from '@/lib/chatSearch';
 import { useProjectStore } from '@/store/projectStore';
 import { useChatStore } from '@/store/chatStore';
-import { textTemplates, useLlmStore } from '@/store/llmStore';
+import { textTemplates, useLlmStore, writtenBy } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
@@ -294,7 +294,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
         .map((x) => {
           if (x.id !== id) return x;
           const reasoning = x.swipes.map((_, i) => (i === x.swipe ? r.reasoning || x.reasoning?.[i] : x.reasoning?.[i]));
-          return { ...x, model: connection?.model, reasoning, ...(stats ? { gen: setAt(x.gen, x.swipe, stats) } : {}), swipes: x.swipes.map((s, i) => (i === x.swipe && s ? written : s)) };
+          return { ...x, model: connection?.model, ...(connection ? { sentWith: writtenBy(connection, preset) } : {}), reasoning, ...(stats ? { gen: setAt(x.gen, x.swipe, stats) } : {}), swipes: x.swipes.map((s, i) => (i === x.swipe && s ? written : s)) };
         })
         // A reply that failed before writing anything is taken back out.
         .filter((x) => !(x.id === id && !target && !messageText(x).trim())),
@@ -380,12 +380,13 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
             gen: [...x.swipes.map((_, i) => x.gen?.[i]), ...kept.map((k) => k.gen)],
             continues: x.continues ? [...x.continues, ...kept.map(() => undefined)] : undefined,
             model: kept.at(-1)?.model ?? x.model,
+            sentWith: kept.at(-1)?.sentWith ?? x.sentWith,
           };
         }),
       );
     } else {
       const m = newMessage('assistant', kept[0].text, kept[kept.length - 1].model);
-      setMessages((ms) => [...ms, { ...m, swipes: kept.map((k) => k.text), swipe: kept.length - 1, swipeDates: kept.map(() => now), reasoning: kept.map((k) => k.reasoning), gen: kept.map((k) => k.gen) }]);
+      setMessages((ms) => [...ms, { ...m, sentWith: kept[kept.length - 1].sentWith, swipes: kept.map((k) => k.text), swipe: kept.length - 1, swipeDates: kept.map(() => now), reasoning: kept.map((k) => k.reasoning), gen: kept.map((k) => k.gen) }]);
     }
   };
 
@@ -1281,35 +1282,40 @@ function Bubble({
               🙈 hidden
             </button>
           )}
-          {m.model && !isUser && <span className="min-w-0 flex-1 basis-0 truncate text-slate-600">{m.model}</span>}
+          {m.model && !isUser && (
+            <span className="min-w-0 flex-1 basis-0 truncate text-slate-600" title={writtenWith(m)}>
+              {m.model}
+            </span>
+          )}
           <span className={cx('flex flex-wrap items-center gap-0.5 group-hover:opacity-100 touch:opacity-100', more ? 'opacity-100' : 'opacity-0', mirror ? 'mr-auto' : 'ml-auto')}>
-            <IconButton title="Edit" disabled={busy} onClick={() => setEditing(text)}>
-              ✎
-            </IconButton>
+            {/* SillyTavern's order: what ⋯ opens, ⋯, then Edit last. */}
+            {more && (
+              <>
+                <IconButton title="Copy" onClick={() => void copyText(text)}>
+                  ⧉
+                </IconButton>
+                <IconButton title={m.hidden ? 'Show it to the model again' : "Hide from the prompt: it stays in the chat, but the model doesn't see it"} disabled={busy} onClick={() => onChange({ hidden: m.hidden ? undefined : true })}>
+                  {m.hidden ? '👁' : '🙈'}
+                </IconButton>
+                <IconButton title="Branch: a new chat from here (this message and everything before it, every version kept); this chat stays as it is" disabled={busy} onClick={onBranch}>
+                  🔀
+                </IconButton>
+                {!isLast && (
+                  <IconButton title="Delete everything after this" tone="danger" disabled={busy} onClick={onDeleteAfter}>
+                    ⤓
+                  </IconButton>
+                )}
+                <IconButton title="Delete message" tone="danger" disabled={busy} onClick={onDelete}>
+                  🗑
+                </IconButton>
+              </>
+            )}
             <IconButton title={more ? 'Fewer buttons' : 'More: copy, hide, branch, delete'} tone={more ? 'accent' : 'default'} aria-expanded={more} onClick={() => setMore(!more)}>
               ⋯
             </IconButton>
-            {more && (
-              <>
-              <IconButton title="Copy" onClick={() => void copyText(text)}>
-                ⧉
-              </IconButton>
-              <IconButton title={m.hidden ? 'Show it to the model again' : "Hide from the prompt: it stays in the chat, but the model doesn't see it"} disabled={busy} onClick={() => onChange({ hidden: m.hidden ? undefined : true })}>
-                {m.hidden ? '👁' : '🙈'}
-              </IconButton>
-              <IconButton title="Branch: a new chat from here (this message and everything before it, every version kept); this chat stays as it is" disabled={busy} onClick={onBranch}>
-                🔀
-              </IconButton>
-              {!isLast && (
-                <IconButton title="Delete everything after this" tone="danger" disabled={busy} onClick={onDeleteAfter}>
-                  ⤓
-                </IconButton>
-              )}
-              <IconButton title="Delete message" tone="danger" disabled={busy} onClick={onDelete}>
-                🗑
-              </IconButton>
-              </>
-            )}
+            <IconButton title="Edit" disabled={busy} onClick={() => setEditing(text)}>
+              ✎
+            </IconButton>
           </span>
         </div>
         {!flat && showTime && <MessageTime time={swipeDate(m)} className={mirror ? 'text-right' : undefined} />}
@@ -1606,6 +1612,13 @@ const PARAM_LABELS: Record<string, string> = {
 
 /** The samplers a chat request goes with: the connection's, with the
  *  preset's over them where it's used. */
+/** A reply's model, connection and preset, for hovering (or holding) its model. */
+function writtenWith(m: ChatMessage): string {
+  const w = m.sentWith;
+  if (!w) return `Model: ${m.model}`;
+  return [`Model: ${m.model}`, `Connection: ${w.connection}`, `Preset: ${w.preset ?? 'none'}`, ...(w.instruct ? [`Instruct template: ${w.instruct}`] : [])].join('\n');
+}
+
 function sentWith(connection: LlmConnection, overrides: Partial<SamplerParams>, preset: ChatPreset | null): SentWith {
   const merged: Record<string, unknown> = { ...connection.params, ...overrides };
   const params = Object.keys(PARAM_LABELS)
