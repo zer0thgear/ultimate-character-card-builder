@@ -648,7 +648,7 @@ function EntryView({ entry: e, userName, avatar, busy, update }: { entry: Advent
 
 /** *actions*, **bold** and "speech", as the chat shows them. */
 function Formatted({ text }: { text: string }) {
-  const nodes = useMemo(() => formatChat(hideComments(text)), [text]);
+  const nodes = useMemo(() => formatChat(hideComments(text).trim()), [text]);
   return <div className="chat-text text-sm leading-relaxed whitespace-pre-wrap text-slate-200">{render(nodes)}</div>;
 }
 

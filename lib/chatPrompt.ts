@@ -349,7 +349,9 @@ export function historyParts(
 ): PromptPart[] {
   const msgs: PromptPart[] = [];
   history.forEach((m, i) => {
-    let content = x(messageText(m));
+    // Without the blank lines and spaces around it, which cost tokens and
+    // say nothing (replies often start with a line break).
+    let content = x(messageText(m)).trim();
     const placement = placementFor(m.role);
     if (rx && placement !== null && content) content = rx(content, placement, history.length - 1 - i).trim();
     if (!content) return;

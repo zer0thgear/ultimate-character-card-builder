@@ -275,16 +275,22 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
         m.map((x) => (x.id === id ? { ...x, swipes: [...x.swipes, ''], swipe: x.swipes.length, swipeDates: [...x.swipes.map((_, i) => x.swipeDates?.[i] ?? x.createdAt), Date.now()] } : x)),
       );
     const r = await complete(built, (full) => {
-      written = base + (continueFrom && full && !/^\s/.test(full) && !/\s$/.test(base) ? ' ' : '') + full;
+      // A new reply or version starts at its first word: models often open
+      // with a line break or a space. A continue keeps its own (a new
+      // paragraph is a line break), joined as written.
+      const body = continueFrom === undefined ? full.replace(/^\s+/, '') : full;
+      written = base + (continueFrom && body && !/^\s/.test(body) && !/\s$/.test(base) ? ' ' : '') + body;
       setMessages((m) => m.map((x) => (x.id === id ? { ...x, swipes: x.swipes.map((s, i) => (i === x.swipe ? written : s)) } : x)));
     });
     setStreamingId(null);
+    // And it ends at its last: trailing line breaks and spaces go.
+    written = written.replace(/\s+$/, '');
     setMessages((m) =>
       m
         .map((x) => {
           if (x.id !== id) return x;
           const reasoning = x.swipes.map((_, i) => (i === x.swipe ? r.reasoning || x.reasoning?.[i] : x.reasoning?.[i]));
-          return { ...x, model: connection?.model, reasoning };
+          return { ...x, model: connection?.model, reasoning, swipes: x.swipes.map((s, i) => (i === x.swipe && s ? written : s)) };
         })
         // A reply that failed before writing anything is taken back out.
         .filter((x) => !(x.id === id && !target && !messageText(x).trim())),
@@ -847,7 +853,9 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
  *  way, as frontends show them (lib/chatFormat.ts); <!-- comments --> are
  *  left out (they're for the model). */
 function Formatted({ text }: { text: string }) {
-  const nodes = useMemo(() => formatChat(hideComments(text)), [text]);
+  // Blank lines and spaces around a message aren't shown (older replies
+  // were saved with them).
+  const nodes = useMemo(() => formatChat(hideComments(text).trim()), [text]);
   return <div className="chat-text text-sm leading-relaxed whitespace-pre-wrap text-slate-200">{renderNodes(nodes)}</div>;
 }
 
@@ -1151,10 +1159,10 @@ function GreetingBubble({
               <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
                 Cancel
               </Button>
-              <Button size="sm" onClick={() => saveToCard(editing)} title="Change the card's greeting itself (undo in the editor brings it back); every chat reading it live gets it, this one too">
+              <Button size="sm" onClick={() => saveToCard(editing.trim())} title="Change the card's greeting itself (undo in the editor brings it back); every chat reading it live gets it, this one too">
                 Save to the card
               </Button>
-              <Button size="sm" variant="primary" onClick={() => saveToChat(editing)} title="This chat only: the card's greeting stays as it is">
+              <Button size="sm" variant="primary" onClick={() => saveToChat(editing.trim())} title="This chat only: the card's greeting stays as it is">
                 Save for this chat
               </Button>
             </div>
@@ -1290,7 +1298,7 @@ function Bubble({
                 variant="primary"
                 onClick={() => {
                   // An edit starts the swipe's continue tree afresh.
-                  onChange({ swipes: m.swipes.map((s, i) => (i === m.swipe ? editing : s)), continues: m.continues?.map((c, i) => (i === m.swipe ? undefined : c)) });
+                  onChange({ swipes: m.swipes.map((s, i) => (i === m.swipe ? editing.trim() : s)), continues: m.continues?.map((c, i) => (i === m.swipe ? undefined : c)) });
                   setEditing(null);
                 }}
               >

@@ -37,6 +37,12 @@ describe('buildChatPrompt', () => {
     expect(parts[7]).toMatchObject({ role: 'assistant', content: 'Welcome, Bob.' });
   });
 
+  it('sends messages without the blank lines and spaces around them', () => {
+    const history = [{ ...newMessage('assistant', '\n\n  Welcome.  \n'), id: 'greeting' }, newMessage('user', ' Hi.\n'), newMessage('assistant', '\n*She nods.*\n\n"Sit."\n\n')];
+    const { parts } = buildChatPrompt(card(), history, settings);
+    expect(parts.slice(-3).map((p) => p.content)).toEqual(['Welcome.', 'Hi.', '*She nods.*\n\n"Sit."']);
+  });
+
   it("uses the card's system prompt and PHI, with {{original}}", () => {
     const c = { ...card(), system_prompt: 'Card rules. {{original}}', post_history_instructions: 'Stay terse.' };
     const { parts } = buildChatPrompt(c, [], { ...settings, mainPrompt: 'Base.' });
