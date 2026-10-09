@@ -1,5 +1,5 @@
 import type { CardData } from '@/types/card';
-import type { AuthorsNote, ChatMessage, ChatSession } from '@/types/project';
+import type { AuthorsNote, ChatMessage, ChatSession, GenStats } from '@/types/project';
 import { expandMacros } from '@/lib/macros';
 import { greetingText } from '@/lib/chatPrompt';
 import { uuid } from '@/lib/uuid';
@@ -100,6 +100,16 @@ function messageOf(l: Line, role: Role): ChatMessage {
     const e = i === swipeId ? extra : isObject(info[i]) && isObject(info[i].extra) ? info[i].extra : {};
     return str(e.reasoning) || undefined;
   });
+  // SillyTavern's message timer, and the token count it divides by.
+  const gen = swipes.map((_, i): GenStats | undefined => {
+    const src = i === swipeId ? l : isObject(info[i]) ? info[i] : {};
+    const e = i === swipeId ? extra : isObject(src.extra) ? src.extra : {};
+    const start = typeof src.gen_started === 'string' ? Date.parse(src.gen_started) : NaN;
+    const finish = typeof src.gen_finished === 'string' ? Date.parse(src.gen_finished) : NaN;
+    if (!(finish >= start)) return undefined;
+    const tokens = typeof e.token_count === 'number' && e.token_count > 0 ? e.token_count : undefined;
+    return { ms: finish - start, ...(tokens ? { tokens } : {}) };
+  });
   const model = str(extra.model) || undefined;
   return {
     id: uuid(),
@@ -109,6 +119,7 @@ function messageOf(l: Line, role: Role): ChatMessage {
     createdAt: dates[0],
     swipeDates: dates,
     ...(reasoning.some(Boolean) ? { reasoning } : {}),
+    ...(role === 'assistant' && gen.some(Boolean) ? { gen } : {}),
     ...(model && role === 'assistant' ? { model } : {}),
     // SillyTavern leaves its system messages out of the prompt.
     ...(l.is_system === true ? { hidden: true } : {}),

@@ -33,9 +33,10 @@ import { useKeyboard } from '@/hooks/useKeyboard';
 import { chatFileName, chatToStJsonl, chatToText } from '@/lib/chatExport';
 import { ChatImportError, parseChatFile } from '@/lib/chatImport';
 import type { Persona } from '@/types/project';
-import { useTextTokens, formatTokens } from '@/lib/textTokens';
+import { useTextTokens, formatTokens, countTextNow } from '@/lib/textTokens';
+import { formatSeconds, genStats, setAt, tokensPerSecond } from '@/lib/genStats';
 import type { CardData } from '@/types/card';
-import type { ChatImage, ChatMessage } from '@/types/project';
+import type { ChatImage, ChatMessage, GenStats } from '@/types/project';
 import { uuid } from '@/lib/uuid';
 import { copyText } from '@/lib/clipboard';
 import { CODE_BLOCK_CLASS, CODE_CLASS, HEADING_CLASSES, formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
@@ -285,12 +286,15 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
     setStreamingId(null);
     // And it ends at its last: trailing line breaks and spaces go.
     written = written.replace(/\s+$/, '');
+    // How long it took (a continue's: just the part it added).
+    const added = written.slice(base.length);
+    const stats = added.trim() ? genStats(r.timing, r.outputTokens, () => countTextNow(added)) : undefined;
     setMessages((m) =>
       m
         .map((x) => {
           if (x.id !== id) return x;
           const reasoning = x.swipes.map((_, i) => (i === x.swipe ? r.reasoning || x.reasoning?.[i] : x.reasoning?.[i]));
-          return { ...x, model: connection?.model, reasoning, swipes: x.swipes.map((s, i) => (i === x.swipe && s ? written : s)) };
+          return { ...x, model: connection?.model, reasoning, ...(stats ? { gen: setAt(x.gen, x.swipe, stats) } : {}), swipes: x.swipes.map((s, i) => (i === x.swipe && s ? written : s)) };
         })
         // A reply that failed before writing anything is taken back out.
         .filter((x) => !(x.id === id && !target && !messageText(x).trim())),
@@ -373,6 +377,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
             swipe: x.swipes.length + kept.length - 1,
             swipeDates: [...x.swipes.map((_, i) => x.swipeDates?.[i] ?? x.createdAt), ...kept.map(() => now)],
             reasoning: [...x.swipes.map((_, i) => x.reasoning?.[i]), ...kept.map((k) => k.reasoning)],
+            gen: [...x.swipes.map((_, i) => x.gen?.[i]), ...kept.map((k) => k.gen)],
             continues: x.continues ? [...x.continues, ...kept.map(() => undefined)] : undefined,
             model: kept.at(-1)?.model ?? x.model,
           };
@@ -380,7 +385,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
       );
     } else {
       const m = newMessage('assistant', kept[0].text, kept[kept.length - 1].model);
-      setMessages((ms) => [...ms, { ...m, swipes: kept.map((k) => k.text), swipe: kept.length - 1, swipeDates: kept.map(() => now), reasoning: kept.map((k) => k.reasoning) }]);
+      setMessages((ms) => [...ms, { ...m, swipes: kept.map((k) => k.text), swipe: kept.length - 1, swipeDates: kept.map(() => now), reasoning: kept.map((k) => k.reasoning), gen: kept.map((k) => k.gen) }]);
     }
   };
 
@@ -943,6 +948,32 @@ function Avatar({ role, persona }: { role: 'user' | 'assistant' | 'system'; pers
 }
 
 /**
+ * The portrait, and under it what SillyTavern shows there: the message's
+ * number, how long a reply took to write (holding or hovering it says how
+ * long the first token took), its tokens and tokens a second. With
+ * avatars off the numbers keep the column to themselves.
+ */
+function MessageAside({ role, persona, id, tokens, gen }: { role: 'user' | 'assistant' | 'system'; persona?: Persona | null; id?: number; tokens?: number; gen?: GenStats }) {
+  const s = useLlmStore((st) => st.chatSettings);
+  const time = (s.showGenTime ?? true) && gen ? gen : undefined;
+  const count = (s.showTokenCounts ?? true) && tokens ? tokens : undefined;
+  const tps = (s.showTokensPerSecond ?? true) && gen ? tokensPerSecond(gen) : undefined;
+  const any = id !== undefined || time || count !== undefined || tps !== undefined;
+  if ((s.avatarShape ?? 'circle') === 'none' && !any) return null;
+  return (
+    <div className="flex w-10 flex-shrink-0 flex-col items-center gap-0.5 text-[10px] leading-tight whitespace-nowrap text-slate-600 tabular-nums">
+      <Avatar role={role} persona={persona} />
+      {id !== undefined && <MessageId id={id} />}
+      {time && (
+        <span title={`Took ${formatSeconds(time.ms)} to write${time.ttft !== undefined ? `; the first token came after ${formatSeconds(time.ttft)}` : ''}`}>{formatSeconds(time.ms)}</span>
+      )}
+      {count !== undefined && <span title={`${count} tokens (estimated: o200k tokenizer; your model may count a little differently)`}>{formatTokens(count)}t</span>}
+      {tps !== undefined && <span title={`Tokens a second: ${gen?.tokens} written (reasoning included) in ${formatSeconds(gen?.ms ?? 0)}`}>{tps.toFixed(1)}t/s</span>}
+    </div>
+  );
+}
+
+/**
  * A sideways swipe on a message, by touch only: left for the next version,
  * right for the one before. Scrolling up and down is left to the browser;
  * the bubble follows the finger a little while it's a swipe. Off with
@@ -1109,9 +1140,9 @@ function GreetingBubble({
   };
   return (
     <div ref={box} className={cx('group flex gap-2', right && 'flex-row-reverse', flat && 'border-b border-slate-800/70 pb-3')}>
-      <Avatar role="assistant" />
+      <MessageAside role="assistant" id={showId ? 0 : undefined} tokens={shown ? tokens : undefined} />
       <div className={cx('min-w-0 flex-1', flat ? 'px-1' : 'rounded-lg bg-slate-900 px-3 py-2')} {...swipe.props} style={swipe.style}>
-        <div className={cx('mb-1 flex items-center gap-2 text-xs', right && !flat && 'flex-row-reverse')}>
+        <div className={cx('mb-1 flex min-w-0 items-center gap-2 text-xs', right && !flat && 'flex-row-reverse')}>
           <span className="max-w-[50%] flex-shrink-0 truncate font-semibold text-slate-200">{card.nickname || card.name || 'Character'}</span>
           {edited !== undefined ? (
             <span className="min-w-0 truncate text-amber-400/80" title="Edited in this chat: changes to the card's greeting don't show here until you go back to the card's">
@@ -1119,11 +1150,6 @@ function GreetingBubble({
             </span>
           ) : (
             <span className="min-w-0 truncate text-slate-500">greeting · live from the card</span>
-          )}
-          {shown && (
-            <span className="flex-shrink-0 text-[10px] whitespace-nowrap text-slate-600 tabular-nums" title="Estimated tokens in this greeting (o200k tokenizer; your model may count a little differently)">
-              {formatTokens(tokens)} tok
-            </span>
           )}
           {flat && date !== undefined && <MessageTime time={date} inline />}
           <span className={cx('flex flex-shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 touch:opacity-100', right && !flat ? 'mr-auto' : 'ml-auto')}>
@@ -1136,20 +1162,6 @@ function GreetingBubble({
               </IconButton>
             )}
           </span>
-          {showId && <MessageId id={0} />}
-          {count > 1 && (
-            <span className="flex items-center gap-1 text-slate-400">
-              <IconButton title="Previous greeting" disabled={editing !== null} onClick={() => onSwipe(index <= 0 ? count - 1 : index - 1)}>
-                ‹
-              </IconButton>
-              <span className="tabular-nums">
-                {index + 1}/{count}
-              </span>
-              <IconButton title="Next greeting" disabled={editing !== null} onClick={() => onSwipe(index >= count - 1 ? 0 : index + 1)}>
-                ›
-              </IconButton>
-            </span>
-          )}
         </div>
         {!flat && date !== undefined && <MessageTime time={date} className={right ? 'text-right' : undefined} />}
         {editing !== null ? (
@@ -1171,6 +1183,19 @@ function GreetingBubble({
           <Formatted text={shownText(card, shown, 'assistant', depth, { userName, useCardRegex: regex })} />
         ) : (
           <em className="text-sm text-slate-500">This greeting is empty.</em>
+        )}
+        {count > 1 && (
+          <div className={cx('mt-1.5 flex items-center justify-end gap-1 text-xs text-slate-400', right && !flat && 'flex-row-reverse')}>
+            <IconButton title="Previous greeting" disabled={editing !== null} onClick={() => onSwipe(index <= 0 ? count - 1 : index - 1)}>
+              ‹
+            </IconButton>
+            <span className="tabular-nums">
+              {index + 1}/{count}
+            </span>
+            <IconButton title="Next greeting" disabled={editing !== null} onClick={() => onSwipe(index >= count - 1 ? 0 : index + 1)}>
+              ›
+            </IconButton>
+          </div>
         )}
       </div>
     </div>
@@ -1226,6 +1251,8 @@ function Bubble({
   onShowTree: () => void;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
+  // Edit stays out; the rest of a message's buttons wait behind ⋯.
+  const [more, setMore] = useState(false);
   const text = messageText(m);
   const tokens = useTextTokens(text, 800);
   const reasoning = streaming ? streamReasoning : m.reasoning?.[m.swipe];
@@ -1244,39 +1271,45 @@ function Bubble({
   useArrowSwipe(box, next, prev);
   return (
     <div ref={box} className={cx('group flex gap-2', right && 'flex-row-reverse', flat && 'border-b border-slate-800/70 pb-3')}>
-      <Avatar role={m.role} persona={persona} />
+      <MessageAside role={m.role} persona={persona} id={messageId} tokens={text ? tokens : undefined} gen={streaming ? undefined : m.gen?.[m.swipe]} />
       <div className={cx('min-w-0 flex-1', flat ? 'px-1' : cx('rounded-lg px-3 py-2', isUser ? 'bg-sky-500/10' : 'bg-slate-900'), m.hidden && 'rounded-lg border border-dashed border-slate-700 opacity-60')} {...swipe.props} style={swipe.style}>
-        <div className={cx('mb-1 flex items-center gap-2 text-xs', mirror && 'flex-row-reverse')}>
-          <span className="font-semibold text-slate-200">{isUser ? userName || 'User' : card.nickname || card.name || 'Character'}</span>
+        <div className={cx('mb-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs', mirror && 'flex-row-reverse')}>
+          <span className="min-w-0 truncate font-semibold text-slate-200">{isUser ? userName || 'User' : card.nickname || card.name || 'Character'}</span>
           {flat && showTime && <MessageTime time={swipeDate(m)} inline />}
           {m.hidden && (
             <button type="button" className="rounded bg-slate-700/60 px-1.5 text-[10px] text-slate-300 hover:bg-slate-600" title="Left out of the prompt: the model doesn't see it. Click to put it back." onClick={() => onChange({ hidden: undefined })}>
               🙈 hidden
             </button>
           )}
-          {m.model && !isUser && <span className="truncate text-slate-600">{m.model}</span>}
-          <span className={cx('flex items-center gap-0.5 opacity-0 group-hover:opacity-100 touch:opacity-100', mirror ? 'mr-auto' : 'ml-auto')}>
-            <span className="mr-1 text-[10px] text-slate-600">{formatTokens(tokens)} tok</span>
+          {m.model && !isUser && <span className="min-w-0 flex-1 basis-0 truncate text-slate-600">{m.model}</span>}
+          <span className={cx('flex flex-wrap items-center gap-0.5 group-hover:opacity-100 touch:opacity-100', more ? 'opacity-100' : 'opacity-0', mirror ? 'mr-auto' : 'ml-auto')}>
             <IconButton title="Edit" disabled={busy} onClick={() => setEditing(text)}>
               ✎
             </IconButton>
-            <IconButton title="Copy" onClick={() => void copyText(text)}>
-              ⧉
+            <IconButton title={more ? 'Fewer buttons' : 'More: copy, hide, branch, delete'} tone={more ? 'accent' : 'default'} aria-expanded={more} onClick={() => setMore(!more)}>
+              ⋯
             </IconButton>
-            <IconButton title={m.hidden ? 'Show it to the model again' : "Hide from the prompt: it stays in the chat, but the model doesn't see it"} disabled={busy} onClick={() => onChange({ hidden: m.hidden ? undefined : true })}>
-              {m.hidden ? '👁' : '🙈'}
-            </IconButton>
-            <IconButton title="Branch: a new chat from here (this message and everything before it, every version kept); this chat stays as it is" disabled={busy} onClick={onBranch}>
-              🔀
-            </IconButton>
-            {!isLast && (
-              <IconButton title="Delete everything after this" tone="danger" disabled={busy} onClick={onDeleteAfter}>
-                ⤓
+            {more && (
+              <>
+              <IconButton title="Copy" onClick={() => void copyText(text)}>
+                ⧉
               </IconButton>
+              <IconButton title={m.hidden ? 'Show it to the model again' : "Hide from the prompt: it stays in the chat, but the model doesn't see it"} disabled={busy} onClick={() => onChange({ hidden: m.hidden ? undefined : true })}>
+                {m.hidden ? '👁' : '🙈'}
+              </IconButton>
+              <IconButton title="Branch: a new chat from here (this message and everything before it, every version kept); this chat stays as it is" disabled={busy} onClick={onBranch}>
+                🔀
+              </IconButton>
+              {!isLast && (
+                <IconButton title="Delete everything after this" tone="danger" disabled={busy} onClick={onDeleteAfter}>
+                  ⤓
+                </IconButton>
+              )}
+              <IconButton title="Delete message" tone="danger" disabled={busy} onClick={onDelete}>
+                🗑
+              </IconButton>
+              </>
             )}
-            <IconButton title="Delete message" tone="danger" disabled={busy} onClick={onDelete}>
-              🗑
-            </IconButton>
           </span>
         </div>
         {!flat && showTime && <MessageTime time={swipeDate(m)} className={mirror ? 'text-right' : undefined} />}
@@ -1311,11 +1344,8 @@ function Bubble({
         ) : (
           <span className="animate-pulse text-sm text-slate-500">…</span>
         )}
-        {((!isUser && isLast) || messageId !== undefined) && (
+        {!isUser && isLast && (
           <div className={cx('mt-1.5 flex items-center justify-end gap-1 text-xs text-slate-400', mirror && 'flex-row-reverse')}>
-            {messageId !== undefined && <MessageId id={messageId} className={mirror ? 'ml-auto' : 'mr-auto'} />}
-            {!isUser && isLast && (
-              <>
             {tree && pathDepth(tree) > 0 && (
               <>
                 <IconButton title="Undo the last continue (it stays in 🌿, to go back to)" disabled={busy} onClick={onUndoContinue}>
@@ -1344,8 +1374,6 @@ function Bubble({
             <IconButton title={m.swipe < m.swipes.length - 1 ? 'Next version' : 'Generate another version'} disabled={busy} onClick={() => (m.swipe < m.swipes.length - 1 ? onChange({ swipe: m.swipe + 1 }) : onSwipeNew())}>
               ›
             </IconButton>
-              </>
-            )}
           </div>
         )}
       </div>
@@ -1517,6 +1545,10 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
         <Toggle checked={s.useCardRegex ?? true} onChange={(v) => setChatSettings({ useCardRegex: v })} label={<span className="text-xs" title="Scripts a card carries (as SillyTavern's Regex extension runs them) to change how messages look or what the model is sent. The card's are listed on its Prompts tab">Run the card&apos;s regex scripts</span>} />
         <Toggle checked={s.showMessageIds} onChange={(v) => setChatSettings({ showMessageIds: v })} label={<span className="text-xs">Show message numbers (#0 is the greeting)</span>} />
         <Toggle checked={s.showTimestamps ?? true} onChange={(v) => setChatSettings({ showTimestamps: v })} label={<span className="text-xs" title="Each reply's versions have their own; the greeting shows when the chat began">Show when messages were sent</span>} />
+        <span className="text-[11px] text-slate-500">Under the portraits:</span>
+        <Toggle checked={s.showTokenCounts ?? true} onChange={(v) => setChatSettings({ showTokenCounts: v })} label={<span className="text-xs">Token counts</span>} />
+        <Toggle checked={s.showGenTime ?? true} onChange={(v) => setChatSettings({ showGenTime: v })} label={<span className="text-xs" title="How long each reply took to write; hover or hold it for how long the first token took">How long replies took</span>} />
+        <Toggle checked={s.showTokensPerSecond ?? true} onChange={(v) => setChatSettings({ showTokensPerSecond: v })} label={<span className="text-xs">Tokens a second</span>} />
         <label className="flex w-full flex-col gap-0.5 text-xs text-slate-400">
           🧭 Guide template <span className="text-slate-500">({'{{guide}}'} is where your guide goes; sent last, just before the reply)</span>
           <input value={s.guideTemplate ?? DEFAULT_GUIDE_TEMPLATE} onChange={(e) => setChatSettings({ guideTemplate: e.target.value })} className={cx(inputClass, 'text-xs')} />

@@ -6,7 +6,9 @@ import type { ChatPreset } from '@/lib/stPreset';
 import type { BuiltPrompt } from '@/lib/chatPrompt';
 import { useLlmStore } from '@/store/llmStore';
 import { useLlmStream, type StreamResult } from '@/hooks/useLlmStream';
-import { useTextTokens, formatTokens } from '@/lib/textTokens';
+import { useTextTokens, formatTokens, countTextNow } from '@/lib/textTokens';
+import { genStats } from '@/lib/genStats';
+import type { GenStats } from '@/types/project';
 import { Button, Modal, cx, inputClass } from '@/components/ui';
 
 // ⚖ Compare: the next reply written by two connections (or presets) at
@@ -21,6 +23,7 @@ export interface KeptReply {
   text: string;
   reasoning?: string;
   model?: string;
+  gen?: GenStats;
 }
 
 interface SidePick {
@@ -76,7 +79,7 @@ export function CompareDialog({
   const keep = (which: number[]) => {
     const kept = which.map((i) => results[i]).filter((r): r is NonNullable<typeof r> => !!r && !!r.text.trim());
     if (!kept.length) return;
-    onKeep(kept.map((r) => ({ text: r.text, reasoning: r.reasoning || undefined, model: r.model })));
+    onKeep(kept.map((r) => ({ text: r.text, reasoning: r.reasoning || undefined, model: r.model, gen: genStats(r.timing, r.outputTokens, () => countTextNow(r.text)) })));
     onClose();
   };
   const set = (i: number, patch: Partial<SidePick>) => setPicks((ps) => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)) as [SidePick, SidePick]);

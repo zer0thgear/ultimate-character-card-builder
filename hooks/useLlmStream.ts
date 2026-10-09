@@ -44,6 +44,10 @@ export interface StreamResult {
   reasoning: string;
   stopReason?: string;
   error?: string;
+  /** How long it took, in ms: in all, and to its first token. */
+  timing?: { ms: number; firstMs?: number };
+  /** Tokens written, as the provider counted them (when it says). */
+  outputTokens?: number;
 }
 
 /** One streaming completion at a time, with live text and a Stop. */
@@ -81,6 +85,8 @@ export function useLlmStream() {
     setRunning(true);
     useJobStore.getState().bump(1);
     const result: StreamResult = { text: '', reasoning: '' };
+    const t0 = performance.now();
+    let first: number | undefined;
     // A text-completion connection gets one prompt in its instruct
     // template: the chat's own (built from the card), or these messages
     // laid out in it.
@@ -92,6 +98,7 @@ export function useLlmStream() {
       await streamLlm(
         { connection: { ...requestConnection(connection), params }, messages, prefill: opts.prefill, ...(text ? { prompt: text.prompt } : {}) },
         (e) => {
+          if ((e.type === 'text' || e.type === 'reasoning') && e.text && first === undefined) first = performance.now() - t0;
           if (e.type === 'text') {
             result.text += e.text;
             setText((opts.prefix ?? '') + result.text);
@@ -102,6 +109,7 @@ export function useLlmStream() {
             opts.onReasoning?.(result.reasoning);
           } else if (e.type === 'done') {
             result.stopReason = e.stopReason;
+            if (e.usage?.output) result.outputTokens = e.usage.output;
           } else if (e.type === 'error') {
             result.error = e.message;
             setError(e.message);
@@ -117,6 +125,7 @@ export function useLlmStream() {
       setRunning(false);
       useJobStore.getState().bump(-1);
     }
+    result.timing = { ms: performance.now() - t0, ...(first !== undefined ? { firstMs: first } : {}) };
     if (opts.prefix) result.text = opts.prefix + result.text;
     return result;
   }, []);

@@ -85,7 +85,15 @@ export function chatToStJsonl(chat: ChatSession, card: CardData, userName: strin
     const extra = (i: number) => ({
       ...(m.model && !isUser ? { api: 'openai', model: m.model } : {}),
       ...(m.reasoning?.[i] ? { reasoning: m.reasoning[i] } : {}),
+      ...(m.gen?.[i]?.tokens ? { token_count: m.gen[i]!.tokens } : {}),
     });
+    // SillyTavern's message timer.
+    const timer = (i: number) => {
+      const g = m.gen?.[i];
+      if (!g) return {};
+      const start = swipeDate(m, i);
+      return { gen_started: new Date(start).toISOString(), gen_finished: new Date(start + g.ms).toISOString() };
+    };
     lines.push({
       name: isUser ? names.user : m.role === 'system' ? 'System' : names.char,
       is_user: isUser,
@@ -93,10 +101,11 @@ export function chatToStJsonl(chat: ChatSession, card: CardData, userName: strin
       is_system: m.role === 'system' || !!m.hidden,
       send_date: dateOf(m.swipe),
       mes: swipes[m.swipe] ?? '',
+      ...timer(m.swipe),
       extra: extra(m.swipe),
       // SillyTavern keeps swipes on the character's messages only.
       ...(!isUser && swipes.length > 1
-        ? { swipe_id: m.swipe, swipes, swipe_info: swipes.map((_, i) => ({ send_date: dateOf(i), extra: extra(i) })) }
+        ? { swipe_id: m.swipe, swipes, swipe_info: swipes.map((_, i) => ({ send_date: dateOf(i), ...timer(i), extra: extra(i) })) }
         : {}),
     });
   }
