@@ -88,6 +88,34 @@ async function pictureReference(blob: Blob, name: string, id = uuid()): Promise<
  * The attached references as chips, and the 📎 button that adds more.
  * Pictures dropped on it are attached too.
  */
+/** The references a sent message carried, as small chips: a picture
+ *  opens full size, a piece of the card shows its text on hover. */
+export function SentReferences({ refs, className }: { refs: Reference[]; className?: string }) {
+  const images = refs.filter((r) => r.kind === 'image');
+  return (
+    <div className={cx('flex flex-wrap gap-1 whitespace-normal', className)}>
+      {refs.map((r) => {
+        const face = (
+          <>
+            {r.thumb ? <img src={r.thumb} alt="" className="h-4 w-4 rounded object-cover" /> : r.kind === 'card' ? '🪪' : r.kind === 'text' ? '📄' : '🖼'}
+            {r.name}
+          </>
+        );
+        const chip = 'flex items-center gap-1 rounded bg-slate-900/60 px-1 py-0.5 text-[11px] text-slate-400';
+        return r.kind === 'image' ? (
+          <button key={r.id} type="button" className={cx(chip, 'cursor-zoom-in hover:text-slate-200')} title="Show the picture" onClick={() => openLightbox(images.map((i) => i.thumb), images.indexOf(r))}>
+            {face}
+          </button>
+        ) : (
+          <span key={r.id} className={chip} title={r.kind === 'text' ? `${r.text.trim().slice(0, 400)}${r.text.trim().length > 400 ? '…' : ''}` : `Card: ${r.name}`}>
+            {face}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ReferenceTray({ refs, onAdd, onRemove, className, label = 'References', hint }: { refs: Reference[]; onAdd: (r: Reference[]) => void; onRemove: (id: string) => void; className?: string; label?: string; hint?: string }) {
   const [picking, setPicking] = useState(false);
   const [over, setOver] = useState(false);
@@ -126,7 +154,7 @@ export function ReferenceTray({ refs, onAdd, onRemove, className, label = 'Refer
                 src={r.thumb}
                 alt=""
                 className={cx('h-5 w-5 flex-shrink-0 rounded object-cover', r.kind === 'image' && 'cursor-zoom-in')}
-                onClick={() => r.kind === 'image' && openLightbox(images.map((i) => i.thumb!), images.indexOf(r))}
+                onClick={() => r.kind === 'image' && openLightbox(images.map((i) => i.thumb), images.indexOf(r))}
               />
             ) : (
               <span>{r.kind === 'card' ? '🪪' : r.kind === 'text' ? '📄' : '🖼'}</span>

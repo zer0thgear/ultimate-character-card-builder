@@ -16,9 +16,13 @@ import { StatsPanel } from '@/components/editor/StatsPanel';
 import { SourceButton } from '@/components/CardSource';
 import { SandboxFrame } from '@/components/extensions/SandboxFrame';
 import { usePackStore } from '@/store/packStore';
+import { useMediaQuery, PHONE_QUERY } from '@/hooks/useMediaQuery';
 
 export function CardEditor() {
-  const { editorTab: chosen, setEditorTab, showAvatar } = useUiStore();
+  const { editorTab: chosen, setEditorTab, showAvatar: showOnDesktop, showAvatarPhone, setShowAvatarPhone } = useUiStore();
+  // A phone's header has no room for the strip's switch: it's beside the tabs.
+  const phone = useMediaQuery(PHONE_QUERY);
+  const showAvatar = phone ? showAvatarPhone : showOnDesktop;
   const card = useProjectStore((s) => s.project?.card.data);
   // Extensions' tabs; one that's gone falls back to Character.
   const extTabs = usePackStore((s) => s.layer.ui).filter((u) => u.slot === 'editorTab');
@@ -41,6 +45,11 @@ export function CardEditor() {
       {showAvatar && <AvatarStrip />}
       <div className="flex items-center border-b border-slate-800 pr-1">
         <Tabs value={editorTab} onChange={setEditorTab} tabs={tabs} className="min-w-0 flex-1 border-b-0 px-3" />
+        {phone && (
+          <IconButton title={showAvatar ? 'Hide the avatar strip' : 'Show the avatar strip'} onClick={() => setShowAvatarPhone(!showAvatar)}>
+            {showAvatar ? '▣' : '□'}
+          </IconButton>
+        )}
         <FullPaneButton pane="card" />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 phone:px-3">

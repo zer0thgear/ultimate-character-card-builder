@@ -61,6 +61,9 @@ interface UiState {
   chatFullWidth: number;
   setChatFullWidth: (w: number) => void;
   showAvatar: boolean;
+  /** The same on a phone, kept apart (a phone has less room for it). */
+  showAvatarPhone: boolean;
+  setShowAvatarPhone: (show: boolean) => void;
   setShowAvatar: (show: boolean) => void;
   /** Keep NovelAI's generation metadata in exported card PNGs. */
   exportKeepsMetadata: boolean;
@@ -135,6 +138,8 @@ export const useUiStore = create<UiState>()(
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
       showAvatar: true,
       setShowAvatar: (showAvatar) => set({ showAvatar }),
+      showAvatarPhone: true,
+      setShowAvatarPhone: (showAvatarPhone) => set({ showAvatarPhone }),
       exportKeepsMetadata: false,
       setExportKeepsMetadata: (exportKeepsMetadata) => set({ exportKeepsMetadata }),
       exportMaxSize: 0,
