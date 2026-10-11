@@ -311,6 +311,8 @@ describe('card project routes', { timeout: 30_000 }, () => {
     it('saves a chat under the id in the URL and lists it, newest first', async () => {
       const p = await create();
       await routeFetch(`/api/projects/${p.id}/chats/c1`, json('PUT', chat('c1', 2)));
+      // Saved in the same millisecond, they'd tie on updatedAt.
+      await new Promise((r) => setTimeout(r, 5));
       await routeFetch(`/api/projects/${p.id}/chats/c2`, json('PUT', chat('wrong', 3)));
       const list = (await (await routeFetch(`/api/projects/${p.id}/chats`)).json()) as { id: string; messageCount: number }[];
       expect(list.map(({ id, messageCount }) => ({ id, messageCount }))).toEqual([
