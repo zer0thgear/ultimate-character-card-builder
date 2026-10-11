@@ -10,6 +10,7 @@ import { useLlmStore } from '@/store/llmStore';
 import { usePackStore } from '@/store/packStore';
 import { toast } from '@/store/uiStore';
 import { readPackData, updatePackData } from '@/store/packDataCache';
+import { openLightbox } from '@/components/Lightbox';
 import { referenceSummary, referencesById, withReferences, type Reference } from '@/lib/references';
 import { pickReferences, referenceConnectionId } from '@/components/llm/References';
 import { llmCall } from '@/components/llm/llmCall';
@@ -114,6 +115,15 @@ export async function handleCall(host: CallHost, method: string, params: unknown
     }
     case 'references.list':
       return (heldReferences.get(host.packId) ?? []).map(referenceSummary);
+    case 'references.show': {
+      // UCCB shows the picture itself: it never goes to the page.
+      const held = heldReferences.get(host.packId) ?? [];
+      const pictures = held.filter((r) => !!r.thumb);
+      const i = pictures.findIndex((r) => r.id === p.id);
+      if (i < 0) return false;
+      openLightbox(pictures.map((r) => r.thumb!), i);
+      return true;
+    }
     case 'references.remove': {
       heldReferences.set(host.packId, (heldReferences.get(host.packId) ?? []).filter((r) => r.id !== p.id));
       return (heldReferences.get(host.packId) ?? []).map(referenceSummary);

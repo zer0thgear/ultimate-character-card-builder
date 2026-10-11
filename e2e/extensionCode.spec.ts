@@ -88,3 +88,51 @@ test('an extension with code adds a dock tab and a field button, inside its sand
   await page.keyboard.press('Escape');
   await expect(page.getByRole('tab', { name: '🧩 Probe' })).toHaveCount(0);
 });
+
+// A pack gets only a picked picture's name, but can ask UCCB to show it.
+test('an extension shows a picked reference picture in UCCB’s viewer', async ({ page }) => {
+  const viewer = {
+    uccb: 1,
+    id: 'viewer',
+    name: 'Viewer',
+    version: '1.0.0',
+    permissions: ['llm'],
+    contributes: {},
+    ui: [{ id: 'v', slot: 'dockTab', label: 'Viewer', entry: 'v.html' }],
+    files: {
+      'v.html': `<button id="pick">pick</button><button id="show">show</button><pre id="out"></pre><script>
+let refs = [];
+const out = (t) => (document.getElementById('out').textContent = t);
+document.getElementById('pick').onclick = async () => { refs = await uccb.references.pick(); out(refs.map((r) => r.kind + ':' + r.name + ':' + ('image' in r || 'thumb' in r)).join(',')); };
+document.getElementById('show').onclick = async () => out('shown:' + (await uccb.references.show(refs[0].id)));
+</script>`,
+    },
+  };
+  await page.goto('/');
+  for (const p of (await (await page.request.get('/api/packs')).json()) as { pack: { id: string } }[]) await page.request.delete(`/api/packs/${p.pack.id}`);
+  await paste(page, JSON.stringify(viewer), 'Install with its code');
+  await page.getByRole('button', { name: '+ New card' }).first().click();
+  await page.getByRole('tab', { name: /Viewer/ }).click();
+  const frame = page.frameLocator('iframe[title="Viewer: Viewer"]');
+
+  const png = Buffer.from(
+    await page.evaluate(() => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      c.getContext('2d')!.fillRect(0, 0, 64, 64);
+      return c.toDataURL('image/png').split(',')[1];
+    }),
+    'base64',
+  );
+  await frame.locator('#pick').click();
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: '📁 Card or picture file…' }).click();
+  await (await chooser).setFiles({ name: 'dot.png', mimeType: 'image/png', buffer: png });
+  await page.getByRole('button', { name: 'Done (1)' }).click();
+  // Its name only: the picture stays with UCCB.
+  await expect(frame.locator('#out')).toHaveText('image:dot.png:false');
+
+  await frame.locator('#show').click();
+  await expect(frame.locator('#out')).toHaveText('shown:true');
+  await expect(page.locator('[data-lightbox] img').first()).toHaveAttribute('src', /^data:image\//);
+});

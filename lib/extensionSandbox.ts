@@ -45,6 +45,7 @@ export const METHOD_PERMISSION: Record<string, Permission | null> = {
   'references.pick': 'llm',
   'references.list': 'llm',
   'references.remove': 'llm',
+  'references.show': 'llm',
   'storage.get': null,
   'storage.set': null,
   'ui.toast': null,
@@ -184,6 +185,7 @@ const BOOTSTRAP = `(() => {
       pick: () => call('references.pick'),
       list: () => call('references.list'),
       remove: (id) => call('references.remove', { id }),
+      show: (id) => call('references.show', { id }),
     }),
     storage: Object.freeze({
       get: (key) => call('storage.get', { key }),
