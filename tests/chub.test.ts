@@ -16,6 +16,15 @@ describe('Chub links', () => {
     expect(chubLink('https://notcardbox.moe/characters/a/b')).toBeNull();
   });
 
+  it("reads an anonymous upload's links as Chub files it", () => {
+    expect(chubCharacterId('https://cardbox.moe/characters/chub.ai/claire-5422981d56f7')).toBe('Anonymous/claire-5422981d56f7');
+    expect(chubCharacterId('https://cardbox.moe/chub.ai/claire-5422981d56f7')).toBe('Anonymous/claire-5422981d56f7');
+    expect(chubCharacterId('https://chub.ai/characters/Anonymous/claire-5422981d56f7')).toBe('Anonymous/claire-5422981d56f7');
+    expect(chubCharacterId('https://cardbox.moe/characters/chub.ai/7964114')).toBe('7964114');
+    expect(chubCharacterId('https://chub.ai/characters/7964114')).toBe('7964114');
+    expect(chubLink('https://cardbox.moe/characters/chub.ai/claire-5422981d56f7')).toEqual({ id: 'Anonymous/claire-5422981d56f7', source: 'Cardbox', apiBase: 'https://cardbox.moe/gateway' });
+  });
+
   it('turns down other links, lorebooks and odd paths', () => {
     expect(chubCharacterId('https://example.com/characters/someone/a-knight')).toBeNull();
     expect(chubCharacterId('https://notchub.ai/characters/someone/a-knight')).toBeNull();
@@ -57,6 +66,17 @@ describe('a Chub character as a card', () => {
     expect(data).toMatchObject({ name: 'Sir Test', description: 'The description.', personality: 'Brave.', creator_notes: 'Creator notes here.', first_mes: 'Hail!', alternate_greetings: ['Well met.'], tags: ['fantasy', 'knight'], creator: 'someone', character_book: { entries: [] } });
     expect(r.avatar?.type).toBe('image/png');
     expect(fetched[0]).toBe('https://api.chub.ai/api/characters/someone/a-knight?full=true');
+  });
+
+  it("fetches a character by its number, and takes its creator from Chub's reply", async () => {
+    const fetched: string[] = [];
+    vi.stubGlobal('fetch', async (url: string | URL) => {
+      fetched.push(String(url));
+      return Response.json({ node: { fullPath: 'Anonymous/claire-5422981d56f7', definition: { name: 'Claire' } } });
+    });
+    const r = await chubCharacter('7964114');
+    expect((r.card as { data: Record<string, unknown> }).data).toMatchObject({ name: 'Claire', creator: 'Anonymous' });
+    expect(fetched[0]).toBe('https://api.chub.ai/api/characters/7964114?full=true');
   });
 
   it('skips a picture that isn’t on Chub', async () => {

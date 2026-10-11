@@ -14,6 +14,10 @@ const CHUB_HOSTS = ['chub.ai', 'characterhub.org'];
 /** Sites that mirror Chub's character pages at Chub's paths, and where
  *  their copy of Chub's API is. */
 const CHUB_MIRRORS: Record<string, { name: string; apiBase: string }> = { 'cardbox.moe': { name: 'Cardbox', apiBase: 'https://cardbox.moe/gateway' } };
+/** What stands in a link for the creator of a card uploaded anonymously:
+ *  Chub files those under "Anonymous", and mirrors show the site there
+ *  (cardbox.moe/characters/chub.ai/name). */
+const ANONYMOUS = ['anonymous', ...CHUB_HOSTS];
 /** Where Chub keeps pictures; the only hosts a picture is fetched from. */
 const PICTURE_HOSTS = ['chub.ai', 'characterhub.org', 'charhub.io'];
 
@@ -68,8 +72,10 @@ export async function chubLinkCharacter(link: string): Promise<UrlCardImport | n
 /**
  * A Chub character's id ("creator/name") from a link (Chub's or a
  * mirror's) or a bare path, as SillyTavern reads them:
- * /characters/creator/name, or creator/name. Null for anything else
- * (lorebooks included, for now).
+ * /characters/creator/name, or creator/name. An anonymous upload's is
+ * "Anonymous/name", whatever its link puts in the creator's place; a
+ * character's number (/characters/7964114) is an id too. Null for
+ * anything else (lorebooks included, for now).
  */
 export function chubCharacterId(link: string): string | null {
   let path = link.trim();
@@ -83,7 +89,9 @@ export function chubCharacterId(link: string): string | null {
   const parts = path.split(/[?#]/)[0].split('/').filter(Boolean).map(decodeURIComponent);
   if (parts[0]?.toLowerCase() === 'characters') parts.shift();
   else if (parts[0]?.toLowerCase() === 'lorebooks') return null;
+  if (parts.length === 1 && /^\d+$/.test(parts[0])) return parts[0];
   if (parts.length !== 2 || parts.some((p) => !/^[\w.~-]+$/.test(p))) return null;
+  if (ANONYMOUS.includes(parts[0].toLowerCase())) return /^\d+$/.test(parts[1]) ? parts[1] : `Anonymous/${parts[1]}`;
   return parts.join('/');
 }
 
@@ -113,12 +121,11 @@ export interface ChubOptions {
   source?: string;
 }
 
-/** A Chub character as a card, by its id ("creator/name"). */
+/** A Chub character as a card, by its id ("creator/name", or its number). */
 export async function chubCharacter(id: string, opts: ChubOptions = {}): Promise<UrlCardImport> {
-  const [creator, name] = id.split('/');
   const source = opts.source ?? 'Chub';
   const base = (opts.apiBase ?? 'https://api.chub.ai').replace(/\/+$/, '');
-  const res = await fetch(`${base}/api/characters/${encodeURIComponent(creator)}/${encodeURIComponent(name)}?full=true`, {
+  const res = await fetch(`${base}/api/characters/${id.split('/').map(encodeURIComponent).join('/')}?full=true`, {
     headers: { Accept: 'application/json', 'User-Agent': 'UCCB' },
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
@@ -128,8 +135,10 @@ export async function chubCharacter(id: string, opts: ChubOptions = {}): Promise
     const why = (await res.text().catch(() => '')).trim().slice(0, 200);
     throw new Error(`${source} said ${res.status} for ${id}${why && !why.startsWith('<') ? `: ${why}` : '.'}`);
   }
-  const json = (await res.json()) as { node?: { definition?: ChubDefinition; topics?: string[]; max_res_url?: string; avatar_url?: string } };
+  const json = (await res.json()) as { node?: { fullPath?: string; definition?: ChubDefinition; topics?: string[]; max_res_url?: string; avatar_url?: string } };
   const node = json.node;
+  // Its path as Chub has it (a number doesn't say whose it is).
+  const [creator = '', name = ''] = (typeof node?.fullPath === 'string' && node.fullPath.includes('/') ? node.fullPath : id).split('/');
   const d = node?.definition;
   if (!d) throw new BadRequestError(`${source}'s reply for ${id} had no character in it.`);
   // Chub's names for the fields aren't the card's: its "personality" is the
