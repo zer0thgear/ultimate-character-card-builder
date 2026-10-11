@@ -121,6 +121,8 @@ export async function handleCall(host: CallHost, method: string, params: unknown
       const pictures = held.filter((r) => !!r.thumb);
       const i = pictures.findIndex((r) => r.id === p.id);
       if (i < 0) return false;
+      // Out of the extension's frame, so Esc and the arrow keys reach the viewer.
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       openLightbox(pictures.map((r) => r.thumb!), i);
       return true;
     }
