@@ -1,5 +1,4 @@
 'use client';
-/* eslint-disable @next/next/no-img-element -- thumbnails are data: and blob: URLs, which next/image can't optimise */
 
 import { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '@/store/projectStore';
@@ -15,7 +14,7 @@ import { AutoTextarea, Button, IconButton, Toggle, confirmDialog, cx, enterSends
 import { AssistReasoning } from '@/components/llm/AssistTrace';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
 import { copyText } from '@/lib/clipboard';
-import { ReferenceTray, referenceConnectionId, useReferences } from '@/components/llm/References';
+import { ReferenceTray, referenceConnectionId, useReferences, SentReferences } from '@/components/llm/References';
 import { attachReferences, hasPictures, type Reference } from '@/lib/references';
 import { usePackStore } from '@/store/packStore';
 import { SandboxFrame } from '@/components/extensions/SandboxFrame';
@@ -195,16 +194,7 @@ export function BrainstormPanel() {
             {messages.map((m, i) => (
               <div key={i} className={cx('group rounded-lg px-3 py-2 text-sm whitespace-pre-wrap', m.role === 'user' ? 'ml-8 bg-sky-500/10 text-slate-200' : 'mr-4 bg-slate-900 text-slate-300')}>
                 {m.role === 'assistant' && m.runId && <AssistReasoning runId={m.runId} className="mb-1.5 whitespace-normal" />}
-                {m.refs?.length ? (
-                  <div className="mb-1 flex flex-wrap gap-1 whitespace-normal">
-                    {m.refs.map((r) => (
-                      <span key={r.id} className="flex items-center gap-1 rounded bg-slate-900/60 px-1 py-0.5 text-[11px] text-slate-400">
-                        {r.thumb ? <img src={r.thumb} alt="" className="h-4 w-4 rounded object-cover" /> : r.kind === 'card' ? '🪪' : r.kind === 'text' ? '📄' : '🖼'}
-                        {r.name}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
+                {m.refs?.length ? <SentReferences refs={m.refs} className="mb-1" /> : null}
                 {m.content}
                 {m.role === 'assistant' && (
                   <div className="mt-1 flex justify-end gap-1 opacity-0 group-hover:opacity-100 touch:opacity-100">
