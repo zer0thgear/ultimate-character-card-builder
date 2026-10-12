@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasHtml, messageHtml, pageSrcdoc, splitHtmlPages } from '@/lib/chatHtml';
+import { hasHtml, messageHtml, pageSrcdoc, pinMinHeightVh, splitHtmlPages } from '@/lib/chatHtml';
 
 describe('HTML in chat messages', () => {
   it('tells HTML from the tags the plain formatter shows', () => {
@@ -46,5 +46,18 @@ describe('HTML in chat messages', () => {
   it('adds a height report to a page', () => {
     expect(pageSrcdoc('<html><body>x</body></html>')).toMatch(/x<script>[\s\S]*uccbHtml[\s\S]*<\/script><\/body><\/html>$/);
     expect(pageSrcdoc('<div>x</div>')).toMatch(/<div>x<\/div><script>[\s\S]*uccbHtml[\s\S]*<\/script>$/);
+  });
+
+  it("keeps a page from scrolling in its frame, and pins min-height vh to the window's", () => {
+    const page = pageSrcdoc('<html><head></head><body>x</body></html>', 700);
+    expect(page).toContain('--uccb-vh:700px');
+    expect(page).toMatch(/html,body\{margin:0!important;overflow:hidden!important/);
+    expect(pinMinHeightVh('<style>body{min-height:100vh;height:50vh}.a{min-height: 50vh}</style>')).toBe(
+      '<style>body{min-height:var(--uccb-vh);height:50vh}.a{min-height: calc(var(--uccb-vh) * 0.5)}</style>',
+    );
+    expect(pinMinHeightVh('<div style="min-height:100vh">')).toBe('<div style="min-height:var(--uccb-vh)">');
+    expect(pinMinHeightVh("el.style.minHeight = '100vh'; el.style.setProperty('min-height', '80vh')")).toBe(
+      "el.style.minHeight = 'var(--uccb-vh)'; el.style.setProperty('min-height', 'calc(var(--uccb-vh) * 0.8)')",
+    );
   });
 });

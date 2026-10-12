@@ -105,17 +105,40 @@ export function messageHtml(text: string): string {
   return render(formatChat(t));
 }
 
+/** `min-height: …vh` in a page's CSS (<style>, style="", and scripts setting
+ *  it), as the chat window's height instead, as Tavern Helper does: in a
+ *  frame that grows to fit its page, vh is the frame's own height, so a
+ *  page at least 100vh tall would always be taller than its frame. */
+export function pinMinHeightVh(html: string): string {
+  const pin = (value: string) =>
+    value.replace(/(\d+(?:\.\d+)?)vh\b/gi, (m, n: string) => {
+      const v = parseFloat(n);
+      return !isFinite(v) ? m : v === 100 ? 'var(--uccb-vh)' : `calc(var(--uccb-vh) * ${v / 100})`;
+    });
+  return html
+    .replace(/(min-height\s*:\s*)([^;{}"']*?\d+(?:\.\d+)?vh)(?=\s*[;}"'])/gi, (_m, p: string, v: string) => p + pin(v))
+    .replace(/(\.style\.minHeight\s*=\s*(["']))([^"'\n]*?)(\2)/gi, (_m, p: string, _q, v: string, s: string) => p + pin(v) + s)
+    .replace(/(setProperty\s*\(\s*(["'])min-height\2\s*,\s*(["']))([^"'\n]*?)(\3)/gi, (_m, p: string, _q1, _q2, v: string, s: string) => p + pin(v) + s);
+}
+
 /** A page's document with the chat bridge (lib/pageBridge.ts) before its
  *  own scripts, and a script at the end that reports its height to the
- *  chat, so its frame can fit it. */
-export function pageSrcdoc(html: string): string {
+ *  chat, so its frame can fit it. As in Tavern Helper, the page never
+ *  scrolls on its own (a frame that did would take the wheel from the
+ *  chat), and `viewportHeight` (the chat window's) stands in for 100vh in
+ *  min-heights. */
+export function pageSrcdoc(html: string, viewportHeight = 800): string {
+  const frameCss =
+    `<style>:root{--uccb-vh:${Math.round(viewportHeight)}px}*,*::before,*::after{box-sizing:border-box}` +
+    'html,body{margin:0!important;overflow:hidden!important;max-width:100%!important}</style>';
   const report =
-    '<script>(()=>{const h=()=>parent.postMessage({uccbHtml:1,height:Math.ceil(document.documentElement.getBoundingClientRect().height)},"*");' +
-    'new ResizeObserver(h).observe(document.documentElement);addEventListener("load",h);h();})()</script>';
-  const withReport = /<\/body\s*>/i.test(html) ? html.replace(/<\/body\s*>(?![\s\S]*<\/body\s*>)/i, `${report}</body>`) : html + report;
+    '<script>(()=>{let s=0;const m=()=>{s=0;const b=document.body;if(b&&b.scrollHeight>0)parent.postMessage({uccbHtml:1,height:b.scrollHeight},"*")};' +
+    'const h=()=>{if(!s){s=1;setTimeout(m,16)}};new ResizeObserver(h).observe(document.body);addEventListener("load",h);h();})()</script>';
+  const page = pinMinHeightVh(html);
+  const withReport = /<\/body\s*>/i.test(page) ? page.replace(/<\/body\s*>(?![\s\S]*<\/body\s*>)/i, `${report}</body>`) : page + report;
   // As early as can be without leaving standards mode (nothing before the
   // doctype).
   const start = withReport.match(/<head\b[^>]*>|<html\b[^>]*>|<!doctype[^>]*>/i);
   const at = start ? start.index! + start[0].length : 0;
-  return withReport.slice(0, at) + BRIDGE_SCRIPT + withReport.slice(at);
+  return withReport.slice(0, at) + BRIDGE_SCRIPT + frameCss + withReport.slice(at);
 }
