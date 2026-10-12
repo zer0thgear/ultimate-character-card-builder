@@ -5,7 +5,8 @@ import type { CardData } from '@/types/card';
 // words), to hide a stat block, restyle a reply or tidy what the model
 // sees. Each finds a pattern in some kinds of text (your messages, the
 // character's, lorebook entries) and replaces it, for display, for the
-// prompt, or both.
+// prompt, or both. A chat-completion preset can carry its own as well
+// (SillyTavern's preset regex); those run before the card's.
 //
 // SillyTavern writes a script with neither "only" switch into the message
 // itself as it arrives; UCCB leaves the message as it was written and runs
@@ -39,7 +40,19 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 
 /** The card's scripts, as SillyTavern stores them, with gaps filled. */
 export function cardRegexScripts(card: Pick<CardData, 'extensions'>): RegexScript[] {
-  const raw = (card.extensions as { regex_scripts?: unknown } | undefined)?.regex_scripts;
+  return parseRegexScripts((card.extensions as { regex_scripts?: unknown } | undefined)?.regex_scripts);
+}
+
+/** A chat-completion preset's own scripts (SillyTavern's preset-bound
+ *  regex, in the preset file's extensions.regex_scripts), which UCCB keeps
+ *  with the preset's other settings it doesn't read itself. */
+export function presetRegexScripts(preset: { extra?: Record<string, unknown> }): RegexScript[] {
+  const ext = preset.extra?.extensions;
+  return parseRegexScripts(isObject(ext) ? ext.regex_scripts : undefined);
+}
+
+/** A list of scripts as SillyTavern stores them, with gaps filled. */
+export function parseRegexScripts(raw: unknown): RegexScript[] {
   if (!Array.isArray(raw)) return [];
   return raw.filter(isObject).map((s) => ({
     id: typeof s.id === 'string' ? s.id : undefined,
@@ -82,7 +95,9 @@ export interface RegexRun {
 
 function applies(s: RegexScript, run: RegexRun): boolean {
   if (s.disabled || !s.findRegex || !s.placement.includes(run.placement)) return false;
-  if (run.target === 'display' ? s.promptOnly : s.markdownOnly) return false;
+  // One "only" switch keeps it to that side; with both on, SillyTavern
+  // runs it on both (and with neither, see the top of this file).
+  if (run.target === 'display' ? s.promptOnly && !s.markdownOnly : s.markdownOnly && !s.promptOnly) return false;
   if (typeof run.depth === 'number') {
     if (typeof s.minDepth === 'number' && s.minDepth >= -1 && run.depth < s.minDepth) return false;
     if (typeof s.maxDepth === 'number' && s.maxDepth >= 0 && run.depth > s.maxDepth) return false;

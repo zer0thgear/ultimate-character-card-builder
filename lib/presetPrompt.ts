@@ -3,6 +3,7 @@ import type { LlmMessage } from '@/types/llm';
 import type { ChatMessage } from '@/types/project';
 import type { ChatPreset, PresetPrompt } from '@/lib/stPreset';
 import { scanLorebook, describeEntry } from '@/lib/lorebookScan';
+import { presetRegexScripts } from '@/lib/regexScripts';
 import {
   authorsNoteParts,
   cardDepthInjections,
@@ -48,7 +49,7 @@ export function buildPresetPrompt(card: CardData, history: ChatMessage[], settin
   // Continuing with a prefill: the reply being continued isn't history.
   const prefillContinue = continuing && preset.continuePrefill;
   let chat = promptHistory(history, prefillContinue);
-  const { x, lx, rx, char, user, texts, setFields } = macroExpander(card, chat, settings, opts);
+  const { x, lx, rx, char, user, texts, setFields } = macroExpander(card, chat, settings, opts, settings.usePresetRegex === false ? [] : presetRegexScripts(preset));
 
   const lore = settings.useLorebook ? scanLorebook(card.character_book, texts, { defaults: loreDefaults(settings), random: opts.random, generatedAt: replyPoints(chat) }) : { active: [], dropped: [] };
   const loreText = (place: 'before' | 'after') =>

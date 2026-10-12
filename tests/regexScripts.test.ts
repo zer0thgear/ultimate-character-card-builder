@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { REGEX_PLACEMENT, cardRegexScripts, runRegexScript, runRegexScripts, type RegexScript } from '@/lib/regexScripts';
-import { buildChatPrompt, DEFAULT_CHAT_SETTINGS, newMessage, shownText } from '@/lib/chatPrompt';
+import { buildChatPrompt, chatRegexScripts, DEFAULT_CHAT_SETTINGS, newMessage, shownText } from '@/lib/chatPrompt';
+import { buildPresetPrompt } from '@/lib/presetPrompt';
+import { parseStPreset } from '@/lib/stPreset';
 import { newCard, newEntry, newLorebook } from '@/lib/cardSpec';
 
 const script = (over: Partial<RegexScript>): RegexScript => ({
@@ -48,6 +50,9 @@ describe('regex scripts', () => {
     expect(run({ ...s, minDepth: 1 }, 'prompt', 0)).toBe('secret');
     expect(run({ ...s, minDepth: 1 }, 'prompt', 1)).toBe('***');
     expect(run({ ...s, disabled: true }, 'display')).toBe('secret');
+    // Both "only" switches: SillyTavern runs it on both sides.
+    expect(run({ ...s, markdownOnly: true, promptOnly: true }, 'display')).toBe('***');
+    expect(run({ ...s, markdownOnly: true, promptOnly: true }, 'prompt')).toBe('***');
   });
 
   it('change what the chat shows and what the model is sent', () => {
@@ -62,8 +67,8 @@ describe('regex scripts', () => {
     };
     card.character_book = { ...newLorebook(), entries: [{ ...newEntry(), keys: ['sword'], content: 'Ann has a sword.' }] };
     const reply = 'Hello. [stats]HP 10[/stats]';
-    expect(shownText(card, reply, 'assistant', 0, DEFAULT_CHAT_SETTINGS).trim()).toBe('Hello.');
-    expect(shownText(card, reply, 'assistant', 0, { ...DEFAULT_CHAT_SETTINGS, useCardRegex: false })).toBe(reply);
+    expect(shownText(card, reply, 'assistant', 0, 'You', chatRegexScripts(card, null, DEFAULT_CHAT_SETTINGS)).trim()).toBe('Hello.');
+    expect(shownText(card, reply, 'assistant', 0, 'You', chatRegexScripts(card, null, { ...DEFAULT_CHAT_SETTINGS, useCardRegex: false }))).toBe(reply);
 
     const history = [newMessage('user', 'sword?'), newMessage('assistant', reply), newMessage('user', 'and the sword?'), newMessage('assistant', reply)];
     const sent = buildChatPrompt(card, history.slice(0, 3), DEFAULT_CHAT_SETTINGS).parts;
@@ -72,5 +77,31 @@ describe('regex scripts', () => {
     expect(sent.some((p) => p.content === 'Ann the brave has a sword.')).toBe(true);
     const last = buildChatPrompt(card, history.slice(0, 2), DEFAULT_CHAT_SETTINGS).parts;
     expect(last.find((p) => p.role === 'assistant')?.content).toBe(reply);
+  });
+
+  it("run a preset's own scripts, before the card's", () => {
+    const card = newCard().data;
+    card.name = 'Ann';
+    card.extensions = { regex_scripts: [{ scriptName: 'Card', findRegex: '/<b>/g', replaceString: 'card', placement: [2] }] };
+    const preset = parseStPreset({
+      prompts: [{ identifier: 'main', content: 'Write.' }],
+      extensions: {
+        regex_scripts: [
+          { scriptName: 'Old progress out', findRegex: '/<progress>[\\s\\S]*?<\\/progress>/g', replaceString: '', placement: [2], promptOnly: true, minDepth: 1 },
+          { scriptName: 'Tag', findRegex: '/<a>/g', replaceString: '<b>', placement: [2], markdownOnly: true },
+        ],
+      },
+    });
+    const scripts = chatRegexScripts(card, preset, DEFAULT_CHAT_SETTINGS);
+    expect(scripts.map((s) => s.scriptName)).toEqual(['Old progress out', 'Tag', 'Card']);
+    // The preset's runs first, so the card's sees what it made.
+    expect(shownText(card, '<a>', 'assistant', 0, 'You', scripts)).toBe('card');
+    expect(chatRegexScripts(card, preset, { ...DEFAULT_CHAT_SETTINGS, usePresetRegex: false }).map((s) => s.scriptName)).toEqual(['Card']);
+
+    const reply = 'Hi.<progress>day 1</progress>';
+    const history = [newMessage('user', 'hi'), newMessage('assistant', reply), newMessage('user', 'more')];
+    const sent = (settings = DEFAULT_CHAT_SETTINGS) => buildPresetPrompt(card, history, settings, preset).parts.find((p) => p.role === 'assistant')?.content;
+    expect(sent()).toBe('Hi.');
+    expect(sent({ ...DEFAULT_CHAT_SETTINGS, usePresetRegex: false })).toBe(reply);
   });
 });

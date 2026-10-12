@@ -80,7 +80,8 @@ export function youtubeId(url: string): string | null {
 
 /** [text](url), and bare web addresses (trailing punctuation left off). */
 const MD_LINK = /\[([^\]\n]+)\]\(\s*<?([^\s)>]+)>?(?:\s+["'][^"'\n]*["'])?\s*\)/y;
-const BARE_URL = /https?:\/\/[^\s<>"'`)\]]*[^\s<>"'`)\].,;:!?*_]/y;
+// ( and  mark where lib/chatHtml.ts took a tag out.)
+const BARE_URL = /https?:\/\/[^\s<>"'`)\]]*[^\s<>"'`)\].,;:!?*_]/y;
 /** <audio …>…</audio> or <video …>…</video> (or the opening tag alone):
  *  its src, or its first <source>'s. */
 const HTML_MEDIA = /<(audio|video)\b([^>]*)>(?:([\s\S]*?)<\/\1\s*>)?(?:\n)?/iy;
