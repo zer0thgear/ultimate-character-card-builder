@@ -4,7 +4,7 @@ import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useMem
 import { chatMatches, splitMatches } from '@/lib/chatSearch';
 import { useProjectStore } from '@/store/projectStore';
 import { useChatStore } from '@/store/chatStore';
-import { textTemplates, useLlmStore, writtenBy } from '@/store/llmStore';
+import { requestConnection, textTemplates, useLlmStore, writtenBy } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
@@ -14,7 +14,8 @@ import { buildTextPrompt } from '@/lib/textCompletion';
 import { CompareDialog, type KeptReply } from '@/components/dock/CompareReplies';
 import { presetParams, type ChatPreset } from '@/lib/stPreset';
 import type { RegexScript } from '@/lib/regexScripts';
-import type { LlmConnection, SamplerParams } from '@/types/llm';
+import type { LlmConnection, LlmMessage, SamplerParams } from '@/types/llm';
+import { expandMacros } from '@/lib/macros';
 import { describeEntry } from '@/lib/lorebookScan';
 import { AutoTextarea, Button, IconButton, Modal, NumberInput, TokenBadge, Toggle, choiceDialog, confirmDialog, textDialog, cx, downloadBlob, enterSends, inputClass, pickFiles } from '@/components/ui';
 import { ConnectionPicker } from '@/components/llm/ConnectionPicker';
@@ -42,7 +43,10 @@ import { uuid } from '@/lib/uuid';
 import { copyText } from '@/lib/clipboard';
 import { CODE_BLOCK_CLASS, CODE_CLASS, HEADING_CLASSES, formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
 import { ChatLink, ChatMedia, ChatRule } from '@/components/ChatMedia';
-import { HtmlPage, HtmlText } from '@/components/ChatHtml';
+import { HtmlPage, HtmlText, PageBridgeContext, runSlash, type PageBridge } from '@/components/ChatHtml';
+import { ScriptActionsHost, ScriptApprovals, ScriptButtons, logScriptRequest, useTavernScripts, type ScriptActions } from '@/components/dock/TavernScripts';
+import { rawPrompt } from '@/lib/tavernHelper';
+import { parseSlash } from '@/lib/pageBridge';
 import { hasHtml, messageHtml, splitHtmlPages, type HtmlSegment } from '@/lib/chatHtml';
 import { AuthorsNoteDialog } from '@/components/dock/AuthorsNote';
 import { summaryInjection, summarySettings } from '@/lib/chatSummary';
@@ -73,7 +77,22 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const pending = useBridgeStore((s) => s.chatGreeting);
   const clearPending = useBridgeStore((s) => s.clearChat);
   const { run, stop, running, text: streamText, reasoning: streamReasoning, error } = useLlmStream();
+  // Tavern Helper scripts (the preset's and the card's): their own
+  // generations run apart from the chat's.
+  const scriptStream = useLlmStream();
   const [input, setInput] = useState('');
+  const scriptActions = useRef<ScriptActions | null>(null);
+  const scriptPreset = chatSettings.presetId && !textTemplates(connection) ? (presets.find((p) => p.id === chatSettings.presetId) ?? null) : null;
+  const scripts = useTavernScripts({
+    card: project?.card.data ?? null,
+    chat,
+    preset: scriptPreset,
+    settings: chatSettings,
+    userName: resolvePersona(personas, chatSettings, chat).name,
+    model: connection?.model,
+    input,
+    actions: scriptActions,
+  });
   const [showSettings, setShowSettings] = useState(false);
   const [inspect, setInspect] = useState<BuiltPrompt | null>(null);
   const [lastPrompt, setLastPrompt] = useState<BuiltPrompt | null>(null);
@@ -240,7 +259,10 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
     const { connection: c, preset: p } = use;
     const over = overridesFor(c, p);
     const summary = summaryInjection(useChatStore.getState().chat?.summary, summarySettings(chatSettings.summary));
-    const full = { model: c?.model, kind: c?.kind, maxTokens: over.max_tokens ?? c?.params.max_tokens, maxContext: c?.params.max_context, summary, authorsNote: chat?.authorsNote, ...opts };
+    // {{getvar}} reads the chat's variables (and the global ones), which
+    // Tavern Helper scripts keep.
+    const vars = { ...chatSettings.thGlobalVars, ...useChatStore.getState().chat?.vars };
+    const full = { model: c?.model, kind: c?.kind, maxTokens: over.max_tokens ?? c?.params.max_tokens, maxContext: c?.params.max_context, summary, authorsNote: chat?.authorsNote, vars, ...opts };
     // A text-completion connection lays the prompt out in its instruct
     // template; a chat-completion preset's prompts don't apply to it.
     const text = textTemplates(c);
@@ -251,9 +273,13 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const summaryRequest = () => ({ build, connection, params: overrides });
 
   /** Streams a completion for `built`, calling `onText` with the reply so far. */
-  const complete = (built: BuiltPrompt, onText: (full: string) => void) => {
+  const complete = async (built: BuiltPrompt, onText: (full: string) => void) => {
     setLastPrompt(built);
-    const messages = built.prefill !== undefined ? [...built.messages, { role: 'assistant' as const, content: built.prefill }] : built.messages;
+    const prompt = built.prefill !== undefined ? [...built.messages, { role: 'assistant' as const, content: built.prefill }] : built.messages;
+    // Tavern Helper scripts put their prompts in and go over it last (only
+    // for chat completion, as in SillyTavern).
+    const messages = built.text === undefined ? await scripts.beforeSend(prompt, { lore: built.lore, request: { model: connection?.model ?? '', ...connection?.params, ...overrides } }) : prompt;
+    if (messages !== prompt) setLastPrompt({ ...built, messages: built.prefill !== undefined ? messages.slice(0, -1) : messages });
     return run(connection, messages, onText, { prefill: built.prefill !== undefined, params: overrides, text: built.text !== undefined ? { prompt: built.text, stop: built.stop ?? [] } : undefined });
   };
 
@@ -275,6 +301,11 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
     const id = target?.id ?? uuid();
     const base = continueFrom ?? '';
     let written = base;
+    // As Tavern Helper scripts hear it.
+    const kind = continueFrom !== undefined ? 'continue' : target ? 'swipe' : 'normal';
+    scripts.setGenerating(true);
+    scripts.emit('generation_started', kind, {}, false);
+    scripts.emit('GENERATION_AFTER_COMMANDS', kind, {}, false);
     setStreamingId(id);
     if (!target) setMessages((m) => [...m, { ...newMessage('assistant', '', connection?.model), id }]);
     else if (continueFrom === undefined)
@@ -305,6 +336,13 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
         // A reply that failed before writing anything is taken back out.
         .filter((x) => !(x.id === id && !target && !messageText(x).trim())),
     );
+    scripts.setGenerating(false);
+    const n = scripts.messageNumber(id);
+    if (n >= 0 && written.trim()) {
+      scripts.emit('message_received', n, kind);
+      scripts.emit('character_message_rendered', n, kind);
+      scripts.emit('generation_ended', n);
+    } else scripts.emit('generation_stopped');
     if (r.error) toast(r.error, 'error');
     // Every so many messages, the summary catches up.
     else void summarizer.summarizeIfDue(summaryRequest());
@@ -347,17 +385,93 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   /** ↶ Takes the last continue back off (it stays in the tree). */
   const undoLastContinue = (m: ChatMessage) => setTree(m.id, undoContinue(treeOf(m)));
 
-  const send = async () => {
+  /** Sends the message box (or `typed`, from a page in a message). */
+  const send = async (typed?: string) => {
     if (running || summarizing || !chat) return;
-    const text = input.trim();
+    const text = (typed ?? input).trim();
     const messages = text ? [...chat.messages, newMessage('user', text)] : chat.messages;
     if (text) {
       setMessages(() => messages);
       setInput('');
+      sentToScripts(messages.at(-1)!.id);
     }
     follow.current = true;
     chase.current = false;
     await reply(messages, undefined, undefined, !text);
+  };
+  /** Tells Tavern Helper scripts you sent a message. */
+  const sentToScripts = (id: string) => {
+    const n = scripts.messageNumber(id);
+    if (n < 0) return;
+    scripts.emit('message_sent', n);
+    scripts.emit('user_message_rendered', n);
+  };
+
+  /** What pages in messages can do here (lib/pageBridge.ts). */
+  const pageBridge: PageBridge = {
+    input,
+    setInput,
+    submit: (text) => void send(text),
+    addMessage: (text) => {
+      if (running || summarizing || !chat) return;
+      const m = newMessage('user', text);
+      setMessages((ms) => [...ms, m]);
+      sentToScripts(m.id);
+    },
+    trigger: async () => {
+      const messages = useChatStore.getState().chat?.messages;
+      if (running || summarizing || !messages) return;
+      follow.current = true;
+      chase.current = false;
+      await reply(messages, undefined, undefined, messages.at(-1)?.role !== 'user');
+    },
+    busy: running || summarizing,
+  };
+
+  /** What Tavern Helper scripts ask of the chat (components/dock/TavernScripts.tsx). */
+  const scriptActionsNow: ScriptActions = {
+    generate: async (config, raw, script) => {
+      const history = (useChatStore.getState().chat?.messages ?? []).filter((m) => !m.hidden);
+      const max = config.max_chat_history;
+      const kept = typeof max === 'number' && max >= 0 ? history.slice(history.length - max) : history;
+      const userInput = typeof config.user_input === 'string' ? config.user_input : '';
+      let messages: LlmMessage[];
+      let text: { prompt: string; stop: string[] } | undefined;
+      if (raw) {
+        const x = (t: string) => expandMacros(t ?? '', { char: card.nickname || card.name || 'Character', user: me.name || 'User' });
+        messages = rawPrompt(config.ordered_prompts, {
+          char_description: card.description,
+          char_personality: card.personality,
+          scenario: card.scenario,
+          persona_description: me.description,
+          dialogue_examples: card.mes_example,
+          history: kept.map((m) => ({ role: m.role, content: messageText(m) })),
+          userInput,
+        }).map((m) => ({ ...m, content: x(m.content) }));
+      } else {
+        const built = build(userInput ? [...kept, newMessage('user', userInput)] : kept, {});
+        messages = built.prefill !== undefined ? [...built.messages, { role: 'assistant', content: built.prefill }] : built.messages;
+        if (built.text !== undefined) text = { prompt: built.text, stop: built.stop ?? [] };
+      }
+      // Recent requests (Settings → Assistant) show what scripts asked for.
+      const done = logScriptRequest(script, { connection: connection?.name ?? '(none)', model: connection?.model ?? '', messages, params: { ...connection?.params, ...overrides }, preset: preset?.name });
+      const r = await scriptStream.run(connection, messages, undefined, { params: overrides, text });
+      done(r);
+      if (r.error) throw new Error(r.error);
+      return config.should_return_reasoning ? ({ content: r.text, reasoning: r.reasoning } as unknown as string) : r.text;
+    },
+    stop: () => scriptStream.stop(),
+    setInput,
+    submit: (text) => void send(text),
+    listModels: async () => {
+      if (!connection) throw new Error('Add an LLM connection in Settings first.');
+      return api.llmModels(requestConnection(connection));
+    },
+    slash: async (command) => {
+      const parsed = parseSlash(command);
+      if ('error' in parsed) throw new Error(parsed.error);
+      await runSlash(parsed.steps, pageBridge);
+    },
   };
 
   const regenerate = async () => {
@@ -627,6 +741,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
 
       <div className="relative min-h-0 flex-1">
         <SearchQuery.Provider value={search ?? ''}>
+        <PageBridgeContext.Provider value={pageBridge}>
         <div ref={scroller} onScroll={onScroll} className="relative h-full overflow-y-auto px-3 py-3">
           {!chat ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-slate-500">
@@ -669,6 +784,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     messageId={showIds ? i + 1 : undefined}
                     depth={chat.messages.length - 1 - i}
                     scripts={regexScripts}
+                    display={scripts.displayFor(m.id, messageText(m))}
                     showTime={showTimes}
                     userName={me.name}
                     persona={me.persona}
@@ -707,6 +823,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
             </div>
           )}
         </div>
+        </PageBridgeContext.Provider>
         </SearchQuery.Provider>
         {chat && !following && (
           <button
@@ -763,6 +880,10 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
               </button>
             </div>
           )}
+          {scripts.frames}
+          <ScriptActionsHost actionsRef={scriptActions} actions={scriptActionsNow} />
+          <ScriptApprovals pending={scripts.pending} presetName={scriptPreset?.name} cardName={card.name || 'This character'} />
+          <ScriptButtons buttons={scripts.buttons} onClick={scripts.clickButton} />
           <div className="flex items-start gap-1.5">
             <AutoTextarea
               data-chat-input
@@ -1233,6 +1354,7 @@ function Bubble({
   messageId,
   depth,
   scripts,
+  display,
   showTime,
   userName,
   persona,
@@ -1257,6 +1379,8 @@ function Bubble({
   depth: number;
   /** The regex scripts it's shown through (chatRegexScripts). */
   scripts: RegexScript[];
+  /** How a Tavern Helper script made it look (HTML), shown in place of its text. */
+  display?: string;
   /** Show when it (this version of it) was written. */
   showTime: boolean;
   userName: string;
@@ -1370,7 +1494,11 @@ function Bubble({
             </div>
           </div>
         ) : text ? (
-          <Formatted text={shownText(card, isUser ? displayText(card, text, userName) : text, m.role, depth, userName, scripts)} />
+          display !== undefined ? (
+            <HtmlText html={display} />
+          ) : (
+            <Formatted text={shownText(card, isUser ? displayText(card, text, userName) : text, m.role, depth, userName, scripts)} />
+          )
         ) : (
           <span className="animate-pulse text-sm text-slate-500">…</span>
         )}
@@ -1576,6 +1704,25 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
         <Toggle checked={s.usePresetRegex ?? true} onChange={(v) => setChatSettings({ usePresetRegex: v })} label={<span className="text-xs" title="Scripts a SillyTavern chat-completion preset carries (its preset regex), run before the card's while the preset builds the prompt">Run the preset&apos;s regex scripts</span>} />
         <Toggle checked={s.renderHtml ?? true} onChange={(v) => setChatSettings({ renderHtml: v })} label={<span className="text-xs" title="As SillyTavern shows it: styled boxes, folding sections and the like that regex scripts and cards put in messages. Scripts, event handlers and forms are taken out, and a message's styles only reach that message">Show HTML in messages</span>} />
         <Toggle checked={s.htmlPages ?? true} onChange={(v) => setChatSettings({ htmlPages: v })} label={<span className="text-xs" title="A code block holding a whole page (<html>, <body>), as Tavern Helper runs one: its scripts run, in a sandbox that can't reach UCCB, your keys or the rest of the chat. Off, it shows as code">Run HTML pages in messages</span>} />
+        <Toggle checked={s.runScripts ?? true} onChange={(v) => setChatSettings({ runScripts: v })} label={<span className="text-xs" title="Scripts written for SillyTavern's Tavern Helper extension that presets and cards carry. Each asks before it first runs (and again if it changes), and runs in a sandbox">Run Tavern Helper scripts 🧩</span>} />
+        {Object.keys(s.scriptApprovals ?? {}).length > 0 && (
+          <button type="button" className="self-start text-xs text-slate-400 underline hover:text-slate-200" onClick={() => setChatSettings({ scriptApprovals: {} })} title="Every script asks again before it runs">
+            Forget my answers about scripts ({Object.values(s.scriptApprovals ?? {}).filter((a) => a === 'run').length} allowed, {Object.values(s.scriptApprovals ?? {}).filter((a) => a === 'block').length} not)
+          </button>
+        )}
+        {Object.keys(s.thScriptStorage ?? {}).length > 0 && (
+          <button
+            type="button"
+            className="self-start text-xs text-slate-400 underline hover:text-slate-200"
+            onClick={async () => {
+              const ok = await confirmDialog({ title: "Clear scripts' saved data?", body: 'What Tavern Helper scripts keep in their storage (their settings, and anything you typed into their panels) goes, and running scripts start afresh.', confirmLabel: 'Clear', danger: true });
+              if (ok) setChatSettings({ thScriptStorage: {} });
+            }}
+            title="What scripts keep in their localStorage, as they would in SillyTavern's browser"
+          >
+            Clear scripts&apos; saved data ({Object.keys(s.thScriptStorage ?? {}).length})
+          </button>
+        )}
         <Toggle checked={s.showMessageIds} onChange={(v) => setChatSettings({ showMessageIds: v })} label={<span className="text-xs">Show message numbers (#0 is the greeting)</span>} />
         <Toggle checked={s.showTimestamps ?? true} onChange={(v) => setChatSettings({ showTimestamps: v })} label={<span className="text-xs" title="Each reply's versions have their own; the greeting shows when the chat began">Show when messages were sent</span>} />
         <span className="text-[11px] text-slate-500">Under the portraits:</span>

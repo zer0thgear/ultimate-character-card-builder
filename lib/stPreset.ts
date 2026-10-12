@@ -35,7 +35,14 @@ export interface PresetPrompt {
   forbidOverrides: boolean;
   /** ST's built-in prompts (main, nsfw, jailbreak, enhanceDefinitions). */
   systemPrompt: boolean;
+  /** The prompt's other fields, which UCCB doesn't use (its `extra`, which
+   *  presets' own scripts tag prompts with, and other extensions' fields),
+   *  kept so scripts can read them and exporting writes them back. */
+  rest?: Record<string, unknown>;
 }
+
+/** The prompt fields UCCB reads (so everything else goes in `rest`). */
+const PROMPT_KEYS = new Set(['identifier', 'name', 'role', 'content', 'marker', 'injection_position', 'injection_depth', 'injection_order', 'forbid_overrides', 'system_prompt', 'enabled']);
 
 export interface PresetOrderItem {
   identifier: string;
@@ -131,7 +138,9 @@ function parsePrompt(raw: unknown): PresetPrompt | null {
   if (!identifier) return null;
   const marker = raw.marker === true || (MARKERS as readonly string[]).includes(identifier);
   const role = raw.role === 'user' || raw.role === 'assistant' ? raw.role : 'system';
+  const rest = Object.fromEntries(Object.entries(raw).filter(([k]) => !PROMPT_KEYS.has(k)));
   return {
+    ...(Object.keys(rest).length ? { rest } : {}),
     identifier,
     name: str(raw.name) || DEFAULT_NAMES[identifier] || identifier,
     role,
@@ -281,6 +290,7 @@ export function toStPreset(p: ChatPreset): Record<string, unknown> {
     squash_system_messages: p.squashSystemMessages,
     names_behavior: p.namesBehavior,
     prompts: p.prompts.map((x) => ({
+      ...x.rest,
       identifier: x.identifier,
       name: x.name,
       role: x.role,

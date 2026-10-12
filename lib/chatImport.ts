@@ -111,6 +111,8 @@ function messageOf(l: Line, role: Role): ChatMessage {
     return { ms: finish - start, ...(tokens ? { tokens } : {}) };
   });
   const model = str(extra.model) || undefined;
+  const vars = Array.isArray(l.variables) ? l.variables : [];
+  const data = swipes.map((_, i) => (isObject(vars[i]) && Object.keys(vars[i]).length ? (vars[i] as Record<string, unknown>) : undefined));
   return {
     id: uuid(),
     role,
@@ -123,7 +125,15 @@ function messageOf(l: Line, role: Role): ChatMessage {
     ...(model && role === 'assistant' ? { model } : {}),
     // SillyTavern leaves its system messages out of the prompt.
     ...(l.is_system === true ? { hidden: true } : {}),
+    // Each version's variables (SillyTavern's message variables).
+    ...(data.some(Boolean) ? { data } : {}),
   };
+}
+
+/** The chat's variables, from its chat metadata. */
+function chatVars(meta: Line): Record<string, unknown> | undefined {
+  const m = isObject(meta.chat_metadata) ? meta.chat_metadata : {};
+  return isObject(m.variables) && Object.keys(m.variables).length ? m.variables : undefined;
 }
 
 /** SillyTavern's author's note from its chat metadata. */
@@ -185,6 +195,7 @@ export function parseChatFile(text: string, card: CardData, userName: string, fi
     ...(greetingEdits ? { greetingEdits } : {}),
     messages,
     ...(noteOf(meta) ? { authorsNote: noteOf(meta) } : {}),
+    ...(chatVars(meta) ? { vars: chatVars(meta) } : {}),
     createdAt: created,
     updatedAt: now,
   };

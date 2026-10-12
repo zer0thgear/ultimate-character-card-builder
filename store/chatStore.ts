@@ -79,6 +79,8 @@ interface ChatState {
   setMessages: (change: (m: ChatMessage[]) => ChatMessage[]) => void;
   /** The chat's summary (undefined clears it). */
   setSummary: (summary: ChatSessionSummary | undefined) => void;
+  /** The chat's variables (empty clears them). */
+  setVars: (vars: Record<string, unknown>) => void;
   /** Adds a picture to the chat, or replaces one with the same id. */
   putImage: (image: ChatImage) => void;
   removeImage: (id: string) => void;
@@ -174,6 +176,12 @@ export const useChatStore = create<ChatState>((set, get) => {
       updateChat((c) => {
         const chat: ChatSession = { ...c, authorsNote: note };
         if (!note) delete chat.authorsNote;
+        return chat;
+      }),
+    setVars: (vars) =>
+      updateChat((c) => {
+        const chat: ChatSession = { ...c, vars };
+        if (!Object.keys(vars).length) delete chat.vars;
         return chat;
       }),
     setMessages: (change) =>

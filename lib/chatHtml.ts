@@ -1,4 +1,5 @@
 import { formatChat, type FormatNode } from '@/lib/chatFormat';
+import { BRIDGE_SCRIPT } from '@/lib/pageBridge';
 
 // HTML in chat messages, as SillyTavern shows it: presets and cards style
 // replies with regex scripts that put out <div>s, <details> and <style>
@@ -104,11 +105,17 @@ export function messageHtml(text: string): string {
   return render(formatChat(t));
 }
 
-/** A page's document with a script that reports its height to the chat,
- *  so its frame can fit it. */
+/** A page's document with the chat bridge (lib/pageBridge.ts) before its
+ *  own scripts, and a script at the end that reports its height to the
+ *  chat, so its frame can fit it. */
 export function pageSrcdoc(html: string): string {
   const report =
     '<script>(()=>{const h=()=>parent.postMessage({uccbHtml:1,height:Math.ceil(document.documentElement.getBoundingClientRect().height)},"*");' +
     'new ResizeObserver(h).observe(document.documentElement);addEventListener("load",h);h();})()</script>';
-  return /<\/body\s*>/i.test(html) ? html.replace(/<\/body\s*>(?![\s\S]*<\/body\s*>)/i, `${report}</body>`) : html + report;
+  const withReport = /<\/body\s*>/i.test(html) ? html.replace(/<\/body\s*>(?![\s\S]*<\/body\s*>)/i, `${report}</body>`) : html + report;
+  // As early as can be without leaving standards mode (nothing before the
+  // doctype).
+  const start = withReport.match(/<head\b[^>]*>|<html\b[^>]*>|<!doctype[^>]*>/i);
+  const at = start ? start.index! + start[0].length : 0;
+  return withReport.slice(0, at) + BRIDGE_SCRIPT + withReport.slice(at);
 }

@@ -128,6 +128,9 @@ export interface ChatMessage {
   /** Left out of the prompt (and the lorebook's scan), but kept in the
    *  chat: SillyTavern's hidden messages (is_system). */
   hidden?: boolean;
+  /** Per swipe, its variables (SillyTavern's message variables, which
+   *  Tavern Helper scripts read and write as a message's `data`). */
+  data?: (Record<string, unknown> | undefined)[];
 }
 
 /** How long a reply took to write: SillyTavern's message timer, with the
@@ -195,6 +198,9 @@ export interface ChatSession {
   authorsNote?: AuthorsNote;
   /** The story so far, summed up (see lib/chatSummary.ts). */
   summary?: ChatSessionSummary;
+  /** The chat's variables (SillyTavern's chat variables): what Tavern
+   *  Helper scripts keep for this chat, and what {{getvar}} reads. */
+  vars?: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
 }

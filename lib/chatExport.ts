@@ -57,7 +57,8 @@ export function chatToStJsonl(chat: ChatSession, card: CardData, userName: strin
       user_name: names.user,
       character_name: names.char,
       create_date: stCreateDate(created),
-      chat_metadata: stNoteMetadata(chat),
+      // The chat's variables (Tavern Helper's and {{getvar}}'s), where SillyTavern keeps them.
+      chat_metadata: { ...stNoteMetadata(chat), ...(chat.vars && Object.keys(chat.vars).length ? { variables: chat.vars } : {}) },
     },
   ];
 
@@ -103,6 +104,8 @@ export function chatToStJsonl(chat: ChatSession, card: CardData, userName: strin
       mes: swipes[m.swipe] ?? '',
       ...timer(m.swipe),
       extra: extra(m.swipe),
+      // Each version's variables (SillyTavern's message variables).
+      ...(m.data?.some(Boolean) ? { variables: m.swipes.map((_, i) => m.data?.[i] ?? {}) } : {}),
       // SillyTavern keeps swipes on the character's messages only.
       ...(!isUser && swipes.length > 1
         ? { swipe_id: m.swipe, swipes, swipe_info: swipes.map((_, i) => ({ send_date: dateOf(i), ...timer(i), extra: extra(i) })) }
