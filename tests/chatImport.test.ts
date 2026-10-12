@@ -41,6 +41,16 @@ describe('parseChatFile', () => {
     expect(back.name).toBe('Ann - 2026 (imported)');
   });
 
+  it("keeps the chat's and each version's variables, where SillyTavern does", () => {
+    const reply = { ...newMessage('assistant', 'one'), swipes: ['one', 'two'], swipe: 1, data: [undefined, { hp: 3 }] };
+    const chat: ChatSession = { id: 'c', name: 'C', greeting: 0, messages: [reply], vars: { day: 2, flags: { met: true } }, createdAt: 0, updatedAt: 0 };
+    const text = chatToStJsonl(chat, card(), 'Bo');
+    expect(JSON.parse(text.split('\n')[0]).chat_metadata.variables).toEqual({ day: 2, flags: { met: true } });
+    const back = parseChatFile(text, card(), 'Bo');
+    expect(back.vars).toEqual({ day: 2, flags: { met: true } });
+    expect(back.messages[0].data).toEqual([undefined, { hp: 3 }]);
+  });
+
   it("keeps how long each version took, as SillyTavern's message timer", () => {
     const reply = { ...newMessage('assistant', 'one'), swipes: ['one', 'two', 'three'], swipe: 2, gen: [{ ms: 4200, ttft: 900, tokens: 120 }, undefined, { ms: 1500, tokens: 30 }] };
     const chat: ChatSession = { id: 'c', name: 'C', greeting: 0, messages: [reply], createdAt: 0, updatedAt: 0 };

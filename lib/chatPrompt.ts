@@ -90,6 +90,15 @@ export interface ChatPromptSettings {
   /** Run whole HTML pages in messages (a code block holding one, as Tavern
    *  Helper shows them), each in a sandboxed frame. */
   htmlPages?: boolean;
+  /** Run the Tavern Helper scripts presets and cards carry (each once
+   *  you've said it may: see scriptApprovals). */
+  runScripts?: boolean;
+  /** Your answer for each Tavern Helper script, by scriptKey (a changed
+   *  script asks again). */
+  scriptApprovals?: Record<string, 'run' | 'block'>;
+  /** Tavern Helper's global variables, and each script's own (by script id). */
+  thGlobalVars?: Record<string, unknown>;
+  thScriptVars?: Record<string, Record<string, unknown>>;
 }
 
 /** Where each of the chat's replies was written (its index: the history
@@ -186,6 +195,9 @@ export interface BuildOptions {
   /** The context size to fit the history into (the connection's; a
    *  preset's own wins). */
   maxContext?: number;
+  /** Variables {{getvar}} starts from: the chat's and the global ones, as
+   *  SillyTavern keeps them (a {{setvar}} only lasts for the build). */
+  vars?: Record<string, unknown>;
   now?: Date;
   random?: () => number;
 }
@@ -274,7 +286,7 @@ export function macroExpander(card: CardData, history: ChatMessage[], settings: 
     char,
     user,
     model: opts.model,
-    vars: new Map(),
+    vars: new Map(Object.entries(opts.vars ?? {}).map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)])),
     now: opts.now,
     random: opts.random,
     chat: { last: texts[texts.length - 1] ?? '', lastUser: lastOf('user'), lastChar: lastOf('assistant') },

@@ -183,6 +183,23 @@ Search: comma-separated terms, all required; `-term` excludes; `a | b` is either
 
 Text-completion (instruct/context) presets aren't supported yet.
 
+### Tavern Helper scripts 🧩
+
+Presets and cards made for SillyTavern sometimes carry scripts for its **Tavern Helper** (JS-Slash-Runner) extension. The test chat runs the chat preset's (while it builds the prompt) and the card's, each in a sandbox of its own, once you've said it may: a bar above the message box names scripts waiting for an answer, and **Review…** shows each one's description and code, with **Run it** or **Don't run**. A script that changes asks again. Chat settings → **Run Tavern Helper scripts** turns them all off, and **Forget my answers about scripts** makes each ask again.
+
+A script you allow can do what Tavern Helper's API lets it, and no more: it never sees your keys or the rest of UCCB.
+
+- **The chat**: read its messages (the greeting is message 0, as the chat numbers them), change, add and delete them, hide them, and keep variables on each version of a message.
+- **Variables**: the chat's own (kept with the chat, and read by `{{getvar}}` in prompts), global ones, the script's own, the preset's and the card's. SillyTavern's chat files carry the chat's and the messages' variables, so they come along on import and export.
+- **Events**: you sending a message, a reply starting and arriving, edits, deletions, swipes, switching chats, and the prompt just before it's sent, which scripts can change (only for chat completion, as in SillyTavern). The 🔍 inspector still shows the prompt as UCCB built it.
+- **Generating**: `generate` and `generateRaw` ask the chat's connection for a reply of their own, which isn't added to the chat; each shows in Settings → Assistant → Recent requests, marked 🧩.
+- **Prompts**: `injectPrompts` adds prompts in the chat at a depth, to every reply or the next one.
+- **The preset in use and regex scripts**: read and replace the preset (its prompts, order, samplers and extensions) and the preset's and card's regex scripts.
+- **Buttons**: a script's buttons show above the message box.
+- And `triggerSlash` (`/setinput`, `/send`, `/trigger`, `/echo`), toasts, `substitudeMacros` (names, `{{getvar}}`) and lodash and jQuery, as Tavern Helper has them.
+
+What isn't there: SillyTavern itself (scripts that build their own panels into SillyTavern's page, such as the Izumi preset's floating window, run but show nothing), lorebooks, presets other than the one in use, other slash commands, and globals shared between scripts. Pages in messages (see the chat's HTML) don't get this API; they can fill in and send the message box.
+
 ## Chat mode
 
 The **🛠 Builder | 💬 Chat** switch in the header (at the top of the ☰ drawer on a phone) turns UCCB into a chat frontend, with the building tools out of the way. Each mode reopens the card it had open last.

@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef,
 import DOMPurify from 'dompurify';
 import { cx } from '@/components/ui';
 import { pageSrcdoc } from '@/lib/chatHtml';
-import { parseSlash } from '@/lib/pageBridge';
+import { parseSlash, type SlashStep } from '@/lib/pageBridge';
 import { toast } from '@/store/uiStore';
 
 // HTML in chat messages (lib/chatHtml.ts). A message's HTML is sanitized as
@@ -79,6 +79,16 @@ export interface PageBridge {
 
 export const PageBridgeContext = createContext<PageBridge | null>(null);
 
+/** Runs slash-command steps (parseSlash) in the chat. */
+export async function runSlash(steps: SlashStep[], b: PageBridge): Promise<void> {
+  for (const s of steps) {
+    if (s.op === 'setinput') b.setInput(s.text);
+    else if (s.op === 'send') b.addMessage(s.text);
+    else if (s.op === 'echo') toast(s.text.slice(0, 300));
+    else await b.trigger();
+  }
+}
+
 /** A message to a page's frame. */
 const postTo = (frame: HTMLIFrameElement | null, msg: Record<string, unknown>) => frame?.contentWindow?.postMessage({ uccbHtml: 1, ...msg }, '*');
 
@@ -137,12 +147,7 @@ export function HtmlPage({ html }: { html: string }) {
         const sends = parsed.steps.some((s) => s.op === 'send' || s.op === 'trigger');
         if (sends && !canSend()) return reply(b.busy ? 'A reply is being written.' : 'Too soon after the last one.');
         try {
-          for (const s of parsed.steps) {
-            if (s.op === 'setinput') b.setInput(s.text);
-            else if (s.op === 'send') b.addMessage(s.text);
-            else if (s.op === 'echo') toast(s.text.slice(0, 300));
-            else await bridgeRef.current?.trigger();
-          }
+          await runSlash(parsed.steps, b);
           reply();
         } catch (err) {
           reply((err as Error).message);
