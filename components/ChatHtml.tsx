@@ -100,7 +100,7 @@ const SEND_GAP_MS = 1500;
 export function HtmlPage({ html }: { html: string }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(120);
-  const srcdoc = useMemo(() => pageSrcdoc(html), [html]);
+  const srcdoc = useMemo(() => pageSrcdoc(html, typeof window === 'undefined' ? undefined : window.innerHeight), [html]);
   const bridge = useContext(PageBridgeContext);
   const bridgeRef = useRef(bridge);
   useEffect(() => {

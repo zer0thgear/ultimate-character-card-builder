@@ -22,6 +22,7 @@ describe('page bridge', () => {
     const page = pageSrcdoc('<!DOCTYPE html>\n<html><head><title>x</title></head><body>x</body></html>');
     expect(page.startsWith(`<!DOCTYPE html>${BRIDGE_SCRIPT}`)).toBe(true);
     expect(pageSrcdoc('<html><body>x</body></html>').startsWith(`<html>${BRIDGE_SCRIPT}`)).toBe(true);
-    expect(pageSrcdoc('<div>x</div>').startsWith(`${BRIDGE_SCRIPT}<div>`)).toBe(true);
+    const fragment = pageSrcdoc('<div>x</div>');
+    expect(fragment.startsWith(`${BRIDGE_SCRIPT}<style>`) && /<\/style><div>x/.test(fragment)).toBe(true);
   });
 });
