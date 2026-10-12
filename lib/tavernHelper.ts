@@ -1,4 +1,5 @@
 import type { ChatMessage } from '@/types/project';
+import type { Lorebook, LorebookEntry } from '@/types/card';
 import { parseStPreset, toStPreset, type ChatPreset } from '@/lib/stPreset';
 import { REGEX_PLACEMENT, parseRegexScripts } from '@/lib/regexScripts';
 
@@ -30,6 +31,7 @@ export interface TavernScript {
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
+const record = (v: unknown): Record<string, unknown> => (isObject(v) ? v : {});
 
 /** The switched-on scripts in a Tavern Helper script list: its current form
  *  (scripts and folders of them, `type` and `enabled`) and its older one
@@ -383,4 +385,199 @@ export function withInjections<T extends { role: string; content: unknown }>(mes
   const list = injections.filter((i) => i.position === 'in_chat' && i.content.trim()).sort((a, b) => b.depth - a.depth);
   for (const i of list) out.splice(Math.max(0, out.length - Math.max(0, i.depth)), 0, make(i));
   return out;
+}
+
+// ─── Lorebooks ──────────────────────────────────────────────────────────────
+//
+// UCCB keeps SillyTavern's settings for a lorebook entry in its extensions
+// (position, depth, role, selectiveLogic, probability…), as SillyTavern
+// writes them in a card. Tavern Helper's WorldbookEntry, and SillyTavern's
+// own flattened entry (its events and /api/worldinfo), are both read off
+// those.
+
+/** SillyTavern's position numbers, in Tavern Helper's words. */
+const WI_POSITIONS = ['before_character_definition', 'after_character_definition', 'before_author_note', 'after_author_note', 'at_depth', 'before_example_messages', 'after_example_messages', 'outlet'] as const;
+/** SillyTavern's selectiveLogic numbers. */
+const WI_LOGIC = ['and_any', 'not_all', 'not_any', 'and_all'] as const;
+const WI_ROLES = ['system', 'user', 'assistant'] as const;
+
+const numOr = <T>(v: unknown, fallback: T) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+const keysOf = (v: unknown) => (Array.isArray(v) ? v.map((k) => (k instanceof RegExp ? String(k) : String(k))).filter((k) => k.trim()) : []);
+
+/** An entry's uid: its id when that's a number, else its place. */
+export const entryUid = (e: LorebookEntry, i: number) => (typeof e.id === 'number' ? e.id : i);
+
+/** An entry as Tavern Helper's WorldbookEntry. */
+export function thWorldEntry(e: LorebookEntry, i: number): Record<string, unknown> {
+  const x = record(e.extensions);
+  const pos = typeof x.position === 'number' ? x.position : e.position === 'after_char' ? 1 : 0;
+  const delayUntil = x.delay_until_recursion;
+  const effect = (v: unknown) => (typeof v === 'number' && v > 0 ? v : null);
+  return {
+    uid: entryUid(e, i),
+    name: e.name || e.comment || '',
+    enabled: e.enabled !== false,
+    strategy: {
+      type: e.constant ? 'constant' : x.vectorized === true ? 'vectorized' : 'selective',
+      keys: [...e.keys],
+      keys_secondary: { logic: WI_LOGIC[numOr(x.selectiveLogic, 0)] ?? 'and_any', keys: [...(e.secondary_keys ?? [])] },
+      scan_depth: typeof x.scan_depth === 'number' ? x.scan_depth : 'same_as_global',
+    },
+    position: { type: WI_POSITIONS[pos] ?? 'before_character_definition', role: WI_ROLES[numOr(x.role, 0)] ?? 'system', depth: numOr(x.depth, 4), order: e.insertion_order ?? 100 },
+    content: e.content,
+    probability: x.useProbability === false ? 100 : numOr(x.probability, 100),
+    recursion: { prevent_incoming: x.exclude_recursion === true, prevent_outgoing: x.prevent_recursion === true, delay_until: delayUntil === true ? 1 : typeof delayUntil === 'number' && delayUntil > 0 ? delayUntil : null },
+    effect: { sticky: effect(x.sticky), cooldown: effect(x.cooldown), delay: effect(x.delay) },
+    extra: structuredClone(record(x.tavern_helper_extra)),
+  };
+}
+
+/** Deep-merges `patch` over `base` (lists are replaced, not merged). */
+function mergeDeep(base: Record<string, unknown>, patch: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...base };
+  for (const [k, v] of Object.entries(patch)) out[k] = isObject(v) && isObject(out[k]) ? mergeDeep(out[k] as Record<string, unknown>, v) : v;
+  return out;
+}
+
+/** A WorldbookEntry (or part of one) back as UCCB's entry, over the entry
+ *  it changes (or a new one). */
+export function fromThWorldEntry(raw: Record<string, unknown>, was: LorebookEntry | undefined, uid: number): LorebookEntry {
+  const base = was ?? { ...newEntryShape(), id: uid };
+  const th = mergeDeep(thWorldEntry(base, uid), raw);
+  const strategy = record(th.strategy);
+  const second = record(strategy.keys_secondary);
+  const position = record(th.position);
+  const recursion = record(th.recursion);
+  const effect = record(th.effect);
+  const pos = Math.max(0, WI_POSITIONS.indexOf(position.type as (typeof WI_POSITIONS)[number]));
+  const secondary = keysOf(second.keys);
+  const name = str(th.name);
+  const probability = numOr(th.probability, 100);
+  const delayUntil = recursion.delay_until;
+  return {
+    ...base,
+    id: typeof base.id === 'number' ? base.id : uid,
+    name,
+    comment: name,
+    enabled: th.enabled !== false,
+    keys: keysOf(strategy.keys),
+    secondary_keys: secondary,
+    selective: secondary.length > 0,
+    constant: strategy.type === 'constant',
+    content: str(th.content),
+    insertion_order: numOr(position.order, base.insertion_order ?? 100),
+    position: pos === 1 ? 'after_char' : 'before_char',
+    extensions: {
+      ...record(base.extensions),
+      position: pos,
+      depth: numOr(position.depth, 4),
+      role: Math.max(0, WI_ROLES.indexOf(position.role as (typeof WI_ROLES)[number])),
+      selectiveLogic: Math.max(0, WI_LOGIC.indexOf(second.logic as (typeof WI_LOGIC)[number])),
+      probability,
+      useProbability: probability < 100,
+      scan_depth: typeof strategy.scan_depth === 'number' ? strategy.scan_depth : null,
+      vectorized: strategy.type === 'vectorized',
+      exclude_recursion: recursion.prevent_incoming === true,
+      prevent_recursion: recursion.prevent_outgoing === true,
+      delay_until_recursion: typeof delayUntil === 'number' && delayUntil > 0 ? delayUntil : false,
+      sticky: numOr(effect.sticky, 0),
+      cooldown: numOr(effect.cooldown, 0),
+      delay: numOr(effect.delay, 0),
+      ...(isObject(th.extra) && Object.keys(th.extra).length ? { tavern_helper_extra: th.extra } : {}),
+    },
+  };
+}
+
+/** The fields a new entry starts with (cardSpec's newEntry, without its id). */
+function newEntryShape(): LorebookEntry {
+  return { keys: [], content: '', extensions: {}, enabled: true, insertion_order: 100, use_regex: false, constant: false, selective: false, secondary_keys: [], case_sensitive: false, name: '', comment: '', position: 'before_char' };
+}
+
+/** A lorebook's entries as Tavern Helper's worldbook. */
+export const thWorldbook = (book: Lorebook) => book.entries.map(thWorldEntry);
+
+/** A worldbook written back by a script (replaceWorldbook): its entries
+ *  over the book's, matched by uid (a new uid makes a new entry). */
+export function fromThWorldbook(list: unknown, book: Lorebook): Lorebook {
+  if (!Array.isArray(list)) throw new Error('A worldbook needs to be a list of entries.');
+  const old = new Map(book.entries.map((e, i) => [entryUid(e, i), e]));
+  let next = Math.max(-1, ...book.entries.map(entryUid)) + 1;
+  const entries = list.filter(isObject).map((raw) => {
+    const uid = typeof raw.uid === 'number' && Number.isFinite(raw.uid) ? raw.uid : next++;
+    return fromThWorldEntry(raw, old.get(uid), uid);
+  });
+  return { ...book, entries };
+}
+
+/** An entry as SillyTavern's own (flattened) world-info entry, as its
+ *  events and /api/worldinfo carry them. */
+export function stWorldEntry(e: LorebookEntry, i: number, world: string): Record<string, unknown> {
+  const th = thWorldEntry(e, i);
+  const strategy = record(th.strategy);
+  const position = record(th.position);
+  const recursion = record(th.recursion);
+  const effect = record(th.effect);
+  const x = record(e.extensions);
+  return {
+    uid: th.uid,
+    key: strategy.keys,
+    keysecondary: record(strategy.keys_secondary).keys,
+    comment: th.name,
+    content: th.content,
+    constant: strategy.type === 'constant',
+    vectorized: strategy.type === 'vectorized',
+    selective: true,
+    selectiveLogic: WI_LOGIC.indexOf(record(strategy.keys_secondary).logic as (typeof WI_LOGIC)[number]),
+    addMemo: true,
+    order: position.order,
+    position: WI_POSITIONS.indexOf(position.type as (typeof WI_POSITIONS)[number]),
+    disable: th.enabled === false,
+    excludeRecursion: recursion.prevent_incoming,
+    preventRecursion: recursion.prevent_outgoing,
+    delayUntilRecursion: recursion.delay_until ?? false,
+    probability: th.probability,
+    useProbability: x.useProbability === true,
+    depth: position.depth,
+    role: WI_ROLES.indexOf(position.role as (typeof WI_ROLES)[number]),
+    group: typeof x.group === 'string' ? x.group : '',
+    groupOverride: x.group_override === true,
+    groupWeight: numOr(x.group_weight, 100),
+    scanDepth: strategy.scan_depth === 'same_as_global' ? null : strategy.scan_depth,
+    caseSensitive: typeof x.case_sensitive === 'boolean' ? x.case_sensitive : null,
+    matchWholeWords: typeof x.match_whole_words === 'boolean' ? x.match_whole_words : null,
+    useGroupScoring: typeof x.use_group_scoring === 'boolean' ? x.use_group_scoring : null,
+    automationId: typeof x.automation_id === 'string' ? x.automation_id : '',
+    sticky: effect.sticky ?? 0,
+    cooldown: effect.cooldown ?? 0,
+    delay: effect.delay ?? 0,
+    displayIndex: numOr(x.display_index, i),
+    world,
+  };
+}
+
+/** SillyTavern's world file for a lorebook (/api/worldinfo/get). */
+export const stWorldFile = (book: Lorebook, world: string) => ({ entries: Object.fromEntries(book.entries.map((e, i) => [String(entryUid(e, i)), stWorldEntry(e, i, world)])) });
+
+/** A SillyTavern world file written back (/api/worldinfo/edit) over a lorebook. */
+export function fromStWorldFile(file: unknown, book: Lorebook): Lorebook {
+  const entries = record(record(file).entries);
+  const list = Object.values(entries)
+    .filter(isObject)
+    .map((s) => ({
+      uid: numOr(s.uid, undefined),
+      name: str(s.comment),
+      enabled: s.disable !== true,
+      strategy: {
+        type: s.constant === true ? 'constant' : s.vectorized === true ? 'vectorized' : 'selective',
+        keys: keysOf(s.key),
+        keys_secondary: { logic: WI_LOGIC[numOr(s.selectiveLogic, 0)] ?? 'and_any', keys: keysOf(s.keysecondary) },
+        scan_depth: typeof s.scanDepth === 'number' ? s.scanDepth : 'same_as_global',
+      },
+      position: { type: WI_POSITIONS[numOr(s.position, 0)] ?? 'before_character_definition', role: WI_ROLES[numOr(s.role, 0)] ?? 'system', depth: numOr(s.depth, 4), order: numOr(s.order, 100) },
+      content: str(s.content),
+      probability: s.useProbability === false ? 100 : numOr(s.probability, 100),
+      recursion: { prevent_incoming: s.excludeRecursion === true, prevent_outgoing: s.preventRecursion === true, delay_until: typeof s.delayUntilRecursion === 'number' ? s.delayUntilRecursion : s.delayUntilRecursion === true ? 1 : null },
+      effect: { sticky: numOr(s.sticky, null), cooldown: numOr(s.cooldown, null), delay: numOr(s.delay, null) },
+    }));
+  return fromThWorldbook(list, book);
 }

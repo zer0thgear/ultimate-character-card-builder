@@ -2,13 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import type { CardData } from '@/types/card';
-import type { ChatMessage, ChatSession } from '@/types/project';
+import type { CardData, Lorebook } from '@/types/card';
+import type { BankLorebook, ChatMessage, ChatSession } from '@/types/project';
 import { parseStPreset, toStPreset, type ChatPreset } from '@/lib/stPreset';
 import { chatGreeting, newMessage, type ChatPromptSettings } from '@/lib/chatPrompt';
 import {
   cardScripts,
+  fromStWorldFile,
   fromThPreset,
+  fromThWorldbook,
+  stWorldEntry,
+  stWorldFile,
+  thWorldbook,
   fromThRegexes,
   presetScripts,
   scriptKey,
@@ -23,11 +28,16 @@ import {
 } from '@/lib/tavernHelper';
 import { useChatStore } from '@/store/chatStore';
 import { useLlmStore } from '@/store/llmStore';
+import { useLorebookStore } from '@/store/lorebookStore';
+import { newLorebook } from '@/lib/cardSpec';
+import { chatToStJsonl } from '@/lib/chatExport';
+import { entryBook } from '@/lib/lorebookBank';
+import type { ScanResult } from '@/lib/lorebookScan';
 import { useProjectStore } from '@/store/projectStore';
 import { toast } from '@/store/uiStore';
 import { useAssistLog, type AssistRun } from '@/store/assistLog';
 import { uuid } from '@/lib/uuid';
-import { Button, Modal } from '@/components/ui';
+import { Button, Modal, confirmDialog } from '@/components/ui';
 
 // Tavern Helper (JS-Slash-Runner) scripts in the chat: the ones the chat
 // preset and the card carry, each in a hidden sandboxed frame running
@@ -47,6 +57,8 @@ export interface ScriptActions {
   /** The message box (SillyTavern's #send_textarea), and its send button. */
   setInput: (text: string) => void;
   submit: (text: string) => void;
+  /** The chat connection's models (SillyTavern's model list). */
+  listModels: () => Promise<string[]>;
 }
 
 interface Running {
@@ -68,6 +80,72 @@ const withThVars = (ext: unknown, vars: Record<string, unknown>) => {
 };
 /** How long the chat waits on scripts going over the prompt. */
 const PROMPT_WAIT_MS = 3000;
+/** The most a script's localStorage may hold. */
+const STORAGE_MAX = 1_000_000;
+
+/** The card's lorebook's name, as scripts see it. */
+const cardBookName = (c: CardData) => c.character_book?.name?.trim() || c.name || 'Character';
+const bankName = (b: BankLorebook) => b.book.name?.trim() || 'Lorebook';
+
+type BookRef = { kind: 'card'; book: Lorebook } | { kind: 'bank'; id: string; book: Lorebook };
+/** A lorebook scripts named: the card's, or one in the Lorebooks bank. */
+function findBook(name: unknown): BookRef | null {
+  const card = useProjectStore.getState().project?.card.data;
+  if (card?.character_book && cardBookName(card) === name) return { kind: 'card', book: card.character_book };
+  const b = useLorebookStore.getState().books.find((x) => bankName(x) === name);
+  return b ? { kind: 'bank', id: b.id, book: b.book } : null;
+}
+function saveBook(ref: BookRef, book: Lorebook) {
+  if (ref.kind === 'card') useProjectStore.getState().updateCard((d) => ({ ...d, character_book: book }), 'tavern-helper-lore');
+  else useLorebookStore.getState().setBook(ref.id, book);
+}
+/**
+ * SillyTavern's own server, as scripts call it (fetch('/api/…')): the parts
+ * UCCB can answer, in SillyTavern's shapes. The model list is the chat
+ * connection's (a script can't point it at another server).
+ */
+async function stApi(path: string, body: unknown, act: ScriptActions | null, names: { char: string; user: string }): Promise<{ status: number; body: unknown }> {
+  const b = record(body);
+  const card = useProjectStore.getState().project?.card.data;
+  const chat = useChatStore.getState().chat;
+  const notFound = (what: string) => ({ status: 404, body: { error: what } });
+  switch (path) {
+    case '/api/backends/chat-completions/status':
+    case '/api/backends/text-completions/status': {
+      if (!act) return { status: 503, body: { error: 'The chat is not ready.' } };
+      const models = await act.listModels();
+      return { status: 200, body: { object: 'list', data: models.map((id) => ({ id, object: 'model' })) } };
+    }
+    case '/api/worldinfo/get': {
+      const ref = findBook(b.name);
+      return ref ? { status: 200, body: stWorldFile(ref.book, String(b.name)) } : notFound(`There's no lorebook "${String(b.name)}".`);
+    }
+    case '/api/worldinfo/edit': {
+      const ref = findBook(b.name);
+      if (!ref) return notFound(`There's no lorebook "${String(b.name)}".`);
+      saveBook(ref, fromStWorldFile(b.data, ref.book));
+      return { status: 200, body: { ok: true } };
+    }
+    case '/api/characters/get':
+      return card ? { status: 200, body: { ...card, avatar: `${card.name}.png`, chat: chat?.name ?? '', data: card } } : notFound('No character is open.');
+    case '/api/chats/get':
+      return { status: 200, body: chat && card ? chatToStJsonl(chat, card, names.user).trim().split('\n').map((l) => JSON.parse(l) as unknown) : [] };
+    case '/api/settings/get': {
+      const books = useLorebookStore.getState().books.map(bankName);
+      return { status: 200, body: { settings: JSON.stringify({ username: names.user }), world_names: [...(card?.character_book ? [cardBookName(card)] : []), ...books] } };
+    }
+    case '/api/ping':
+      return { status: 204, body: '' };
+    default:
+      return notFound(`UCCB doesn't have SillyTavern's ${path}.`);
+  }
+}
+
+const needBook = (name: unknown) => {
+  const ref = findBook(name);
+  if (!ref) throw new Error(`There's no lorebook "${String(name)}".`);
+  return ref;
+};
 
 export function useTavernScripts({
   card,
@@ -148,8 +226,38 @@ export function useTavernScripts({
     () => ({ names, presetName: preset?.name ?? '', presetNames: presetNames ? presetNames.split('\u0000') : [], cardRegexOn: settings.useCardRegex !== false, model: model ?? '', chatId: chat?.id ?? '', card: cardPart }),
     [names, preset?.name, presetNames, settings.useCardRegex, model, chat?.id, cardPart],
   );
+  // The lorebooks scripts can name: the card's, and the bank's.
+  const bank = useLorebookStore((s) => s.books);
+  const worldbooksPart = useMemo(() => {
+    const ofIds = (ids: (string | undefined)[]) => bank.filter((b) => ids.includes(b.id)).map(bankName);
+    return {
+      names: [...(card?.character_book ? [cardBookName(card)] : []), ...bank.map(bankName)],
+      global: ofIds(settings.globalLorebooks ?? []),
+      charPrimary: card?.character_book ? cardBookName(card) : null,
+      chat: ofIds([chat?.lorebookId])[0] ?? null,
+    };
+  }, [bank, card, settings.globalLorebooks, chat?.lorebookId]);
+  const loreSettingsPart = useMemo(
+    () => ({
+      selected_global_lorebooks: worldbooksPart.global,
+      scan_depth: settings.loreScanDepth ?? 2,
+      context_percentage: 100,
+      budget_cap: settings.loreTokenBudget ?? 0,
+      min_activations: 0,
+      max_depth: 0,
+      max_recursion_steps: settings.loreMaxRecursion ?? 0,
+      insertion_strategy: 'character_first',
+      include_names: true,
+      recursive: true,
+      case_sensitive: false,
+      match_whole_words: false,
+      use_group_scoring: false,
+      overflow_alert: false,
+    }),
+    [worldbooksPart.global, settings.loreScanDepth, settings.loreTokenBudget, settings.loreMaxRecursion],
+  );
   const scriptVars = settings.thScriptVars;
-  const snapshot = (script: TavernScript) => ({ chat: chatPart, preset: presetPart, stPreset: stPresetPart, input, regexes: regexPart, vars: { ...varsPart, script: scriptVars?.[script.id] ?? {} }, ...misc });
+  const snapshot = (script: TavernScript) => ({ chat: chatPart, preset: presetPart, stPreset: stPresetPart, input, regexes: regexPart, worldbooks: worldbooksPart, loreSettings: loreSettingsPart, vars: { ...varsPart, script: scriptVars?.[script.id] ?? {} }, ...misc });
   const latest = useRef({ running, snapshot, chat, chatPart, preset, actions, card, names });
   useEffect(() => {
     latest.current = { running, snapshot, chat, chatPart, preset, actions, card, names };
@@ -173,6 +281,16 @@ export function useTavernScripts({
   }, [chatPart]);
   useEffect(() => postAll({ state: { preset: presetPart, stPreset: stPresetPart, regexes: regexPart, ...misc } }), [presetPart, stPresetPart, regexPart, misc]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => postAll({ state: { input } }), [input]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => postAll({ state: { worldbooks: worldbooksPart, loreSettings: loreSettingsPart } }), [worldbooksPart, loreSettingsPart]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A script whose saved storage was cleared (Chat settings) starts afresh.
+  const stored = settings.thScriptStorage;
+  const storedBefore = useRef(stored);
+  useEffect(() => {
+    const was = storedBefore.current;
+    storedBefore.current = stored;
+    const gone = running.filter((r) => was?.[r.script.id] && !stored?.[r.script.id]);
+    if (gone.length) setReloads((rl) => ({ ...rl, ...Object.fromEntries(gone.map((r) => [r.key, (rl[r.key] ?? 0) + 1])) }));
+  }, [stored]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     for (const r of running) post(r.key, { state: { vars: { ...varsPart, script: scriptVars?.[r.script.id] ?? {} } } });
   }, [varsPart, scriptVars]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -266,6 +384,79 @@ export function useTavernScripts({
           if (!target) throw new Error(`There's no preset "${String(a.name)}".`);
           const parsed = parseStPreset(record(a.settings), target.name);
           llm.updatePreset(target.id, { ...parsed, id: target.id, name: target.name, importedAt: target.importedAt });
+          return;
+        }
+        case 'storage': {
+          const items = Object.fromEntries(Object.entries(record(a.items)).map(([k, v]) => [k, String(v)]));
+          if (JSON.stringify(items).length > STORAGE_MAX) throw new Error(`${script.name}'s saved data is over 1 MB, so it wasn't kept.`);
+          llm.setChatSettings({ thScriptStorage: { ...llm.chatSettings.thScriptStorage, [script.id]: items } });
+          return;
+        }
+        case 'stApi':
+          return stApi(String(a.path ?? ''), a.body, act, latest.current.names);
+        // Lorebooks.
+        case 'getWorldbook':
+          return thWorldbook(needBook(a.name).book);
+        case 'replaceWorldbook': {
+          const ref = needBook(a.name);
+          saveBook(ref, fromThWorldbook(a.entries, ref.book));
+          return;
+        }
+        case 'createWorldbook': {
+          const ref = findBook(a.name);
+          if (ref && a.replace !== true) return false;
+          if (ref) {
+            saveBook(ref, fromThWorldbook(a.entries, { ...ref.book, entries: [] }));
+            return true;
+          }
+          const name = String(a.name ?? '').trim();
+          if (!name) throw new Error('A lorebook needs a name.');
+          await useLorebookStore.getState().add({ ...fromThWorldbook(a.entries, newLorebook()), name });
+          return true;
+        }
+        case 'deleteWorldbook': {
+          const ref = findBook(a.name);
+          if (!ref) return false;
+          if (ref.kind === 'card') throw new Error("The card's own lorebook can't be deleted by a script.");
+          const ok = await confirmDialog({ title: `Delete the lorebook "${String(a.name)}"?`, body: `The script "${script.name}" wants to delete it from your Lorebooks. This can't be undone.`, confirmLabel: 'Delete', danger: true });
+          if (ok) await useLorebookStore.getState().remove(ref.id);
+          return ok;
+        }
+        case 'bindChatWorldbook': {
+          if (a.name === null || a.name === '') {
+            useChatStore.getState().setChatLorebook(undefined);
+            return;
+          }
+          const ref = needBook(a.name);
+          if (ref.kind !== 'bank') throw new Error("The card's lorebook is already the character's; a chat's lorebook comes from the Lorebooks bank.");
+          useChatStore.getState().setChatLorebook(ref.id);
+          return;
+        }
+        case 'getOrCreateChatWorldbook': {
+          const current = useLorebookStore.getState().books.find((b) => b.id === useChatStore.getState().chat?.lorebookId);
+          if (current) return bankName(current);
+          const name = String(a.name ?? '').trim() || `${latest.current.names.char} chat lorebook`;
+          const made = findBook(name)?.kind === 'bank' ? useLorebookStore.getState().books.find((b) => bankName(b) === name)! : await useLorebookStore.getState().add({ ...newLorebook(), name });
+          useChatStore.getState().setChatLorebook(made.id);
+          return bankName(made);
+        }
+        case 'bindGlobalWorldbooks': {
+          const names = (Array.isArray(a.names) ? a.names : []).map(String);
+          const books = useLorebookStore.getState().books;
+          const missing = names.filter((n) => !books.some((b) => bankName(b) === n));
+          if (missing.length) throw new Error(`Only lorebooks in the Lorebooks bank can be global (not ${missing.map((n) => `"${n}"`).join(', ')}).`);
+          llm.setChatSettings({ globalLorebooks: books.filter((b) => names.includes(bankName(b))).map((b) => b.id) });
+          return;
+        }
+        case 'loreSettings': {
+          const patch = record(a.patch);
+          const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined);
+          llm.setChatSettings({
+            ...(n(patch.scan_depth) !== undefined ? { loreScanDepth: n(patch.scan_depth) } : {}),
+            ...(n(patch.budget_cap) !== undefined ? { loreTokenBudget: n(patch.budget_cap) } : {}),
+            ...(n(patch.max_recursion_steps) !== undefined ? { loreMaxRecursion: n(patch.max_recursion_steps) } : {}),
+          });
+          if (Array.isArray(patch.selected_global_lorebooks)) await handle(key, script, 'bindGlobalWorldbooks', { names: patch.selected_global_lorebooks });
           return;
         }
         case 'input':
@@ -392,30 +583,58 @@ export function useTavernScripts({
     return i < 0 ? -1 : i + offset();
   };
 
-  /** The prompt as it's about to be sent, with the scripts' injections put
-   *  in, then gone over by each script listening for it (Tavern Helper's
-   *  CHAT_COMPLETION_PROMPT_READY), in turn. */
-  const beforeSend = async <T extends { role: string; content: unknown }>(messages: T[]): Promise<T[]> => {
-    if (!latest.current.running.length) return messages;
-    const list = [...injections.current.values()];
-    for (const [k, i] of injections.current) if (i.once) injections.current.delete(k);
-    let out = withInjections(messages, list, (i) => ({ role: i.role, content: i.content }) as unknown as T);
+  /** Sends an event every script may change the data of, in turn, waiting
+   *  for each (up to PROMPT_WAIT_MS): what the last one made of it. */
+  const awaitEvent = async (type: string, data: unknown, ...rest: unknown[]): Promise<unknown> => {
     for (const r of latest.current.running) {
       const id = ++ackSeq.current;
       const answer = await Promise.race([
         new Promise<unknown>((resolve) => {
           acks.current.set(id, resolve);
-          post(r.key, { event: 'chat_completion_prompt_ready', args: [{ chat: out, dryRun: false }], ack: id });
+          post(r.key, { event: type, args: [data, ...rest], ack: id });
         }),
         new Promise<unknown>((resolve) => setTimeout(() => resolve(undefined), PROMPT_WAIT_MS)),
       ]);
       acks.current.delete(id);
-      const changed = record(answer).chat;
-      if (Array.isArray(changed)) out = changed.filter((m): m is T => isObject(m) && typeof m.role === 'string');
+      if (answer !== undefined && answer !== null) data = answer;
     }
-    return out;
+    return data;
   };
 
+  /**
+   * The prompt as it's about to be sent, through what scripts hear in
+   * SillyTavern at this point, in its order: the lorebook entries that
+   * fired (WORLD_INFO_ACTIVATED, WORLDINFO_SCAN_DONE), the scripts'
+   * injections put in, then the prompt itself (CHAT_COMPLETION_PROMPT_READY),
+   * the request (CHAT_COMPLETION_SETTINGS_READY) and its data
+   * (GENERATE_AFTER_DATA), each of which scripts can change.
+   */
+  const beforeSend = async <T extends { role: string; content: unknown }>(messages: T[], ctx: { lore?: ScanResult; request?: Record<string, unknown> } = {}): Promise<T[]> => {
+    if (!latest.current.running.length) return messages;
+    const card = latest.current.card;
+    if (ctx.lore && card) {
+      const world = (e: ScanResult['active'][number]['entry']) => entryBook(e) ?? cardBookName(card);
+      const fired = ctx.lore.active.map((a) => stWorldEntry(a.entry, a.index, world(a.entry)));
+      emit('world_info_activated', fired);
+      await awaitEvent('worldinfo_scan_done', {
+        state: { current: 0, next: 0, loopCount: 0 },
+        new: { all: fired, successful: fired },
+        activated: { entries: new Map(fired.map((e) => [`${String(e.world)}.${String(e.uid)}`, e])), text: ctx.lore.active.map((a) => a.entry.content).join('\n') },
+        sortedEntries: fired,
+        recursionDelay: { availableLevels: [], currentLevel: 0 },
+        budget: { current: 0, overflowed: ctx.lore.dropped.length > 0 },
+        timedEffects: {},
+      });
+    }
+    const list = [...injections.current.values()];
+    for (const [k, i] of injections.current) if (i.once) injections.current.delete(k);
+    let out = withInjections(messages, list, (i) => ({ role: i.role, content: i.content }) as unknown as T);
+    const valid = (v: unknown) => (Array.isArray(v) ? v.filter((m): m is T => isObject(m) && typeof m.role === 'string') : null);
+    out = valid(record(await awaitEvent('chat_completion_prompt_ready', { chat: out, dryRun: false })).chat) ?? out;
+    out = valid(record(await awaitEvent('chat_completion_settings_ready', { ...ctx.request, messages: out, stream: true, chat_completion_source: 'custom' })).messages) ?? out;
+    out = valid(record(await awaitEvent('generate_after_data', { prompt: out }, false)).prompt) ?? out;
+    return out;
+  };
   const setGenerating = (on: boolean) => {
     generating.current = on;
     postAll({ state: { busy: on } });
@@ -432,7 +651,7 @@ export function useTavernScripts({
             <ScriptFrame
               key={`${r.key}:${reloads[r.key] ?? 0}`}
               script={r.script}
-              boot={{ scriptId: r.script.id, scriptName: r.script.name, scriptInfo: r.script.info, buttons: r.script.buttons, state: snapshot(r.script) }}
+              boot={{ scriptId: r.script.id, scriptName: r.script.name, scriptInfo: r.script.info, buttons: r.script.buttons, storage: settings.thScriptStorage?.[r.script.id] ?? {}, state: snapshot(r.script) }}
               runtime={runtime}
               overlay={overlays[r.key]}
               onFrame={(f) => (f ? frames.set(r.key, f) : frames.delete(r.key))}

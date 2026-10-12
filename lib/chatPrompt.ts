@@ -99,6 +99,8 @@ export interface ChatPromptSettings {
   /** Tavern Helper's global variables, and each script's own (by script id). */
   thGlobalVars?: Record<string, unknown>;
   thScriptVars?: Record<string, Record<string, unknown>>;
+  /** Each Tavern Helper script's localStorage (by script id). */
+  thScriptStorage?: Record<string, Record<string, string>>;
 }
 
 /** Where each of the chat's replies was written (its index: the history

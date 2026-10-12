@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { cardScripts, fromThPreset, fromThRegexes, messageRange, presetScripts, rawPrompt, scriptKey, scriptSrcdoc, thMessages, thPreset, thRegexes, withInjections } from '@/lib/tavernHelper';
+import { cardScripts, fromStWorldFile, fromThPreset, fromThRegexes, fromThWorldbook, messageRange, presetScripts, rawPrompt, scriptKey, scriptSrcdoc, stWorldFile, thMessages, thPreset, thRegexes, thWorldbook, withInjections } from '@/lib/tavernHelper';
+import { newEntry, newLorebook } from '@/lib/cardSpec';
 import { parseStPreset } from '@/lib/stPreset';
 import { cardRegexScripts } from '@/lib/regexScripts';
 import { newMessage } from '@/lib/chatPrompt';
@@ -129,6 +130,44 @@ describe('Tavern Helper scripts', () => {
       { role: 'user', content: 'Hi' },
       { role: 'user', content: 'Go' },
     ]);
+  });
+
+  it("gives a lorebook as Tavern Helper's worldbook, and takes it back", () => {
+    const book = {
+      ...newLorebook(),
+      name: 'World',
+      entries: [
+        { ...newEntry(), id: 3, name: 'Sword', comment: 'Sword', keys: ['sword'], secondary_keys: ['blade'], selective: true, content: 'A sword.', insertion_order: 7, extensions: { position: 4, depth: 2, role: 2, selectiveLogic: 3, probability: 40, useProbability: true, sticky: 2, exclude_recursion: true, group: 'arms' } },
+        { ...newEntry(), id: 5, name: 'Town', constant: true, content: 'A town.', position: 'after_char' as const },
+      ],
+    };
+    const wb = thWorldbook(book) as Record<string, Record<string, unknown>>[];
+    expect(wb[0]).toMatchObject({
+      uid: 3,
+      name: 'Sword',
+      strategy: { type: 'selective', keys: ['sword'], keys_secondary: { logic: 'and_all', keys: ['blade'] }, scan_depth: 'same_as_global' },
+      position: { type: 'at_depth', role: 'assistant', depth: 2, order: 7 },
+      probability: 40,
+      recursion: { prevent_incoming: true, prevent_outgoing: false, delay_until: null },
+      effect: { sticky: 2, cooldown: null, delay: null },
+    });
+    expect(wb[1]).toMatchObject({ uid: 5, strategy: { type: 'constant' }, position: { type: 'after_character_definition' } });
+
+    // A script changes one entry (only what it names), drops the other, adds one.
+    const back = fromThWorldbook([{ uid: 3, content: 'A sharp sword.', position: { depth: 1 } }, { name: 'New', strategy: { keys: ['new'] }, content: 'Fresh.' }], book);
+    expect(back.entries).toHaveLength(2);
+    expect(back.entries[0]).toMatchObject({ id: 3, name: 'Sword', content: 'A sharp sword.', keys: ['sword'], extensions: { position: 4, depth: 1, role: 2, selectiveLogic: 3, probability: 40, group: 'arms' } });
+    expect(back.entries[1]).toMatchObject({ id: 6, name: 'New', keys: ['new'], content: 'Fresh.', enabled: true });
+  });
+
+  it("gives a lorebook as SillyTavern's world file, and takes it back", () => {
+    const book = { ...newLorebook(), entries: [{ ...newEntry(), id: 0, name: 'A', keys: ['a'], content: 'Aa', extensions: { position: 1, probability: 100 } }] };
+    const file = stWorldFile(book, 'W') as { entries: Record<string, Record<string, unknown>> };
+    expect(file.entries['0']).toMatchObject({ uid: 0, key: ['a'], comment: 'A', content: 'Aa', position: 1, disable: false, world: 'W' });
+    file.entries['0'].content = 'Changed';
+    file.entries['0'].disable = true;
+    const back = fromStWorldFile(file, book);
+    expect(back.entries[0]).toMatchObject({ id: 0, content: 'Changed', enabled: false, keys: ['a'], position: 'after_char' });
   });
 
   it("keeps a script's text from closing its own <script>", () => {

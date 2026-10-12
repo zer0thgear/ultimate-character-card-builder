@@ -4,7 +4,7 @@ import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useMem
 import { chatMatches, splitMatches } from '@/lib/chatSearch';
 import { useProjectStore } from '@/store/projectStore';
 import { useChatStore } from '@/store/chatStore';
-import { textTemplates, useLlmStore, writtenBy } from '@/store/llmStore';
+import { requestConnection, textTemplates, useLlmStore, writtenBy } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
@@ -278,7 +278,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
     const prompt = built.prefill !== undefined ? [...built.messages, { role: 'assistant' as const, content: built.prefill }] : built.messages;
     // Tavern Helper scripts put their prompts in and go over it last (only
     // for chat completion, as in SillyTavern).
-    const messages = built.text === undefined ? await scripts.beforeSend(prompt) : prompt;
+    const messages = built.text === undefined ? await scripts.beforeSend(prompt, { lore: built.lore, request: { model: connection?.model ?? '', ...connection?.params, ...overrides } }) : prompt;
     if (messages !== prompt) setLastPrompt({ ...built, messages: built.prefill !== undefined ? messages.slice(0, -1) : messages });
     return run(connection, messages, onText, { prefill: built.prefill !== undefined, params: overrides, text: built.text !== undefined ? { prompt: built.text, stop: built.stop ?? [] } : undefined });
   };
@@ -305,6 +305,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
     const kind = continueFrom !== undefined ? 'continue' : target ? 'swipe' : 'normal';
     scripts.setGenerating(true);
     scripts.emit('generation_started', kind, {}, false);
+    scripts.emit('GENERATION_AFTER_COMMANDS', kind, {}, false);
     setStreamingId(id);
     if (!target) setMessages((m) => [...m, { ...newMessage('assistant', '', connection?.model), id }]);
     else if (continueFrom === undefined)
@@ -462,6 +463,10 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
     stop: () => scriptStream.stop(),
     setInput,
     submit: (text) => void send(text),
+    listModels: async () => {
+      if (!connection) throw new Error('Add an LLM connection in Settings first.');
+      return api.llmModels(requestConnection(connection));
+    },
     slash: async (command) => {
       const parsed = parseSlash(command);
       if ('error' in parsed) throw new Error(parsed.error);
@@ -1695,6 +1700,19 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
         {Object.keys(s.scriptApprovals ?? {}).length > 0 && (
           <button type="button" className="self-start text-xs text-slate-400 underline hover:text-slate-200" onClick={() => setChatSettings({ scriptApprovals: {} })} title="Every script asks again before it runs">
             Forget my answers about scripts ({Object.values(s.scriptApprovals ?? {}).filter((a) => a === 'run').length} allowed, {Object.values(s.scriptApprovals ?? {}).filter((a) => a === 'block').length} not)
+          </button>
+        )}
+        {Object.keys(s.thScriptStorage ?? {}).length > 0 && (
+          <button
+            type="button"
+            className="self-start text-xs text-slate-400 underline hover:text-slate-200"
+            onClick={async () => {
+              const ok = await confirmDialog({ title: "Clear scripts' saved data?", body: 'What Tavern Helper scripts keep in their storage (their settings, and anything you typed into their panels) goes, and running scripts start afresh.', confirmLabel: 'Clear', danger: true });
+              if (ok) setChatSettings({ thScriptStorage: {} });
+            }}
+            title="What scripts keep in their localStorage, as they would in SillyTavern's browser"
+          >
+            Clear scripts&apos; saved data ({Object.keys(s.thScriptStorage ?? {}).length})
           </button>
         )}
         <Toggle checked={s.showMessageIds} onChange={(v) => setChatSettings({ showMessageIds: v })} label={<span className="text-xs">Show message numbers (#0 is the greeting)</span>} />

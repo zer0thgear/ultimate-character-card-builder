@@ -484,26 +484,267 @@
   };
   Object.assign(window, TavernHelper, { TavernHelper, toastr });
 
-  // A sandboxed frame has no storage of its own; scripts get one that lasts
-  // as long as the frame.
-  for (const name of ['localStorage', 'sessionStorage']) {
+  // A sandboxed frame has no storage of its own. A script's localStorage is
+  // kept by the chat (with its settings, per script) and comes back the next
+  // time it runs; its sessionStorage lasts as long as the frame.
+  function makeStorage(initial, onChange) {
+    const mem = new Map(Object.entries(initial || {}).map(([k, v]) => [String(k), String(v)]));
+    const changed = () => onChange && onChange(Object.fromEntries(mem));
+    return {
+      getItem: (k) => (mem.has(String(k)) ? mem.get(String(k)) : null),
+      setItem: (k, v) => {
+        mem.set(String(k), String(v));
+        changed();
+      },
+      removeItem: (k) => {
+        if (mem.delete(String(k))) changed();
+      },
+      clear: () => {
+        mem.clear();
+        changed();
+      },
+      key: (i) => [...mem.keys()][i] ?? null,
+      get length() {
+        return mem.size;
+      },
+    };
+  }
+  let storageTimer = null;
+  const keepStorage = (items) => {
+    clearTimeout(storageTimer);
+    storageTimer = setTimeout(() => post({ method: 'storage', args: { items } }), 400);
+  };
+  Object.defineProperty(window, 'localStorage', { configurable: true, value: makeStorage(boot.storage, keepStorage) });
+  try {
+    void window.sessionStorage;
+  } catch {
+    Object.defineProperty(window, 'sessionStorage', { configurable: true, value: makeStorage({}, null) });
+  }
+
+  // ─── SillyTavern's server ────────────────────────────────────────────────
+  //
+  // Scripts call SillyTavern's own server (/api/…) with fetch or jQuery's
+  // ajax. A sandboxed frame can't reach UCCB's, so those calls go to the
+  // chat instead, which answers the ones it can as SillyTavern would (the
+  // model list, world info, the character, the chat, settings) and says
+  // which it can't.
+
+  const appOrigin = (() => {
     try {
-      void window[name];
+      return new URL(document.baseURI).origin;
     } catch {
-      const mem = new Map();
-      const storage = {
-        getItem: (k) => (mem.has(String(k)) ? mem.get(String(k)) : null),
-        setItem: (k, v) => void mem.set(String(k), String(v)),
-        removeItem: (k) => void mem.delete(String(k)),
-        clear: () => mem.clear(),
-        key: (i) => [...mem.keys()][i] ?? null,
-        get length() {
-          return mem.size;
-        },
-      };
-      Object.defineProperty(window, name, { configurable: true, value: storage });
+      return '';
+    }
+  })();
+  function apiPath(input) {
+    try {
+      const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input && input.url ? input.url : String(input);
+      const u = new URL(raw, document.baseURI);
+      return u.origin === appOrigin && u.pathname.startsWith('/api/') ? u.pathname : null;
+    } catch {
+      return null;
     }
   }
+  const parseBody = (body) => {
+    if (typeof body !== 'string') return body === undefined ? undefined : null;
+    try {
+      return JSON.parse(body);
+    } catch {
+      return body;
+    }
+  };
+  const answerApi = (path, method, body) =>
+    call('stApi', { path, method: String(method || 'GET').toUpperCase(), body }).catch((err) => ({ status: 500, body: { error: String((err && err.message) || err) } }));
+  const realFetch = window.fetch.bind(window);
+  window.fetch = async (input, init) => {
+    const path = apiPath(input);
+    if (!path) return realFetch(input, init);
+    let body = init && init.body;
+    if (body === undefined && input instanceof Request) body = await input.clone().text();
+    const method = (init && init.method) || (input instanceof Request ? input.method : 'GET');
+    const r = await answerApi(path, method, parseBody(body));
+    const text = typeof r.body === 'string' ? r.body : JSON.stringify(r.body ?? null);
+    return new Response(text, { status: r.status || 200, headers: { 'Content-Type': typeof r.body === 'string' ? 'text/plain' : 'application/json' } });
+  };
+  const xhrOpen = XMLHttpRequest.prototype.open;
+  const xhrSend = XMLHttpRequest.prototype.send;
+  const xhrHeader = XMLHttpRequest.prototype.setRequestHeader;
+  XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+    const path = apiPath(url);
+    this.__uccbApi = path ? { method, path } : null;
+    if (!path) return xhrOpen.call(this, method, url, ...rest);
+  };
+  XMLHttpRequest.prototype.setRequestHeader = function (...args) {
+    if (!this.__uccbApi) return xhrHeader.apply(this, args);
+  };
+  XMLHttpRequest.prototype.send = function (body) {
+    const req = this.__uccbApi;
+    if (!req) return xhrSend.call(this, body);
+    void answerApi(req.path, req.method, parseBody(body)).then((r) => {
+      const text = typeof r.body === 'string' ? r.body : JSON.stringify(r.body ?? null);
+      const set = (k, v) => Object.defineProperty(this, k, { configurable: true, value: v });
+      set('readyState', 4);
+      set('status', r.status || 200);
+      set('statusText', (r.status || 200) < 400 ? 'OK' : 'Error');
+      set('responseText', text);
+      set('response', this.responseType === 'json' ? parseBody(text) : text);
+      this.getResponseHeader = (h) => (/content-type/i.test(h) ? 'application/json' : null);
+      this.getAllResponseHeaders = () => 'content-type: application/json\r\n';
+      for (const type of ['readystatechange', 'load', 'loadend']) this.dispatchEvent(new Event(type));
+    });
+  };
+
+  // ─── Lorebooks (Tavern Helper's worldbooks) ──────────────────────────────
+  //
+  // The card's lorebook and those in UCCB's Lorebooks bank, by name. Names
+  // and bindings are kept here (they're read synchronously); entries are
+  // asked of the chat each time.
+
+  const wb = () => state.worldbooks || { names: [], global: [], charPrimary: null, chat: null };
+  const getWorldbookNames = () => wb().names.slice();
+  const getGlobalWorldbookNames = () => wb().global.slice();
+  const getCharWorldbookNames = () => ({ primary: wb().charPrimary, additional: [] });
+  const getChatWorldbookName = () => wb().chat;
+  const rebindGlobalWorldbooks = (names) => call('bindGlobalWorldbooks', { names });
+  const rebindChatWorldbook = (_chat, name) => call('bindChatWorldbook', { name });
+  const rebindCharWorldbooks = () => Promise.reject(new Error("In UCCB the character's lorebook is the card's own; it can't be swapped for another."));
+  const getOrCreateChatWorldbook = async (_chat, name) => wb().chat || call('getOrCreateChatWorldbook', { name });
+  const getWorldbook = (name) => call('getWorldbook', { name });
+  const replaceWorldbook = (name, entries) => call('replaceWorldbook', { name, entries });
+  const createWorldbook = async (name, entries) => (await call('createWorldbook', { name, entries: entries || [], replace: false })) === true;
+  const createOrReplaceWorldbook = async (name, entries) => (await call('createWorldbook', { name, entries: entries || [], replace: true })) === true;
+  const deleteWorldbook = async (name) => (await call('deleteWorldbook', { name })) === true;
+  async function updateWorldbookWith(name, updater) {
+    await replaceWorldbook(name, await updater(await getWorldbook(name)));
+    return getWorldbook(name);
+  }
+  async function createWorldbookEntries(name, entries) {
+    const book = await getWorldbook(name);
+    const before = new Set(book.map((e) => e.uid));
+    const fresh = (entries || []).map((e) => {
+      const c = Object.assign({}, e);
+      delete c.uid;
+      return c;
+    });
+    await replaceWorldbook(name, [...book, ...fresh]);
+    const after = await getWorldbook(name);
+    return { worldbook: after, new_entries: after.filter((e) => !before.has(e.uid)) };
+  }
+  async function deleteWorldbookEntries(name, predicate) {
+    const book = await getWorldbook(name);
+    const gone = book.filter((e) => predicate(e));
+    await replaceWorldbook(name, book.filter((e) => !gone.includes(e)));
+    return { worldbook: await getWorldbook(name), deleted_entries: gone };
+  }
+
+  // The older lorebook functions, on top of the worldbook ones.
+  function toLorebookEntry(w, i) {
+    const p = w.position.type;
+    return {
+      uid: w.uid,
+      display_index: i,
+      comment: w.name,
+      enabled: w.enabled,
+      type: w.strategy.type,
+      position: p === 'at_depth' ? `at_depth_as_${w.position.role}` : p === 'outlet' ? 'before_character_definition' : p,
+      depth: p === 'at_depth' ? w.position.depth : null,
+      order: w.position.order,
+      probability: w.probability,
+      keys: w.strategy.keys,
+      logic: w.strategy.keys_secondary.logic,
+      filters: w.strategy.keys_secondary.keys,
+      scan_depth: w.strategy.scan_depth,
+      case_sensitive: 'same_as_global',
+      match_whole_words: 'same_as_global',
+      use_group_scoring: 'same_as_global',
+      automation_id: null,
+      exclude_recursion: w.recursion.prevent_incoming,
+      prevent_recursion: w.recursion.prevent_outgoing,
+      delay_until_recursion: w.recursion.delay_until ?? false,
+      content: w.content,
+      group: '',
+      group_prioritized: false,
+      group_weight: 100,
+      sticky: w.effect.sticky,
+      cooldown: w.effect.cooldown,
+      delay: w.effect.delay,
+    };
+  }
+  function fromLorebookEntry(o) {
+    const w = {};
+    const has = (k) => Object.prototype.hasOwnProperty.call(o, k);
+    if (has('uid')) w.uid = o.uid;
+    if (has('comment')) w.name = o.comment;
+    if (has('enabled')) w.enabled = o.enabled;
+    if (has('content')) w.content = o.content;
+    if (has('probability')) w.probability = o.probability;
+    const strategy = {};
+    if (has('type')) strategy.type = o.type;
+    if (has('keys')) strategy.keys = o.keys;
+    if (has('logic') || has('filters')) strategy.keys_secondary = Object.assign({}, has('logic') ? { logic: o.logic } : {}, has('filters') ? { keys: o.filters } : {});
+    if (has('scan_depth')) strategy.scan_depth = o.scan_depth;
+    if (Object.keys(strategy).length) w.strategy = strategy;
+    const position = {};
+    if (has('position')) {
+      const m = /^at_depth_as_(system|user|assistant)$/.exec(o.position);
+      Object.assign(position, m ? { type: 'at_depth', role: m[1] } : { type: o.position });
+    }
+    if (has('depth') && o.depth !== null) position.depth = o.depth;
+    if (has('order')) position.order = o.order;
+    if (Object.keys(position).length) w.position = position;
+    const recursion = {};
+    if (has('exclude_recursion')) recursion.prevent_incoming = o.exclude_recursion;
+    if (has('prevent_recursion')) recursion.prevent_outgoing = o.prevent_recursion;
+    if (has('delay_until_recursion')) recursion.delay_until = o.delay_until_recursion === true ? 1 : o.delay_until_recursion || null;
+    if (Object.keys(recursion).length) w.recursion = recursion;
+    const effect = {};
+    for (const k of ['sticky', 'cooldown', 'delay']) if (has(k)) effect[k] = o[k];
+    if (Object.keys(effect).length) w.effect = effect;
+    return w;
+  }
+  const getLorebookEntries = async (name) => (await getWorldbook(name)).map(toLorebookEntry);
+  const replaceLorebookEntries = (name, entries) => replaceWorldbook(name, (entries || []).map(fromLorebookEntry));
+  async function updateLorebookEntriesWith(name, updater) {
+    await replaceLorebookEntries(name, await updater(await getLorebookEntries(name)));
+    return getLorebookEntries(name);
+  }
+  async function setLorebookEntries(name, partials) {
+    const byUid = new Map((partials || []).map((p) => [p.uid, p]));
+    const book = await getWorldbook(name);
+    await replaceWorldbook(name, book.map((w) => (byUid.has(w.uid) ? fromLorebookEntry(byUid.get(w.uid)) : { uid: w.uid })));
+    return getLorebookEntries(name);
+  }
+  async function createLorebookEntries(name, entries) {
+    const r = await createWorldbookEntries(name, (entries || []).map(fromLorebookEntry));
+    return { entries: r.worldbook.map(toLorebookEntry), new_uids: r.new_entries.map((e) => e.uid) };
+  }
+  async function deleteLorebookEntries(name, uids) {
+    const r = await deleteWorldbookEntries(name, (e) => (uids || []).includes(e.uid));
+    return { entries: r.worldbook.map(toLorebookEntry), delete_occurred: r.deleted_entries.length > 0 };
+  }
+  const getLorebookSettings = () => clone(state.loreSettings || {});
+  const setLorebookSettings = (patch) => post({ method: 'loreSettings', args: plain({ patch }) });
+  const lorebookFunctions = {
+    getWorldbookNames, getGlobalWorldbookNames, rebindGlobalWorldbooks, getCharWorldbookNames, rebindCharWorldbooks, getChatWorldbookName, rebindChatWorldbook, getOrCreateChatWorldbook,
+    getWorldbook, createWorldbook, createOrReplaceWorldbook, deleteWorldbook, replaceWorldbook, updateWorldbookWith, createWorldbookEntries, deleteWorldbookEntries,
+    getLorebooks: getWorldbookNames,
+    getCharLorebooks: (o) => {
+      const c = getCharWorldbookNames();
+      const type = (o && o.type) || 'all';
+      return type === 'primary' ? { primary: c.primary, additional: [] } : type === 'additional' ? { primary: null, additional: c.additional } : c;
+    },
+    getCurrentCharPrimaryLorebook: () => wb().charPrimary,
+    setCurrentCharLorebooks: () => rebindCharWorldbooks(),
+    getChatLorebook: getChatWorldbookName,
+    setChatLorebook: (name) => rebindChatWorldbook('current', name),
+    getOrCreateChatLorebook: (name) => getOrCreateChatWorldbook('current', name),
+    createLorebook: (name) => createWorldbook(name),
+    deleteLorebook: deleteWorldbook,
+    getLorebookEntries, replaceLorebookEntries, updateLorebookEntriesWith, setLorebookEntries, createLorebookEntries, deleteLorebookEntries,
+    getLorebookSettings, setLorebookSettings,
+  };
+  Object.assign(TavernHelper, lorebookFunctions);
+  Object.assign(window, lorebookFunctions);
 
   // ─── SillyTavern's page ──────────────────────────────────────────────────
   //
