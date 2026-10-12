@@ -59,7 +59,8 @@ test('an adventure: scan the card, open with the greeting, play a turn', async (
   await expect(page.getByText('Nobody, that\'s who.', { exact: false })).toBeVisible();
   await expect(page.getByText('You slip past the torchlight.')).toBeVisible();
   await expect(page.getByText('A torch gutters in the wind.')).toBeVisible();
-  await expect(page.getByText(/Sneaking past: 1d20 → \d+ vs 1: success/)).toBeVisible();
+  // The dice are real: a natural 1 fails even against 1 (one roll in 20).
+  await expect(page.getByText(/Sneaking past: 1d20 → \d+ vs 1: (success|failure \(natural 1\))/)).toBeVisible();
   await expect(page.getByText(/Turn 1 · 5 calls · 500 in \/ 100 out/)).toBeVisible();
   await expect(page.getByText('📍 Iron Gate · dusk')).toBeVisible();
   await page.screenshot({ path: 'test-results/adventure-turn.png', fullPage: true });
