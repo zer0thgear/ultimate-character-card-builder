@@ -5,7 +5,7 @@ import type { SummarySettings } from '@/lib/chatSummary';
 import { expandMacros, type MacroContext } from '@/lib/macros';
 import { scanLorebook, describeEntry, type ScanResult, type ActivatedEntry, DEFAULT_SCAN_DEPTH, DEFAULT_MAX_RECURSION, type LoreDefaults } from '@/lib/lorebookScan';
 import { uuid } from '@/lib/uuid';
-import { REGEX_PLACEMENT, cardRegexScripts, placementFor, runRegexScripts, type RegexPlacement } from '@/lib/regexScripts';
+import { REGEX_PLACEMENT, cardRegexScripts, placementFor, presetRegexScripts, runRegexScripts, type RegexPlacement, type RegexScript } from '@/lib/regexScripts';
 import { activeAuthorsNote, AUTHORS_NOTE_LABEL } from '@/lib/authorsNote';
 import type { AuthorsNote } from '@/types/project';
 
@@ -82,6 +82,14 @@ export interface ChatPromptSettings {
   /** Run the card's regex scripts (lib/regexScripts.ts) on what's shown
    *  and sent. */
   useCardRegex?: boolean;
+  /** Run the chat preset's own regex scripts too. */
+  usePresetRegex?: boolean;
+  /** Show HTML in messages (sanitized, as SillyTavern does) rather than
+   *  as text. */
+  renderHtml?: boolean;
+  /** Run whole HTML pages in messages (a code block holding one, as Tavern
+   *  Helper shows them), each in a sandboxed frame. */
+  htmlPages?: boolean;
 }
 
 /** Where each of the chat's replies was written (its index: the history
@@ -143,6 +151,9 @@ export const DEFAULT_CHAT_SETTINGS: ChatPromptSettings = {
   swipeGesture: true,
   guideTemplate: DEFAULT_GUIDE_TEMPLATE,
   useCardRegex: true,
+  usePresetRegex: true,
+  renderHtml: true,
+  htmlPages: true,
 };
 
 export const DEFAULT_IMPERSONATION =
@@ -249,8 +260,9 @@ export function exampleBlocks(mesExample: string): string[] {
 // ─── Shared pieces ───────────────────────────────────────────────────────────
 
 /** Macro expansion for one prompt build: names, card fields, the chat so
- *  far, and one variable store shared by every part. */
-export function macroExpander(card: CardData, history: ChatMessage[], settings: Pick<ChatPromptSettings, 'userName' | 'persona' | 'useCardRegex'>, opts: BuildOptions = {}) {
+ *  far, and one variable store shared by every part. `presetScripts` are
+ *  the preset's regex scripts, run before the card's. */
+export function macroExpander(card: CardData, history: ChatMessage[], settings: Pick<ChatPromptSettings, 'userName' | 'persona' | 'useCardRegex'>, opts: BuildOptions = {}, presetScripts: RegexScript[] = []) {
   const char = card.nickname || card.name || 'Character';
   const user = settings.userName || 'User';
   const texts = history.map(messageText);
@@ -283,8 +295,8 @@ export function macroExpander(card: CardData, history: ChatMessage[], settings: 
   const setFields = (patch: NonNullable<MacroContext['fields']>) => {
     base.fields = { ...base.fields, ...patch };
   };
-  // The card's regex scripts, as they change what the model is sent.
-  const scripts = settings.useCardRegex === false ? [] : cardRegexScripts(card);
+  // The preset's and card's regex scripts, as they change what the model is sent.
+  const scripts = [...presetScripts, ...(settings.useCardRegex === false ? [] : cardRegexScripts(card))];
   const raw = (text: string) => expandMacros(text, base);
   const rx = (text: string, placement: RegexPlacement, depth?: number) => (scripts.length ? runRegexScripts(scripts, text, { placement, target: 'prompt', depth, macros: raw }) : text);
   /** A lorebook entry's content as sent. */
@@ -292,15 +304,20 @@ export function macroExpander(card: CardData, history: ChatMessage[], settings: 
   return { x, lx, rx, char, user, texts, setFields };
 }
 
-/** A message's text as the chat shows it, after the card's display-side
- *  regex scripts; `depth` is how far it is from the end (0: the last). */
-export function shownText(card: CardData, text: string, role: ChatMessage['role'], depth: number, settings: Pick<ChatPromptSettings, 'userName' | 'useCardRegex'>): string {
+/** The regex scripts the chat runs: the preset's (when it's in use), then
+ *  the card's, each unless switched off. */
+export function chatRegexScripts(card: CardData, preset: { extra?: Record<string, unknown> } | null, settings: Pick<ChatPromptSettings, 'useCardRegex' | 'usePresetRegex'>): RegexScript[] {
+  return [...(preset && settings.usePresetRegex !== false ? presetRegexScripts(preset) : []), ...(settings.useCardRegex === false ? [] : cardRegexScripts(card))];
+}
+
+/** A message's text as the chat shows it, after the display-side regex
+ *  `scripts` (chatRegexScripts); `depth` is how far it is from the end (0:
+ *  the last). */
+export function shownText(card: CardData, text: string, role: ChatMessage['role'], depth: number, userName: string, scripts: RegexScript[]): string {
   const placement = placementFor(role);
-  if (settings.useCardRegex === false || placement === null) return text;
-  const scripts = cardRegexScripts(card);
-  if (!scripts.length) return text;
+  if (placement === null || !scripts.length) return text;
   const char = card.nickname || card.name || 'Character';
-  return runRegexScripts(scripts, text, { placement, target: 'display', depth, macros: (t) => expandMacros(t, { char, user: settings.userName || 'User' }) });
+  return runRegexScripts(scripts, text, { placement, target: 'display', depth, macros: (t) => expandMacros(t, { char, user: userName || 'User' }) });
 }
 
 export type LorePlace = 'before' | 'after' | 'depth';

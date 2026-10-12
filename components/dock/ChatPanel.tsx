@@ -8,11 +8,12 @@ import { textTemplates, useLlmStore, writtenBy } from '@/store/llmStore';
 import { useBridgeStore } from '@/store/bridgeStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
-import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, withoutSwipe, buildChatPrompt, displayText, shownText, chatGreeting, greetingText, messageText, newMessage, withShownText, type AvatarShape, type ChatSide, type ChatStyle, messageLayout, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
+import { DEFAULT_CHAT_SETTINGS, formatMessageTime, swipeDate, withoutSwipe, buildChatPrompt, displayText, shownText, chatRegexScripts, chatGreeting, greetingText, messageText, newMessage, withShownText, type AvatarShape, type ChatSide, type ChatStyle, messageLayout, type BuildOptions, type BuiltPrompt, type SentWith, DEFAULT_GUIDE_TEMPLATE } from '@/lib/chatPrompt';
 import { buildPresetPrompt } from '@/lib/presetPrompt';
 import { buildTextPrompt } from '@/lib/textCompletion';
 import { CompareDialog, type KeptReply } from '@/components/dock/CompareReplies';
 import { presetParams, type ChatPreset } from '@/lib/stPreset';
+import type { RegexScript } from '@/lib/regexScripts';
 import type { LlmConnection, SamplerParams } from '@/types/llm';
 import { describeEntry } from '@/lib/lorebookScan';
 import { AutoTextarea, Button, IconButton, Modal, NumberInput, TokenBadge, Toggle, choiceDialog, confirmDialog, textDialog, cx, downloadBlob, enterSends, inputClass, pickFiles } from '@/components/ui';
@@ -41,6 +42,8 @@ import { uuid } from '@/lib/uuid';
 import { copyText } from '@/lib/clipboard';
 import { CODE_BLOCK_CLASS, CODE_CLASS, HEADING_CLASSES, formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
 import { ChatLink, ChatMedia, ChatRule } from '@/components/ChatMedia';
+import { HtmlPage, HtmlText } from '@/components/ChatHtml';
+import { hasHtml, messageHtml, splitHtmlPages, type HtmlSegment } from '@/lib/chatHtml';
 import { AuthorsNoteDialog } from '@/components/dock/AuthorsNote';
 import { summaryInjection, summarySettings } from '@/lib/chatSummary';
 import { ChatSummaryPanel, useChatSummary } from '@/components/dock/ChatSummaryPanel';
@@ -220,6 +223,9 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const showTimes = chatSettings.showTimestamps ?? true;
   const settings = { ...chatSettings, userName: me.name, persona: me.description };
   const preset = chatSettings.presetId ? (presets.find((p) => p.id === chatSettings.presetId) ?? null) : null;
+  // The regex scripts messages are shown through: the preset's only while it
+  // builds the prompt (a text-completion connection doesn't use it).
+  const regexScripts = chatRegexScripts(card, textTemplates(connection) ? null : preset, chatSettings);
   // The bank's lorebooks this chat brings in beside the card's: its own,
   // the persona's and the global ones (lib/lorebookBank.ts).
   const attachedLore = lorebooksInPlay(bank, { projectId: project?.id, chatLorebookId: chat?.lorebookId, personaLorebookId: me.persona?.lorebookId, globalIds: chatSettings.globalLorebooks });
@@ -650,7 +656,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                 showId={showIds}
                 date={showTimes ? chat.createdAt : undefined}
                 depth={chat.messages.length}
-                regex={chatSettings.useCardRegex !== false}
+                scripts={regexScripts}
               />
               </div>
               {picturesAfter(null)}
@@ -662,7 +668,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     message={m}
                     messageId={showIds ? i + 1 : undefined}
                     depth={chat.messages.length - 1 - i}
-                    regex={chatSettings.useCardRegex !== false}
+                    scripts={regexScripts}
                     showTime={showTimes}
                     userName={me.name}
                     persona={me.persona}
@@ -857,12 +863,30 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
 
 /** *actions* in italics, **bold**, and "speech" highlighted, nested either
  *  way, as frontends show them (lib/chatFormat.ts); <!-- comments --> are
- *  left out (they're for the model). */
+ *  left out (they're for the model). HTML is shown as HTML, and a code
+ *  block holding a whole page runs as one (lib/chatHtml.ts), unless the
+ *  chat settings say not to. */
 function Formatted({ text }: { text: string }) {
+  const renderHtml = useLlmStore((s) => s.chatSettings.renderHtml ?? true);
+  const htmlPages = useLlmStore((s) => s.chatSettings.htmlPages ?? true);
   // Blank lines and spaces around a message aren't shown (older replies
   // were saved with them).
-  const nodes = useMemo(() => formatChat(hideComments(text).trim()), [text]);
-  return <div className="chat-text text-sm leading-relaxed whitespace-pre-wrap text-slate-200">{renderNodes(nodes)}</div>;
+  const parts = useMemo(() => {
+    const shown = hideComments(text).trim();
+    const segments: HtmlSegment[] = htmlPages ? splitHtmlPages(shown) : [{ kind: 'text', text: shown }];
+    return segments.map((s) => (s.kind === 'page' ? s : renderHtml && hasHtml(s.text) ? { kind: 'html' as const, html: messageHtml(s.text.trim()) } : { kind: 'nodes' as const, nodes: formatChat(s.text.trim()) }));
+  }, [text, renderHtml, htmlPages]);
+  const one = (p: (typeof parts)[number], key?: number) =>
+    p.kind === 'page' ? (
+      <HtmlPage key={key} html={p.html} />
+    ) : p.kind === 'html' ? (
+      <HtmlText key={key} html={p.html} />
+    ) : (
+      <div key={key} className="chat-text text-sm leading-relaxed whitespace-pre-wrap text-slate-200">
+        {renderNodes(p.nodes)}
+      </div>
+    );
+  return parts.length === 1 ? one(parts[0]) : <div className="flex flex-col gap-1">{parts.map(one)}</div>;
 }
 
 /** The chat's search words, to mark in the messages. */
@@ -1092,7 +1116,7 @@ function GreetingBubble({
   showId,
   date,
   depth,
-  regex,
+  scripts,
 }: {
   card: CardData;
   index: number;
@@ -1108,10 +1132,10 @@ function GreetingBubble({
   userName: string;
   showId: boolean;
   date?: number;
-  /** Messages after it, for the card's regex scripts' depth limits. */
+  /** Messages after it, for the regex scripts' depth limits. */
   depth: number;
-  /** Run the card's regex scripts on what's shown. */
-  regex: boolean;
+  /** The regex scripts it's shown through (chatRegexScripts). */
+  scripts: RegexScript[];
 }) {
   const own = greetingText(card, index);
   const text = edited ?? own;
@@ -1181,7 +1205,7 @@ function GreetingBubble({
             </div>
           </div>
         ) : shown ? (
-          <Formatted text={shownText(card, shown, 'assistant', depth, { userName, useCardRegex: regex })} />
+          <Formatted text={shownText(card, shown, 'assistant', depth, userName, scripts)} />
         ) : (
           <em className="text-sm text-slate-500">This greeting is empty.</em>
         )}
@@ -1208,7 +1232,7 @@ function Bubble({
   message: m,
   messageId,
   depth,
-  regex,
+  scripts,
   showTime,
   userName,
   persona,
@@ -1229,10 +1253,10 @@ function Bubble({
   message: ChatMessage;
   /** Its number in the chat (the greeting is #0), when they're shown. */
   messageId?: number;
-  /** Messages after it, for the card's regex scripts' depth limits. */
+  /** Messages after it, for the regex scripts' depth limits. */
   depth: number;
-  /** Run the card's regex scripts on what's shown. */
-  regex: boolean;
+  /** The regex scripts it's shown through (chatRegexScripts). */
+  scripts: RegexScript[];
   /** Show when it (this version of it) was written. */
   showTime: boolean;
   userName: string;
@@ -1346,7 +1370,7 @@ function Bubble({
             </div>
           </div>
         ) : text ? (
-          <Formatted text={shownText(card, isUser ? displayText(card, text, userName) : text, m.role, depth, { userName, useCardRegex: regex })} />
+          <Formatted text={shownText(card, isUser ? displayText(card, text, userName) : text, m.role, depth, userName, scripts)} />
         ) : (
           <span className="animate-pulse text-sm text-slate-500">…</span>
         )}
@@ -1549,6 +1573,9 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
           </div>
         )}
         <Toggle checked={s.useCardRegex ?? true} onChange={(v) => setChatSettings({ useCardRegex: v })} label={<span className="text-xs" title="Scripts a card carries (as SillyTavern's Regex extension runs them) to change how messages look or what the model is sent. The card's are listed on its Prompts tab">Run the card&apos;s regex scripts</span>} />
+        <Toggle checked={s.usePresetRegex ?? true} onChange={(v) => setChatSettings({ usePresetRegex: v })} label={<span className="text-xs" title="Scripts a SillyTavern chat-completion preset carries (its preset regex), run before the card's while the preset builds the prompt">Run the preset&apos;s regex scripts</span>} />
+        <Toggle checked={s.renderHtml ?? true} onChange={(v) => setChatSettings({ renderHtml: v })} label={<span className="text-xs" title="As SillyTavern shows it: styled boxes, folding sections and the like that regex scripts and cards put in messages. Scripts, event handlers and forms are taken out, and a message's styles only reach that message">Show HTML in messages</span>} />
+        <Toggle checked={s.htmlPages ?? true} onChange={(v) => setChatSettings({ htmlPages: v })} label={<span className="text-xs" title="A code block holding a whole page (<html>, <body>), as Tavern Helper runs one: its scripts run, in a sandbox that can't reach UCCB, your keys or the rest of the chat. Off, it shows as code">Run HTML pages in messages</span>} />
         <Toggle checked={s.showMessageIds} onChange={(v) => setChatSettings({ showMessageIds: v })} label={<span className="text-xs">Show message numbers (#0 is the greeting)</span>} />
         <Toggle checked={s.showTimestamps ?? true} onChange={(v) => setChatSettings({ showTimestamps: v })} label={<span className="text-xs" title="Each reply's versions have their own; the greeting shows when the chat began">Show when messages were sent</span>} />
         <span className="text-[11px] text-slate-500">Under the portraits:</span>

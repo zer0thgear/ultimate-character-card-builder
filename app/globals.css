@@ -81,16 +81,24 @@ body {
   background: var(--color-slate-600);
 }
 
-/* Chat messages: light markdown-ish styling for *actions* and "speech". */
+/* Chat messages: light markdown-ish styling for *actions* and "speech".
+   The colours are variables so a message's HTML, in a shadow root
+   (components/ChatHtml.tsx), uses them too. */
+.chat-text {
+  --chat-em: var(--color-slate-400);
+  --chat-quote: var(--color-amber-200, #fde68a);
+  --chat-link: var(--color-sky-300);
+}
+:root[data-theme="light"] .chat-text {
+  --chat-quote: var(--color-amber-700);
+  --chat-link: var(--color-sky-700);
+}
 .chat-text em {
-  color: var(--color-slate-400);
+  color: var(--chat-em);
 }
 .chat-text q {
-  color: var(--color-amber-200, #fde68a);
+  color: var(--chat-quote);
   quotes: none;
-}
-:root[data-theme="light"] .chat-text q {
-  color: var(--color-amber-700);
 }
 /* Italics in speech stay the speech's colour, as in SillyTavern. */
 .chat-text q em {
