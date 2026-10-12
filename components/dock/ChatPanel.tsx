@@ -784,6 +784,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                     messageId={showIds ? i + 1 : undefined}
                     depth={chat.messages.length - 1 - i}
                     scripts={regexScripts}
+                    display={scripts.displayFor(m.id, messageText(m))}
                     showTime={showTimes}
                     userName={me.name}
                     persona={me.persona}
@@ -1353,6 +1354,7 @@ function Bubble({
   messageId,
   depth,
   scripts,
+  display,
   showTime,
   userName,
   persona,
@@ -1377,6 +1379,8 @@ function Bubble({
   depth: number;
   /** The regex scripts it's shown through (chatRegexScripts). */
   scripts: RegexScript[];
+  /** How a Tavern Helper script made it look (HTML), shown in place of its text. */
+  display?: string;
   /** Show when it (this version of it) was written. */
   showTime: boolean;
   userName: string;
@@ -1490,7 +1494,11 @@ function Bubble({
             </div>
           </div>
         ) : text ? (
-          <Formatted text={shownText(card, isUser ? displayText(card, text, userName) : text, m.role, depth, userName, scripts)} />
+          display !== undefined ? (
+            <HtmlText html={display} />
+          ) : (
+            <Formatted text={shownText(card, isUser ? displayText(card, text, userName) : text, m.role, depth, userName, scripts)} />
+          )
         ) : (
           <span className="animate-pulse text-sm text-slate-500">…</span>
         )}

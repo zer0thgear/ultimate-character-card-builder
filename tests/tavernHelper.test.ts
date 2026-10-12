@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cardScripts, fromStWorldFile, fromThPreset, fromThRegexes, fromThWorldbook, messageRange, presetScripts, rawPrompt, scriptKey, scriptSrcdoc, stWorldFile, thMessages, thPreset, thRegexes, thWorldbook, withInjections } from '@/lib/tavernHelper';
 import { newEntry, newLorebook } from '@/lib/cardSpec';
-import { parseStPreset } from '@/lib/stPreset';
+import { parseStPreset, toStPreset } from '@/lib/stPreset';
 import { cardRegexScripts } from '@/lib/regexScripts';
 import { newMessage } from '@/lib/chatPrompt';
 
@@ -90,6 +90,20 @@ describe('Tavern Helper scripts', () => {
     expect(back.prompts.find((x) => x.identifier === 'mine')).toMatchObject({ content: 'Be very brief.', injectionPosition: 1, injectionDepth: 2 });
     expect(back.prompts.some((x) => x.identifier === 'spare')).toBe(true);
     expect((back.extra?.extensions as { tavern_helper: { variables: unknown } }).tavern_helper.variables).toEqual({ mood: 'calm' });
+  });
+
+  it("keeps a prompt's own fields (its extra, other extensions') through import, scripts and export", () => {
+    const p = parseStPreset({
+      prompts: [{ identifier: 'tagged', name: 'Tagged', content: 'x', extra: { izumi_layer: 'structure' }, attach_index: 1, attach_side: 'end' }],
+      prompt_order: [{ character_id: 100001, order: [{ identifier: 'tagged', enabled: true }] }],
+    });
+    expect(toStPreset(p).prompts).toEqual(expect.arrayContaining([expect.objectContaining({ identifier: 'tagged', extra: { izumi_layer: 'structure' }, attach_index: 1, attach_side: 'end' })]));
+    const th = thPreset(p) as { prompts: Record<string, unknown>[] };
+    expect(th.prompts[0].extra).toEqual({ izumi_layer: 'structure' });
+    // A script changes the tag; the other fields stay.
+    th.prompts[0].extra = { izumi_layer: 'thinking' };
+    const back = fromThPreset(th, p);
+    expect(back.prompts.find((x) => x.identifier === 'tagged')?.rest).toEqual({ extra: { izumi_layer: 'thinking' }, attach_index: 1, attach_side: 'end' });
   });
 
   it('gives regex scripts in Tavern Helper\'s shape, and takes them back', () => {

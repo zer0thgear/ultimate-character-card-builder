@@ -163,7 +163,11 @@ export function thPreset(p: ChatPreset): Record<string, unknown> {
         : { position: x.injectionPosition === 1 ? { type: 'in_chat', depth: x.injectionDepth, order: x.injectionOrder } : { type: 'relative' } }),
       role: x.role,
       ...(PLACEHOLDERS.includes(id) ? {} : { content: x.content }),
-      ...(x.forbidOverrides ? { extra: { forbid_overrides: true } } : {}),
+      // The prompt's own `extra` (what a preset's scripts tag prompts with).
+      ...(() => {
+        const extra = { ...record(x.rest?.extra), ...(x.forbidOverrides ? { forbid_overrides: true } : {}) };
+        return Object.keys(extra).length ? { extra } : {};
+      })(),
     };
   };
   const ordered = new Set(p.order.map((o) => o.identifier));
@@ -215,7 +219,14 @@ export function fromThPreset(raw: unknown, base: ChatPreset): ChatPreset {
     const was = old.get(id);
     const pos = isObject(x.position) ? x.position : null;
     const inChat = pos ? pos.type === 'in_chat' : was?.injectionPosition === 1;
+    // `extra` comes back as the prompt's own, less the forbid_overrides flag
+    // UCCB keeps there; the prompt's other fields stay as they were.
+    const extra = isObject(x.extra) ? { ...x.extra } : undefined;
+    const forbid = extra && 'forbid_overrides' in extra ? extra.forbid_overrides === true : (was?.forbidOverrides ?? false);
+    if (extra) delete extra.forbid_overrides;
     return {
+      ...was?.rest,
+      ...(extra ? { extra } : {}),
       identifier: id,
       name: str(x.name) || was?.name || id,
       role: x.role === 'user' || x.role === 'assistant' ? x.role : 'system',
@@ -225,7 +236,7 @@ export function fromThPreset(raw: unknown, base: ChatPreset): ChatPreset {
       injection_position: inChat ? 1 : 0,
       injection_depth: num(pos?.depth, was?.injectionDepth ?? 4),
       injection_order: num(pos?.order, was?.injectionOrder ?? 100),
-      forbid_overrides: isObject(x.extra) && x.extra.forbid_overrides === true ? true : (was?.forbidOverrides ?? false),
+      forbid_overrides: forbid,
     };
   };
   const prompts = [...used, ...unused].filter((x) => str(x.id)).map(toSt);

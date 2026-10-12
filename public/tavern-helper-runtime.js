@@ -325,9 +325,13 @@
 
   const inUse = (name) => name === undefined || name === 'in_use' || name === state.presetName;
   function getPreset(name) {
-    if (!inUse(name)) throw new Error(`Only the preset in use can be read in UCCB (asked for "${name}").`);
-    if (!state.preset) throw new Error('No preset is in use.');
-    return clone(state.preset);
+    if (inUse(name)) {
+      if (!state.preset) throw new Error('No preset is in use.');
+      return clone(state.preset);
+    }
+    const p = (state.allPresets || {})[name];
+    if (!p) throw new Error(`There's no preset "${name}".`);
+    return clone(p);
   }
   async function replacePreset(name, preset) {
     if (inUse(name)) state.preset = clone(preset);
@@ -346,7 +350,6 @@
     post({ method: 'loadPreset', args: { name } });
     return true;
   }
-  const unsupported = (what) => () => Promise.reject(new Error(`${what} is not supported in UCCB.`));
   const SYSTEM = ['main', 'nsfw', 'jailbreak', 'enhanceDefinitions'];
   const PLACE = ['worldInfoBefore', 'personaDescription', 'charDescription', 'charPersonality', 'scenario', 'worldInfoAfter', 'dialogueExamples', 'chatHistory'];
   const isPresetSystemPrompt = (p) => SYSTEM.includes(p.id);
@@ -456,7 +459,13 @@
     eventOn, eventOnce, eventMakeFirst, eventMakeLast, eventEmit, eventEmitAndWait, eventRemoveListener, eventClearEvent, eventClearListener, eventClearAll, eventOnButton, getButtonEvent,
     tavern_events, iframe_events,
     getPreset, replacePreset, updatePresetWith, setPreset, getPresetNames, getLoadedPresetName, loadPreset,
-    createPreset: unsupported('createPreset'), createOrReplacePreset: unsupported('createOrReplacePreset'), deletePreset: unsupported('deletePreset'), renamePreset: unsupported('renamePreset'),
+    createPreset: (name, preset) => call('createPreset', { name, preset, replace: false }),
+    createOrReplacePreset: (name, preset) => call('createPreset', { name, preset, replace: true }),
+    deletePreset: (name) => call('deletePreset', { name }),
+    renamePreset: (name, newName) => call('renamePreset', { name, newName }),
+    get default_preset() {
+      return clone(state.defaultPreset);
+    },
     isPresetNormalPrompt, isPresetSystemPrompt, isPresetPlaceholderPrompt,
     getTavernRegexes, replaceTavernRegexes, updateTavernRegexesWith, isCharacterTavernRegexesEnabled, formatAsTavernRegexedString,
     generate, generateRaw, stopAllGeneration, stopGenerationById,
@@ -483,6 +492,7 @@
     },
   };
   Object.assign(window, TavernHelper, { TavernHelper, toastr });
+  Object.defineProperty(window, 'default_preset', { configurable: true, get: () => clone(state.defaultPreset) });
 
   // A sandboxed frame has no storage of its own. A script's localStorage is
   // kept by the chat (with its settings, per script) and comes back the next
@@ -774,10 +784,14 @@
   const sendButton = document.getElementById('send_but');
   if (sendButton) sendButton.addEventListener('click', () => post({ method: 'submit', args: { text: box ? box.value : '' } }));
 
-  /** SillyTavern's #chat (hidden), for scripts that read messages from it. */
+  /** SillyTavern's #chat (hidden), for scripts that read messages from it.
+   *  What a script writes into a message's .mes_text there is shown in
+   *  UCCB's chat in its place (see watchDisplays below). */
+  let rendering = false;
   function renderChat() {
     const el = document.getElementById('chat');
     if (!el) return;
+    rendering = true;
     el.textContent = '';
     for (const m of chat()) {
       const d = document.createElement('div');
@@ -792,7 +806,71 @@
       d.appendChild(text);
       el.appendChild(d);
     }
+    // The observer hears these after this returns; they're ours.
+    setTimeout(() => {
+      rendering = false;
+    }, 0);
   }
+
+  // A script changing how a message looks (its .mes_text in #chat), as
+  // Tavern Helper scripts change SillyTavern's: the chat shows it instead.
+  const changedDisplays = new Set();
+  let displayTimer = null;
+  function watchDisplays() {
+    const el = document.getElementById('chat');
+    if (!el) return;
+    new MutationObserver((records) => {
+      if (rendering) return;
+      for (const r of records) {
+        const node = r.target.nodeType === 1 ? r.target : r.target.parentElement;
+        const mes = node && node.closest ? node.closest('.mes') : null;
+        if (mes) changedDisplays.add(mes);
+      }
+      clearTimeout(displayTimer);
+      displayTimer = setTimeout(() => {
+        for (const mes of changedDisplays) {
+          const id = Number(mes.getAttribute('mesid'));
+          const text = mes.querySelector('.mes_text');
+          const m = chat()[id];
+          if (text && m && mes.isConnected) post({ method: 'display', args: { message_id: id, html: text.innerHTML, text: m.message } });
+        }
+        changedDisplays.clear();
+      }, 50);
+    }).observe(el, { subtree: true, childList: true, characterData: true, attributes: true });
+  }
+  /** A message's .mes_text, as Tavern Helper gives it (with jQuery). */
+  function retrieveDisplayedMessage(id) {
+    const el = document.querySelector(`#chat .mes[mesid="${Number(id)}"] .mes_text`);
+    return window.jQuery ? window.jQuery(el || []) : el ? [el] : [];
+  }
+  /** Text as the chat shows a message: *italics*, **bold**, line breaks. */
+  function formatAsDisplayedMessage(text) {
+    return String(text ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+      .replace(/"([^"\n]*)"/g, '<q>"$1"</q>')
+      .replace(/\n/g, '<br>');
+  }
+  /** Shows a message as it is again (drops what a script made of its look). */
+  function refreshOneMessage(id) {
+    post({ method: 'display', args: { message_id: Number(id), html: null } });
+    const m = chat()[Number(id)];
+    const text = document.querySelector(`#chat .mes[mesid="${Number(id)}"] .mes_text`);
+    if (m && text) {
+      rendering = true;
+      text.textContent = m.message;
+      setTimeout(() => {
+        rendering = false;
+      }, 0);
+    }
+    return Promise.resolve();
+  }
+  const saveChatDebounced = () => void saveChat().catch((err) => console.error(err));
+  Object.assign(TavernHelper, { retrieveDisplayedMessage, formatAsDisplayedMessage, refreshOneMessage });
+  Object.assign(window, { retrieveDisplayedMessage, formatAsDisplayedMessage, refreshOneMessage, saveChatDebounced });
   /** SillyTavern's prompt manager list (hidden), from the preset in use. */
   function renderPromptList() {
     const el = document.getElementById('completion_prompt_manager_list');
@@ -889,7 +967,7 @@
     getAllPresets: () => getPresetNames(),
     getPresetList: () => ({ presets: [], preset_names: getPresetNames() }),
     findPreset: (name) => (getPresetNames().includes(name) ? name : undefined),
-    getCompletionPresetByName: (name) => (name === state.presetName ? clone(state.stPreset) : undefined),
+    getCompletionPresetByName: (name) => (name === state.presetName ? clone(state.stPreset) : clone((state.allStPresets || {})[name])),
     selectPreset: (name) => loadPreset(name),
     savePreset: (name, settings) => call('saveStPreset', { name: name || 'in_use', settings: settings || state.stPreset }),
   };
@@ -910,6 +988,7 @@
       chatMetadata,
       saveMetadata: async () => writeVars({ type: 'chat' }, chatMetadata.variables || {}),
       saveChat,
+      saveChatDebounced,
       characters: [Object.assign({ data: clone(c) }, clone(c))],
       characterId: '0',
       this_chid: 0,
@@ -1002,6 +1081,7 @@
   syncStChat();
   renderChat();
   renderPromptList();
+  watchDisplays();
 
   window.addEventListener('message', async (e) => {
     if (e.source !== host) return;

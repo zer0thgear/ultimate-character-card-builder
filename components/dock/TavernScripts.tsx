@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import type { CardData, Lorebook } from '@/types/card';
 import type { BankLorebook, ChatMessage, ChatSession } from '@/types/project';
-import { parseStPreset, toStPreset, type ChatPreset } from '@/lib/stPreset';
+import { newPreset, parseStPreset, toStPreset, type ChatPreset } from '@/lib/stPreset';
 import { chatGreeting, newMessage, type ChatPromptSettings } from '@/lib/chatPrompt';
 import {
   cardScripts,
@@ -184,6 +184,9 @@ export function useTavernScripts({
   const [reloads, setReloads] = useState<Record<string, number>>({});
   /** What each script shows over the chat (see the runtime's report()). */
   const [overlays, setOverlays] = useState<Record<string, { rects: number[][]; grab: boolean }>>({});
+  /** How scripts changed messages' look (by message id), with the text it
+   *  was for: shown in place of the message until its text changes. */
+  const [displays, setDisplays] = useState<{ chatId?: string; byId: Record<string, { html: string; text: string }> }>({ byId: {} });
   /** Each running script's frame, by its key. */
   const [frames] = useState(() => new Map<string, HTMLIFrameElement>());
   const injections = useRef(new Map<string, ThInjection & { once: boolean }>());
@@ -206,6 +209,18 @@ export function useTavernScripts({
     () => (preset && running.length ? { ...toStPreset(preset), chat_completion_source: 'custom', custom_model: model ?? '', openai_model: model ?? '' } : null),
     [preset, running.length, model],
   );
+  // The other presets, for scripts that read them by name (getPreset, the
+  // preset manager), and Tavern Helper's default_preset.
+  const presetList = useLlmStore((s) => s.presets);
+  const otherPresetsPart = useMemo(() => {
+    if (!running.length) return { all: {}, allSt: {} };
+    const others = presetList.filter((p) => p.id !== preset?.id).reverse();
+    return {
+      all: Object.fromEntries(others.map((p) => [p.name, thPreset(p)])),
+      allSt: Object.fromEntries(others.map((p) => [p.name, { ...toStPreset(p), chat_completion_source: 'custom' }])),
+    };
+  }, [presetList, preset?.id, running.length]);
+  const defaultPresetPart = useMemo(() => (running.length ? thPreset(newPreset('Default')) : null), [running.length]);
   const cardPart = useMemo(
     () =>
       card
@@ -257,7 +272,7 @@ export function useTavernScripts({
     [worldbooksPart.global, settings.loreScanDepth, settings.loreTokenBudget, settings.loreMaxRecursion],
   );
   const scriptVars = settings.thScriptVars;
-  const snapshot = (script: TavernScript) => ({ chat: chatPart, preset: presetPart, stPreset: stPresetPart, input, regexes: regexPart, worldbooks: worldbooksPart, loreSettings: loreSettingsPart, vars: { ...varsPart, script: scriptVars?.[script.id] ?? {} }, ...misc });
+  const snapshot = (script: TavernScript) => ({ chat: chatPart, preset: presetPart, stPreset: stPresetPart, allPresets: otherPresetsPart.all, allStPresets: otherPresetsPart.allSt, defaultPreset: defaultPresetPart, input, regexes: regexPart, worldbooks: worldbooksPart, loreSettings: loreSettingsPart, vars: { ...varsPart, script: scriptVars?.[script.id] ?? {} }, ...misc });
   const latest = useRef({ running, snapshot, chat, chatPart, preset, actions, card, names });
   useEffect(() => {
     latest.current = { running, snapshot, chat, chatPart, preset, actions, card, names };
@@ -280,6 +295,7 @@ export function useTavernScripts({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatPart]);
   useEffect(() => postAll({ state: { preset: presetPart, stPreset: stPresetPart, regexes: regexPart, ...misc } }), [presetPart, stPresetPart, regexPart, misc]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => postAll({ state: { allPresets: otherPresetsPart.all, allStPresets: otherPresetsPart.allSt, defaultPreset: defaultPresetPart } }), [otherPresetsPart, defaultPresetPart]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => postAll({ state: { input } }), [input]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => postAll({ state: { worldbooks: worldbooksPart, loreSettings: loreSettingsPart } }), [worldbooksPart, loreSettingsPart]); // eslint-disable-line react-hooks/exhaustive-deps
   // A script whose saved storage was cleared (Chat settings) starts afresh.
@@ -465,9 +481,53 @@ export function useTavernScripts({
         case 'submit':
           if (String(a.text ?? '').trim()) act?.submit(String(a.text));
           return;
+        case 'display': {
+          const n = Number(a.message_id);
+          const ms = useChatStore.getState().chat?.messages ?? [];
+          const id = n === 0 ? 'greeting' : ms[n - off]?.id;
+          if (!id) return;
+          const chatId = useChatStore.getState().chat?.id;
+          setDisplays((d) => {
+            const byId = { ...(d.chatId === chatId ? d.byId : {}) };
+            if (typeof a.html === 'string') byId[id] = { html: a.html, text: String(a.text ?? '') };
+            else delete byId[id];
+            return { chatId, byId };
+          });
+          return;
+        }
         case 'overlay':
           setOverlays((o) => ({ ...o, [key]: { rects: (Array.isArray(a.rects) ? a.rects : []).filter((r): r is number[] => Array.isArray(r) && r.length === 4 && r.every((n) => typeof n === 'number' && Number.isFinite(n))).slice(0, 200), grab: a.grab === true } }));
           return;
+        case 'createPreset': {
+          const name = String(a.name ?? '').trim();
+          if (!name) throw new Error('A preset needs a name.');
+          const target = name === 'in_use' ? p : llm.presets.find((x) => x.name === name);
+          if (target && a.replace !== true) return false;
+          if (target) {
+            llm.updatePreset(target.id, fromThPreset(a.preset ?? thPreset(newPreset(target.name)), target));
+            return true;
+          }
+          const made = newPreset(name);
+          const full = a.preset ? fromThPreset(a.preset, made) : made;
+          // Added to the list, not put in use (as in SillyTavern).
+          useLlmStore.setState((s) => ({ presets: [...s.presets, full] }));
+          return true;
+        }
+        case 'deletePreset': {
+          const target = llm.presets.find((x) => x.name === a.name);
+          if (!target) return false;
+          if (target.id === p?.id) throw new Error("The preset in use can't be deleted; pick another first.");
+          const ok = await confirmDialog({ title: `Delete the preset "${target.name}"?`, body: `The script "${script.name}" wants to delete it from your presets. This can't be undone.`, confirmLabel: 'Delete', danger: true });
+          if (ok) llm.removePreset(target.id);
+          return ok;
+        }
+        case 'renamePreset': {
+          const target = llm.presets.find((x) => x.name === a.name);
+          const newName = String(a.newName ?? '').trim();
+          if (!target || !newName || llm.presets.some((x) => x.name === newName)) return false;
+          llm.updatePreset(target.id, { name: newName });
+          return true;
+        }
         case 'loadPreset': {
           const target = llm.presets.find((x) => x.name === a.name);
           if (target) llm.setChatSettings({ presetId: target.id });
@@ -664,7 +724,14 @@ export function useTavernScripts({
   const shownButtons = running.flatMap((r) => (buttons[r.key] ?? r.script.buttons).filter((b) => b.visible).map((b) => ({ key: r.key, script: r.script, name: b.name })));
   const clickButton = (key: string, name: string) => post(key, { event: name, args: [] });
 
-  return { all, running, pending, frames: frameNodes, buttons: shownButtons, clickButton, emit, beforeSend, setGenerating, messageNumber };
+  /** How a script made a message look, while its text is still 	ext. */
+  const displayFor = (id: string, text: string) => {
+    if (displays.chatId !== chat?.id) return undefined;
+    const d = displays.byId[id];
+    return d && d.text === text ? d.html : undefined;
+  };
+
+  return { all, running, pending, frames: frameNodes, displayFor, buttons: shownButtons, clickButton, emit, beforeSend, setGenerating, messageNumber };
 }
 
 /** The runtime's text (public/tavern-helper-runtime.js), fetched once when
@@ -728,7 +795,8 @@ function ScriptFrame({
       // Its own dialogs (confirm, prompt) and downloads, as in SillyTavern.
       sandbox="allow-scripts allow-modals allow-downloads"
       referrerPolicy="no-referrer"
-      allow=""
+      // Copy and paste in its panels, as in SillyTavern (the browser may ask before a paste).
+      allow="clipboard-read *; clipboard-write *"
       srcDoc={srcdoc}
       style={{ position: 'fixed', inset: 0, width: '100vw', height: '100dvh', border: 0, background: 'transparent', colorScheme: 'normal', zIndex: 35, clipPath: clip }}
     />
