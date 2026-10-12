@@ -333,7 +333,10 @@ export function scriptSrcdoc(script: TavernScript, boot: Record<string, unknown>
   const libs = SCRIPT_LIBS.map((src) => `<script src="${src}"></script>`).join('');
   // The script's text can't end its own <script> early.
   const code = script.content.replace(/<\/(script)/gi, '<\\/$1');
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><script>window.__TH_BOOT=${jsonForScript(boot)}</script>${libs}<script>${runtime.replace(/<\/(script)/gi, '<\\/$1')}</script></head><body><script>${code}\n</script></body></html>`;
+  // The page is see-through (the chat shows only what the script puts on
+  // it), with the parts of SillyTavern's page scripts look for, hidden.
+  const page = '<div id="uccb-st" hidden><div id="chat"></div><textarea id="send_textarea"></textarea><div id="send_but"></div><ul id="completion_prompt_manager_list"></ul></div>';
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{background:transparent;margin:0}</style><script>window.__TH_BOOT=${jsonForScript(boot)}</script>${libs}</head><body>${page}<script>${runtime.replace(/<\/(script)/gi, '<\\/$1')}</script><script>${code}\n</script></body></html>`;
 }
 
 /** generateRaw's prompt: its own order of placeholders and role prompts

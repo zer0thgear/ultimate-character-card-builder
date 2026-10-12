@@ -197,8 +197,9 @@ A script you allow can do what Tavern Helper's API lets it, and no more: it neve
 - **The preset in use and regex scripts**: read and replace the preset (its prompts, order, samplers and extensions) and the preset's and card's regex scripts.
 - **Buttons**: a script's buttons show above the message box.
 - And `triggerSlash` (`/setinput`, `/send`, `/trigger`, `/echo`), toasts, `substitudeMacros` (names, `{{getvar}}`) and lodash and jQuery, as Tavern Helper has them.
+- **SillyTavern's page**: scripts made for SillyTavern put their own buttons and windows on its page, as the Izumi preset's floating window does. Here those show over the chat, and only what a script shows takes clicks; everything around it is UCCB as usual. Its `confirm` and `prompt` dialogs and downloads work. `SillyTavern.getContext()` gives what such scripts most often use: the chat (edited in place, then `saveChat()`), `eventSource` and `event_types`, the preset as SillyTavern's settings (`chatCompletionSettings`, kept with `saveSettingsDebounced()`) and its preset manager, `chatMetadata`, the character and your names, `generateQuietPrompt` and `generateRaw`. SillyTavern's message box and send button are there for them too. What a script keeps in its own storage lasts until the chat is closed.
 
-What isn't there: SillyTavern itself (scripts that build their own panels into SillyTavern's page, such as the Izumi preset's floating window, run but show nothing), lorebooks, presets other than the one in use, other slash commands, and globals shared between scripts. Pages in messages (see the chat's HTML) don't get this API; they can fill in and send the message box.
+What isn't there: the rest of SillyTavern (its other settings, its server, its other panels; a script reaching for those says so or does nothing), lorebooks, presets other than the one in use, other slash commands, and globals shared between scripts. Pages in messages (see the chat's HTML) don't get this API; they can fill in and send the message box.
 
 ## Chat mode
 

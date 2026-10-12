@@ -484,24 +484,6 @@
   };
   Object.assign(window, TavernHelper, { TavernHelper, toastr });
 
-  // Pages written for SillyTavern reach for its page through `parent`; they
-  // get a little page of their own instead (nothing in it is shown).
-  const stand = new Proxy(
-    {},
-    {
-      get(_, k) {
-        if (k === 'document') return standDoc;
-        if (k === 'window' || k === 'parent' || k === 'self') return stand;
-        if (k === 'TavernHelper') return TavernHelper;
-        if (k === 'toastr') return toastr;
-        if (k === 'postMessage') return host.postMessage.bind(host);
-        if (typeof k === 'string' && k in TavernHelper) return TavernHelper[k];
-        // Anything else is this frame's own (addEventListener, setTimeout…).
-        const own = window[k];
-        return typeof own === 'function' ? own.bind(window) : own;
-      },
-    },
-  );
   // A sandboxed frame has no storage of its own; scripts get one that lasts
   // as long as the frame.
   for (const name of ['localStorage', 'sessionStorage']) {
@@ -522,10 +504,263 @@
       Object.defineProperty(window, name, { configurable: true, value: storage });
     }
   }
-  const standDoc = document.implementation.createHTMLDocument('SillyTavern');
-  Object.defineProperty(window, 'parent', { configurable: true, value: stand });
 
+  // ─── SillyTavern's page ──────────────────────────────────────────────────
+  //
+  // Scripts written for SillyTavern reach for its page through `parent`
+  // (Tavern Helper runs them in a frame of SillyTavern's own). Here this
+  // frame is that page: `parent` is this window, the few parts of
+  // SillyTavern's page scripts look for are in it (hidden), and what a
+  // script shows on it (a floating button, a panel) is shown over UCCB's
+  // chat: the frame covers the window, and the chat clips it to what's
+  // showing, so clicks anywhere else go through (see report() below).
+
+  Object.defineProperty(window, 'parent', { configurable: true, value: window });
+
+  const box = document.getElementById('send_textarea');
+  if (box) {
+    const val = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+    Object.defineProperty(box, 'value', {
+      configurable: true,
+      get: () => val.get.call(box),
+      set: (v) => {
+        val.set.call(box, v);
+        post({ method: 'input', args: { text: String(v) } });
+      },
+    });
+    box.addEventListener('input', () => post({ method: 'input', args: { text: box.value } }));
+  }
+  const sendButton = document.getElementById('send_but');
+  if (sendButton) sendButton.addEventListener('click', () => post({ method: 'submit', args: { text: box ? box.value : '' } }));
+
+  /** SillyTavern's #chat (hidden), for scripts that read messages from it. */
+  function renderChat() {
+    const el = document.getElementById('chat');
+    if (!el) return;
+    el.textContent = '';
+    for (const m of chat()) {
+      const d = document.createElement('div');
+      d.className = 'mes';
+      d.setAttribute('mesid', String(m.message_id));
+      d.setAttribute('is_user', String(m.role === 'user'));
+      d.setAttribute('is_system', String(m.is_hidden));
+      d.setAttribute('ch_name', m.name);
+      const text = document.createElement('div');
+      text.className = 'mes_text';
+      text.textContent = m.message;
+      d.appendChild(text);
+      el.appendChild(d);
+    }
+  }
+  /** SillyTavern's prompt manager list (hidden), from the preset in use. */
+  function renderPromptList() {
+    const el = document.getElementById('completion_prompt_manager_list');
+    if (!el) return;
+    el.textContent = '';
+    for (const p of (state.preset && state.preset.prompts) || []) {
+      const li = document.createElement('li');
+      li.className = 'completion_prompt_manager_prompt' + (p.enabled ? '' : ' completion_prompt_manager_prompt_disabled');
+      li.setAttribute('data-pm-identifier', p.id);
+      const name = document.createElement('span');
+      name.setAttribute('data-pm-name', p.name);
+      name.textContent = p.name;
+      li.appendChild(name);
+      el.appendChild(li);
+    }
+  }
+
+  // SillyTavern's chat as its scripts change it: messages edited in place,
+  // then saveChat() to keep them.
+  const stChat = [];
+  let stBase = [];
+  const stMessage = (m) => ({
+    name: m.name,
+    is_user: m.role === 'user',
+    is_system: m.is_hidden,
+    mes: m.message,
+    swipes: m.swipes.slice(),
+    swipe_id: m.swipe_id,
+    extra: {},
+    variables: m.swipes_data.map((d) => clone(d) || {}),
+    send_date: '',
+  });
+  function syncStChat() {
+    stChat.length = 0;
+    for (const m of chat()) stChat.push(stMessage(m));
+    stBase = clone(stChat);
+  }
+  async function saveChat() {
+    const changes = [];
+    stChat.forEach((m, i) => {
+      const b = stBase[i];
+      if (!b || !m) return;
+      const change = { message_id: i };
+      let changed = false;
+      if (JSON.stringify(m.swipes) !== JSON.stringify(b.swipes)) {
+        change.swipes = m.swipes;
+        change.swipe_id = m.swipe_id;
+        changed = true;
+      } else if (m.swipe_id !== b.swipe_id) {
+        change.swipe_id = m.swipe_id;
+        changed = true;
+      }
+      if (m.mes !== b.mes) {
+        change.message = m.mes;
+        changed = true;
+      }
+      if (!!m.is_system !== !!b.is_system) {
+        change.is_hidden = !!m.is_system;
+        changed = true;
+      }
+      if (JSON.stringify(m.variables) !== JSON.stringify(b.variables)) {
+        change.swipes_data = m.variables;
+        changed = true;
+      }
+      if (changed) changes.push(change);
+    });
+    const before = stBase.length;
+    const after = stChat.length;
+    const added = stChat.slice(before);
+    stBase = clone(stChat);
+    if (changes.length) await setChatMessages(changes);
+    if (after > before) await createChatMessages(added.map((m) => ({ role: m.is_user ? 'user' : m.is_system ? 'system' : 'assistant', message: m.mes, is_hidden: !!m.is_system })));
+    else if (after < before) await deleteChatMessages(Array.from({ length: before - after }, (_, i) => after + i));
+  }
+
+  // The preset as SillyTavern's settings (oai_settings), and its preset manager.
+  let lastSaved = '';
+  let saveTimer = null;
+  function saveSettings() {
+    const settings = state.stPreset;
+    if (!settings) return Promise.resolve();
+    const json = JSON.stringify(settings);
+    if (json === lastSaved) return Promise.resolve();
+    lastSaved = json;
+    return call('saveStPreset', { name: 'in_use', settings });
+  }
+  const saveSettingsDebounced = () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => void saveSettings().catch((err) => console.error(err)), 500);
+  };
+  const presetManager = {
+    getSelectedPresetName: () => state.presetName || '',
+    getSelectedPreset: () => state.presetName || '',
+    getAllPresets: () => getPresetNames(),
+    getPresetList: () => ({ presets: [], preset_names: getPresetNames() }),
+    findPreset: (name) => (getPresetNames().includes(name) ? name : undefined),
+    getCompletionPresetByName: (name) => (name === state.presetName ? clone(state.stPreset) : undefined),
+    selectPreset: (name) => loadPreset(name),
+    savePreset: (name, settings) => call('saveStPreset', { name: name || 'in_use', settings: settings || state.stPreset }),
+  };
+  const eventSource = {
+    on: eventOn,
+    once: eventOnce,
+    makeFirst: eventMakeFirst,
+    makeLast: eventMakeLast,
+    removeListener: eventRemoveListener,
+    emit: eventEmit,
+  };
+  const chatMetadata = {};
+  function getContext() {
+    const c = state.card || {};
+    chatMetadata.variables = vars().chat || {};
+    return {
+      chat: stChat,
+      chatMetadata,
+      saveMetadata: async () => writeVars({ type: 'chat' }, chatMetadata.variables || {}),
+      saveChat,
+      characters: [Object.assign({ data: clone(c) }, clone(c))],
+      characterId: '0',
+      this_chid: 0,
+      groupId: null,
+      chatId: state.chatId || '',
+      getCurrentChatId: () => state.chatId || '',
+      name1: (state.names && state.names.user) || 'User',
+      name2: (state.names && state.names.char) || 'Character',
+      onlineStatus: 'connected',
+      mainApi: state.preset ? 'openai' : 'textgenerationwebui',
+      chatCompletionSettings: state.stPreset || null,
+      maxContext: (state.stPreset && state.stPreset.openai_max_context) || 0,
+      getChatCompletionModel: () => state.model || '',
+      getPresetManager: () => presetManager,
+      saveSettings,
+      saveSettingsDebounced,
+      extensionSettings: {},
+      eventSource,
+      eventTypes: tavern_events,
+      event_types: tavern_events,
+      substituteParams: substitudeMacros,
+      getRequestHeaders: () => ({ 'Content-Type': 'application/json' }),
+      generateQuietPrompt: (arg) => generate({ user_input: String(typeof arg === 'object' && arg ? arg.quietPrompt || '' : arg) }),
+      generateRaw: (arg) => {
+        const o = typeof arg === 'object' && arg ? arg : { prompt: String(arg) };
+        return generateRaw({ ordered_prompts: [...(o.systemPrompt ? [{ role: 'system', content: String(o.systemPrompt) }] : []), { role: 'user', content: String(o.prompt || '') }] });
+      },
+      callPopup: async (text, type) => (type === 'confirm' ? window.confirm(String(text)) : (window.alert(String(text)), true)),
+      toastr,
+    };
+  }
+  window.SillyTavern = { getContext };
+  Object.assign(window, { eventSource, event_types: tavern_events, saveSettingsDebounced });
+
+  // What the script shows: the boxes of what it put on the page (the parts
+  // SillyTavern's own page would show it over), so the chat clips this
+  // frame to them. While a pointer is down in it (a drag), it takes the
+  // whole window, so the drag doesn't slip out.
+  let lastRects = '';
+  let grabbing = false;
+  let queued = false;
+  function report() {
+    queued = false;
+    const rects = [];
+    const consider = (el) => {
+      if (el.id === 'uccb-st' || el.tagName === 'SCRIPT' || el.tagName === 'STYLE' || el.tagName === 'LINK') return;
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) return;
+      if (cs.position === 'fixed' || cs.position === 'absolute' || cs.position === 'sticky') {
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) rects.push([Math.floor(r.left), Math.floor(r.top), Math.ceil(r.width) + 1, Math.ceil(r.height) + 1]);
+        return;
+      }
+      // A plain box doesn't show over the chat, but what's pinned inside it might.
+      for (const child of el.children) consider(child);
+    };
+    if (document.body) for (const el of document.body.children) consider(el);
+    const key = JSON.stringify(rects);
+    if (key === lastRects) return;
+    lastRects = key;
+    post({ method: 'overlay', args: { rects, grab: grabbing } });
+  }
+  const schedule = () => {
+    if (queued) return;
+    queued = true;
+    // Not requestAnimationFrame: the browser holds those back in a frame
+    // that shows nothing yet, which is how this one starts.
+    setTimeout(report, 16);
+  };
+  const grab = (on) => {
+    if (grabbing === on) return;
+    grabbing = on;
+    post({ method: 'overlay', args: { rects: JSON.parse(lastRects || '[]'), grab: on } });
+  };
+  document.addEventListener('DOMContentLoaded', () => {
+    new MutationObserver(schedule).observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+    schedule();
+  });
+  window.addEventListener('resize', schedule);
+  window.addEventListener('transitionend', schedule, true);
+  window.addEventListener('animationend', schedule, true);
+  // Animations and the like the observer can't see.
+  setInterval(schedule, 500);
+  window.addEventListener('pointerdown', () => grab(true), true);
+  window.addEventListener('pointerup', () => (grab(false), schedule()), true);
+  window.addEventListener('pointercancel', () => grab(false), true);
+  window.addEventListener('blur', () => grab(false));
   // ─── From the chat ───────────────────────────────────────────────────────
+
+  syncStChat();
+  renderChat();
+  renderPromptList();
 
   window.addEventListener('message', async (e) => {
     if (e.source !== host) return;
@@ -539,6 +774,12 @@
       else p.resolve(m.value);
     } else if (m.state) {
       Object.assign(state, m.state);
+      if (m.state.chat) {
+        syncStChat();
+        renderChat();
+      }
+      if (m.state.preset) renderPromptList();
+      if (typeof m.state.input === 'string' && box) Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(box, m.state.input);
     } else if (typeof m.event === 'string') {
       const args = Array.isArray(m.args) ? m.args : [];
       await emitHere(m.event, args);

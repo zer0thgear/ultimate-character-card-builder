@@ -137,5 +137,8 @@ describe('Tavern Helper scripts', () => {
     expect(doc).toContain('const x = "<\\/script><b>";');
     expect(doc).toContain('\\u003c/script>');
     expect(doc.indexOf('/rt.js')).toBeLessThan(doc.indexOf('const x'));
+    // SillyTavern's page parts come before the runtime, which finds them.
+    expect(doc.indexOf('id="send_textarea"')).toBeLessThan(doc.indexOf('/rt.js'));
+    expect(doc).toContain('<div id="uccb-st" hidden>');
   });
 });

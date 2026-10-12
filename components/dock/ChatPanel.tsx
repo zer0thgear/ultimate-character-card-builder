@@ -80,6 +80,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   // Tavern Helper scripts (the preset's and the card's): their own
   // generations run apart from the chat's.
   const scriptStream = useLlmStream();
+  const [input, setInput] = useState('');
   const scriptActions = useRef<ScriptActions | null>(null);
   const scriptPreset = chatSettings.presetId && !textTemplates(connection) ? (presets.find((p) => p.id === chatSettings.presetId) ?? null) : null;
   const scripts = useTavernScripts({
@@ -88,9 +89,10 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
     preset: scriptPreset,
     settings: chatSettings,
     userName: resolvePersona(personas, chatSettings, chat).name,
+    model: connection?.model,
+    input,
     actions: scriptActions,
   });
-  const [input, setInput] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [inspect, setInspect] = useState<BuiltPrompt | null>(null);
   const [lastPrompt, setLastPrompt] = useState<BuiltPrompt | null>(null);
@@ -458,6 +460,8 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
       return config.should_return_reasoning ? ({ content: r.text, reasoning: r.reasoning } as unknown as string) : r.text;
     },
     stop: () => scriptStream.stop(),
+    setInput,
+    submit: (text) => void send(text),
     slash: async (command) => {
       const parsed = parseSlash(command);
       if ('error' in parsed) throw new Error(parsed.error);

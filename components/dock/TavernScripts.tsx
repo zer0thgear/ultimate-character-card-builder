@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import type { CardData } from '@/types/card';
 import type { ChatMessage, ChatSession } from '@/types/project';
-import type { ChatPreset } from '@/lib/stPreset';
+import { parseStPreset, toStPreset, type ChatPreset } from '@/lib/stPreset';
 import { chatGreeting, newMessage, type ChatPromptSettings } from '@/lib/chatPrompt';
 import {
   cardScripts,
@@ -43,6 +44,9 @@ export interface ScriptActions {
   stop: () => void;
   /** /setinput, /send, /trigger and /echo. */
   slash: (command: string) => Promise<void>;
+  /** The message box (SillyTavern's #send_textarea), and its send button. */
+  setInput: (text: string) => void;
+  submit: (text: string) => void;
 }
 
 interface Running {
@@ -71,6 +75,8 @@ export function useTavernScripts({
   preset,
   settings,
   userName,
+  model,
+  input,
   actions,
 }: {
   card: CardData | null;
@@ -79,6 +85,10 @@ export function useTavernScripts({
   preset: ChatPreset | null;
   settings: ChatPromptSettings;
   userName: string;
+  /** The chat connection's model (getChatCompletionModel). */
+  model?: string;
+  /** The message box, which scripts see as SillyTavern's. */
+  input: string;
   /** Set by the chat once it's rendered (its actions need what it builds). */
   actions: RefObject<ScriptActions | null>;
 }) {
@@ -94,6 +104,8 @@ export function useTavernScripts({
 
   const [buttons, setButtons] = useState<Record<string, ScriptButton[]>>({});
   const [reloads, setReloads] = useState<Record<string, number>>({});
+  /** What each script shows over the chat (see the runtime's report()). */
+  const [overlays, setOverlays] = useState<Record<string, { rects: number[][]; grab: boolean }>>({});
   /** Each running script's frame, by its key. */
   const [frames] = useState(() => new Map<string, HTMLIFrameElement>());
   const injections = useRef(new Map<string, ThInjection & { once: boolean }>());
@@ -110,6 +122,19 @@ export function useTavernScripts({
   const greeting = card && chat ? chatGreeting(card, chat) : null;
   const chatPart = useMemo(() => thMessages(chat?.messages ?? [], greeting, names), [chat?.messages, greeting, names]);
   const presetPart = useMemo(() => (preset && running.length ? thPreset(preset) : null), [preset, running.length]);
+  // The same preset as SillyTavern's settings (getContext().chatCompletionSettings).
+  // UCCB's connections count as SillyTavern's custom (OpenAI-compatible) source.
+  const stPresetPart = useMemo(
+    () => (preset && running.length ? { ...toStPreset(preset), chat_completion_source: 'custom', custom_model: model ?? '', openai_model: model ?? '' } : null),
+    [preset, running.length, model],
+  );
+  const cardPart = useMemo(
+    () =>
+      card
+        ? { name: card.name, description: card.description, personality: card.personality, scenario: card.scenario, first_mes: card.first_mes, mes_example: card.mes_example, creator_notes: card.creator_notes, system_prompt: card.system_prompt, post_history_instructions: card.post_history_instructions, alternate_greetings: card.alternate_greetings, tags: card.tags }
+        : null,
+    [card],
+  );
   const regexPart = useMemo(
     () => ({ preset: preset ? thRegexes(record(preset.extra?.extensions).regex_scripts, 'global') : [], character: thRegexes(record(card?.extensions).regex_scripts, 'character') }),
     [preset, card?.extensions],
@@ -120,11 +145,11 @@ export function useTavernScripts({
   );
   const presetNames = useLlmStore((s) => s.presets.map((p) => p.name).join('\u0000'));
   const misc = useMemo(
-    () => ({ names, presetName: preset?.name ?? '', presetNames: presetNames ? presetNames.split('\u0000') : [], cardRegexOn: settings.useCardRegex !== false }),
-    [names, preset?.name, presetNames, settings.useCardRegex],
+    () => ({ names, presetName: preset?.name ?? '', presetNames: presetNames ? presetNames.split('\u0000') : [], cardRegexOn: settings.useCardRegex !== false, model: model ?? '', chatId: chat?.id ?? '', card: cardPart }),
+    [names, preset?.name, presetNames, settings.useCardRegex, model, chat?.id, cardPart],
   );
   const scriptVars = settings.thScriptVars;
-  const snapshot = (script: TavernScript) => ({ chat: chatPart, preset: presetPart, regexes: regexPart, vars: { ...varsPart, script: scriptVars?.[script.id] ?? {} }, ...misc });
+  const snapshot = (script: TavernScript) => ({ chat: chatPart, preset: presetPart, stPreset: stPresetPart, input, regexes: regexPart, vars: { ...varsPart, script: scriptVars?.[script.id] ?? {} }, ...misc });
   const latest = useRef({ running, snapshot, chat, chatPart, preset, actions, card, names });
   useEffect(() => {
     latest.current = { running, snapshot, chat, chatPart, preset, actions, card, names };
@@ -146,7 +171,8 @@ export function useTavernScripts({
     }, generating.current ? 300 : 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatPart]);
-  useEffect(() => postAll({ state: { preset: presetPart, regexes: regexPart, ...misc } }), [presetPart, regexPart, misc]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => postAll({ state: { preset: presetPart, stPreset: stPresetPart, regexes: regexPart, ...misc } }), [presetPart, stPresetPart, regexPart, misc]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => postAll({ state: { input } }), [input]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     for (const r of running) post(r.key, { state: { vars: { ...varsPart, script: scriptVars?.[r.script.id] ?? {} } } });
   }, [varsPart, scriptVars]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -234,6 +260,23 @@ export function useTavernScripts({
           llm.updatePreset(target.id, fromThPreset(a.preset, target));
           return;
         }
+        case 'saveStPreset': {
+          // SillyTavern's settings for the preset, as getContext() gave them.
+          const target = a.name === 'in_use' || a.name === p?.name ? p : llm.presets.find((x) => x.name === a.name);
+          if (!target) throw new Error(`There's no preset "${String(a.name)}".`);
+          const parsed = parseStPreset(record(a.settings), target.name);
+          llm.updatePreset(target.id, { ...parsed, id: target.id, name: target.name, importedAt: target.importedAt });
+          return;
+        }
+        case 'input':
+          act?.setInput(String(a.text ?? ''));
+          return;
+        case 'submit':
+          if (String(a.text ?? '').trim()) act?.submit(String(a.text));
+          return;
+        case 'overlay':
+          setOverlays((o) => ({ ...o, [key]: { rects: (Array.isArray(a.rects) ? a.rects : []).filter((r): r is number[] => Array.isArray(r) && r.length === 4 && r.every((n) => typeof n === 'number' && Number.isFinite(n))).slice(0, 200), grab: a.grab === true } }));
+          return;
         case 'loadPreset': {
           const target = llm.presets.find((x) => x.name === a.name);
           if (target) llm.setChatSettings({ presetId: target.id });
@@ -380,20 +423,24 @@ export function useTavernScripts({
 
   // The frames themselves, once the runtime's text is here.
   const runtime = useRuntime(running.length > 0);
-  const frameNodes = (
-    <div aria-hidden style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
-      {runtime !== null &&
-        running.map((r) => (
-        <ScriptFrame
-          key={`${r.key}:${reloads[r.key] ?? 0}`}
-          script={r.script}
-          boot={{ scriptId: r.script.id, scriptName: r.script.name, scriptInfo: r.script.info, buttons: r.script.buttons, state: snapshot(r.script) }}
-          runtime={runtime}
-          onFrame={(f) => (f ? frames.set(r.key, f) : frames.delete(r.key))}
-        />
-        ))}
-    </div>
-  );
+  // Each covers the window, clipped to what its script shows on it (in a
+  // portal, so nothing in the chat's layout moves or clips it).
+  const frameNodes =
+    runtime !== null && typeof document !== 'undefined'
+      ? createPortal(
+          running.map((r) => (
+            <ScriptFrame
+              key={`${r.key}:${reloads[r.key] ?? 0}`}
+              script={r.script}
+              boot={{ scriptId: r.script.id, scriptName: r.script.name, scriptInfo: r.script.info, buttons: r.script.buttons, state: snapshot(r.script) }}
+              runtime={runtime}
+              overlay={overlays[r.key]}
+              onFrame={(f) => (f ? frames.set(r.key, f) : frames.delete(r.key))}
+            />
+          )),
+          document.body,
+        )
+      : null;
 
   const shownButtons = running.flatMap((r) => (buttons[r.key] ?? r.script.buttons).filter((b) => b.visible).map((b) => ({ key: r.key, script: r.script, name: b.name })));
   const clickButton = (key: string, name: string) => post(key, { event: name, args: [] });
@@ -435,11 +482,38 @@ export function ScriptActionsHost({ actionsRef, actions }: { actionsRef: RefObje
   return null;
 }
 
-function ScriptFrame({ script, boot, runtime, onFrame }: { script: TavernScript; boot: Record<string, unknown>; runtime: string; onFrame: (f: HTMLIFrameElement | null) => void }) {
+/** A script's frame: the whole window, see-through, and clipped to the
+ *  boxes its script shows (clicks outside them reach the chat), or to
+ *  nothing. While you drag in it, it takes the whole window. */
+function ScriptFrame({
+  script,
+  boot,
+  runtime,
+  overlay,
+  onFrame,
+}: {
+  script: TavernScript;
+  boot: Record<string, unknown>;
+  runtime: string;
+  overlay?: { rects: number[][]; grab: boolean };
+  onFrame: (f: HTMLIFrameElement | null) => void;
+}) {
   // Built once: later changes go to the script as messages.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const srcdoc = useMemo(() => scriptSrcdoc(script, boot, runtime), []);
-  return <iframe ref={onFrame} title={`Script: ${script.name}`} sandbox="allow-scripts" referrerPolicy="no-referrer" allow="" srcDoc={srcdoc} style={{ width: 0, height: 0, border: 0 }} />;
+  const clip = overlay?.grab ? 'none' : overlay?.rects.length ? `path('${overlay.rects.map(([x, y, w, h]) => `M${x},${y}h${w}v${h}h${-w}Z`).join('')}')` : 'inset(50%)';
+  return (
+    <iframe
+      ref={onFrame}
+      title={`Script: ${script.name}`}
+      // Its own dialogs (confirm, prompt) and downloads, as in SillyTavern.
+      sandbox="allow-scripts allow-modals allow-downloads"
+      referrerPolicy="no-referrer"
+      allow=""
+      srcDoc={srcdoc}
+      style={{ position: 'fixed', inset: 0, width: '100vw', height: '100dvh', border: 0, background: 'transparent', colorScheme: 'normal', zIndex: 35, clipPath: clip }}
+    />
+  );
 }
 
 /** Logs a script's request in Recent requests (Settings → Assistant); call the result with how it went. */
@@ -474,8 +548,8 @@ export function ScriptApprovals({ pending, presetName, cardName }: { pending: Ru
         <div className="flex flex-col gap-3 text-sm">
           <p className="text-xs text-slate-400">
             Scripts written for SillyTavern&apos;s Tavern Helper extension. Each runs in a sandbox, away from your keys and the rest of UCCB, but once allowed it can read and change this chat (its messages and
-            variables), the preset in use and the card&apos;s regex scripts and variables, send messages, ask your chat connection for replies (which costs what a reply costs), and reach the internet. Only
-            allow scripts you trust. A script that changes asks again.
+            variables), the preset in use and the card&apos;s regex scripts and variables, send messages, ask your chat connection for replies (which costs what a reply costs), show its own buttons and windows over the
+            chat, and reach the internet. Only allow scripts you trust. A script that changes asks again.
           </p>
           {pending.map(({ script, key }) => (
             <div key={key} className="flex flex-col gap-1.5 rounded-md border border-slate-700 p-2.5">
