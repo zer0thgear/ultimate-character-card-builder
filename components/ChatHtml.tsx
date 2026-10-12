@@ -1,16 +1,20 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { cx } from '@/components/ui';
 import { pageSrcdoc } from '@/lib/chatHtml';
+import { parseSlash } from '@/lib/pageBridge';
+import { toast } from '@/store/uiStore';
 
 // HTML in chat messages (lib/chatHtml.ts). A message's HTML is sanitized as
 // SillyTavern does it (no scripts, no event handlers, no forms) and shown in
 // a shadow root, so its <style> blocks style only that message and the
 // app's styles leave it alone; it's also contained, so nothing in it can
 // cover the rest of the app. A whole page runs in a sandboxed frame, as
-// Tavern Helper shows one: its scripts work, but it can't reach UCCB.
+// Tavern Helper shows one: its scripts work, but it can't reach UCCB; it
+// can only fill in and send the chat's message box, through the bridge
+// (lib/pageBridge.ts), and only right after you click in it.
 
 /** The chat's own text styling, inside the shadow root (the colours come
  *  from .chat-text in globals.css). */
@@ -59,17 +63,91 @@ export function HtmlText({ html, className }: { html: string; className?: string
   return <div ref={ref} className={cx('chat-text text-sm leading-relaxed text-slate-200', className)} style={{ contain: 'content' }} />;
 }
 
+/** What pages in messages can do in the chat they're in (lib/pageBridge.ts). */
+export interface PageBridge {
+  /** The message box. */
+  input: string;
+  setInput: (text: string) => void;
+  /** Sends `text` as your message and asks for a reply, as the send button does. */
+  submit: (text: string) => void;
+  /** Adds your message without asking for a reply (/send). */
+  addMessage: (text: string) => void;
+  /** Asks for a reply (/trigger). */
+  trigger: () => Promise<void>;
+  busy: boolean;
+}
+
+export const PageBridgeContext = createContext<PageBridge | null>(null);
+
+/** A message to a page's frame. */
+const postTo = (frame: HTMLIFrameElement | null, msg: Record<string, unknown>) => frame?.contentWindow?.postMessage({ uccbHtml: 1, ...msg }, '*');
+
+/** How soon after one send a page can send again. */
+const SEND_GAP_MS = 1500;
+
 /** A whole page from a message, running in a sandboxed frame that grows to
  *  fit it. */
 export function HtmlPage({ html }: { html: string }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(120);
   const srcdoc = useMemo(() => pageSrcdoc(html), [html]);
+  const bridge = useContext(PageBridgeContext);
+  const bridgeRef = useRef(bridge);
   useEffect(() => {
-    const onMessage = (e: MessageEvent) => {
+    bridgeRef.current = bridge;
+  });
+  const lastSend = useRef(0);
+
+  // The page's copy of the message box follows UCCB's.
+  const input = bridge?.input;
+  useEffect(() => {
+    if (input !== undefined) postTo(ref.current, { input });
+  }, [input]);
+
+  useEffect(() => {
+    const onMessage = async (e: MessageEvent) => {
       if (!ref.current || e.source !== ref.current.contentWindow) return;
-      const m = e.data as { uccbHtml?: number; height?: unknown };
-      if (m?.uccbHtml === 1 && typeof m.height === 'number' && m.height > 0) setHeight(Math.min(Math.ceil(m.height), 4000));
+      const m = e.data as { uccbHtml?: number; height?: unknown; call?: string; text?: unknown; id?: unknown; command?: unknown; tone?: unknown };
+      if (m?.uccbHtml !== 1) return;
+      if (typeof m.height === 'number' && m.height > 0) {
+        setHeight(Math.min(Math.ceil(m.height), 4000));
+        return;
+      }
+      const b = bridgeRef.current;
+      const text = typeof m.text === 'string' ? m.text : '';
+      // Only a page you've just clicked into can type or send.
+      const yours = document.activeElement === ref.current;
+      const canSend = () => {
+        if (!b || !yours || b.busy || Date.now() - lastSend.current < SEND_GAP_MS) return false;
+        lastSend.current = Date.now();
+        return true;
+      };
+      if (m.call === 'input') {
+        if (b && yours) b.setInput(text);
+      } else if (m.call === 'submit') {
+        if (text.trim() && canSend()) b!.submit(text);
+      } else if (m.call === 'toast') {
+        if (yours && text.trim()) toast(text.slice(0, 300), m.tone === 'error' || m.tone === 'success' ? m.tone : 'info');
+      } else if (m.call === 'slash' && typeof m.id === 'number') {
+        const reply = (error?: string) => postTo(ref.current, { reply: m.id, ...(error ? { error } : { result: '' }) });
+        const parsed = parseSlash(typeof m.command === 'string' ? m.command : '');
+        if ('error' in parsed) return reply(parsed.error);
+        if (!b) return reply('Not in a chat.');
+        if (!yours) return reply('Only works after a click in the page.');
+        const sends = parsed.steps.some((s) => s.op === 'send' || s.op === 'trigger');
+        if (sends && !canSend()) return reply(b.busy ? 'A reply is being written.' : 'Too soon after the last one.');
+        try {
+          for (const s of parsed.steps) {
+            if (s.op === 'setinput') b.setInput(s.text);
+            else if (s.op === 'send') b.addMessage(s.text);
+            else if (s.op === 'echo') toast(s.text.slice(0, 300));
+            else await bridgeRef.current?.trigger();
+          }
+          reply();
+        } catch (err) {
+          reply((err as Error).message);
+        }
+      }
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -82,6 +160,7 @@ export function HtmlPage({ html }: { html: string }) {
       referrerPolicy="no-referrer"
       allow=""
       srcDoc={srcdoc}
+      onLoad={() => input !== undefined && postTo(ref.current, { input })}
       className="my-1 block w-full rounded-md border-0 bg-transparent"
       style={{ height }}
     />

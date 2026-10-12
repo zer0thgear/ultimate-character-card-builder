@@ -45,6 +45,6 @@ describe('HTML in chat messages', () => {
 
   it('adds a height report to a page', () => {
     expect(pageSrcdoc('<html><body>x</body></html>')).toMatch(/x<script>[\s\S]*uccbHtml[\s\S]*<\/script><\/body><\/html>$/);
-    expect(pageSrcdoc('<div>x</div>')).toMatch(/^<div>x<\/div><script>/);
+    expect(pageSrcdoc('<div>x</div>')).toMatch(/<div>x<\/div><script>[\s\S]*uccbHtml[\s\S]*<\/script>$/);
   });
 });

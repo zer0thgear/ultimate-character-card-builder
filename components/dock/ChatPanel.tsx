@@ -42,7 +42,7 @@ import { uuid } from '@/lib/uuid';
 import { copyText } from '@/lib/clipboard';
 import { CODE_BLOCK_CLASS, CODE_CLASS, HEADING_CLASSES, formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
 import { ChatLink, ChatMedia, ChatRule } from '@/components/ChatMedia';
-import { HtmlPage, HtmlText } from '@/components/ChatHtml';
+import { HtmlPage, HtmlText, PageBridgeContext, type PageBridge } from '@/components/ChatHtml';
 import { hasHtml, messageHtml, splitHtmlPages, type HtmlSegment } from '@/lib/chatHtml';
 import { AuthorsNoteDialog } from '@/components/dock/AuthorsNote';
 import { summaryInjection, summarySettings } from '@/lib/chatSummary';
@@ -347,9 +347,10 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   /** ↶ Takes the last continue back off (it stays in the tree). */
   const undoLastContinue = (m: ChatMessage) => setTree(m.id, undoContinue(treeOf(m)));
 
-  const send = async () => {
+  /** Sends the message box (or `typed`, from a page in a message). */
+  const send = async (typed?: string) => {
     if (running || summarizing || !chat) return;
-    const text = input.trim();
+    const text = (typed ?? input).trim();
     const messages = text ? [...chat.messages, newMessage('user', text)] : chat.messages;
     if (text) {
       setMessages(() => messages);
@@ -358,6 +359,24 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
     follow.current = true;
     chase.current = false;
     await reply(messages, undefined, undefined, !text);
+  };
+
+  /** What pages in messages can do here (lib/pageBridge.ts). */
+  const pageBridge: PageBridge = {
+    input,
+    setInput,
+    submit: (text) => void send(text),
+    addMessage: (text) => {
+      if (!running && !summarizing && chat) setMessages((ms) => [...ms, newMessage('user', text)]);
+    },
+    trigger: async () => {
+      const messages = useChatStore.getState().chat?.messages;
+      if (running || summarizing || !messages) return;
+      follow.current = true;
+      chase.current = false;
+      await reply(messages, undefined, undefined, messages.at(-1)?.role !== 'user');
+    },
+    busy: running || summarizing,
   };
 
   const regenerate = async () => {
@@ -627,6 +646,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
 
       <div className="relative min-h-0 flex-1">
         <SearchQuery.Provider value={search ?? ''}>
+        <PageBridgeContext.Provider value={pageBridge}>
         <div ref={scroller} onScroll={onScroll} className="relative h-full overflow-y-auto px-3 py-3">
           {!chat ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-slate-500">
@@ -707,6 +727,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
             </div>
           )}
         </div>
+        </PageBridgeContext.Provider>
         </SearchQuery.Provider>
         {chat && !following && (
           <button
