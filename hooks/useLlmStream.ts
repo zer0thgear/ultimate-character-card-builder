@@ -12,6 +12,10 @@ import { wrapWithPreset } from '@/lib/assistPreset';
 import { useAssistLog } from '@/store/assistLog';
 import { useJobStore } from '@/store/jobStore';
 import { uuid } from '@/lib/uuid';
+import { requestCost } from '@/lib/modelPricing';
+import { priceNow } from '@/hooks/useModelPrices';
+import { countTextNow } from '@/lib/textTokens';
+import type { GenCost } from '@/types/project';
 
 /**
  * A writing-assistant request as it will be sent: the assistant's
@@ -48,6 +52,8 @@ export interface StreamResult {
   timing?: { ms: number; firstMs?: number };
   /** Tokens written, as the provider counted them (when it says). */
   outputTokens?: number;
+  /** What it cost, on connections that publish prices (OpenRouter). */
+  cost?: GenCost;
 }
 
 /** One streaming completion at a time, with live text and a Stop. */
@@ -87,6 +93,7 @@ export function useLlmStream() {
     const result: StreamResult = { text: '', reasoning: '' };
     const t0 = performance.now();
     let first: number | undefined;
+    let usage: { input?: number; output?: number; cost?: number } | undefined;
     // A text-completion connection gets one prompt in its instruct
     // template: the chat's own (built from the card), or these messages
     // laid out in it.
@@ -109,6 +116,7 @@ export function useLlmStream() {
             opts.onReasoning?.(result.reasoning);
           } else if (e.type === 'done') {
             result.stopReason = e.stopReason;
+            usage = e.usage;
             if (e.usage?.output) result.outputTokens = e.usage.output;
           } else if (e.type === 'error') {
             result.error = e.message;
@@ -126,6 +134,14 @@ export function useLlmStream() {
       useJobStore.getState().bump(-1);
     }
     result.timing = { ms: performance.now() - t0, ...(first !== undefined ? { firstMs: first } : {}) };
+    // A stopped or failed request is charged too, for what it wrote.
+    if (result.text || result.reasoning || usage) {
+      const cost = requestCost(usage, priceNow(connection), {
+        input: () => countTextNow(text?.prompt ?? messages.map((m) => m.content).join('\n\n')),
+        output: () => countTextNow(result.reasoning + result.text),
+      });
+      if (cost) result.cost = cost;
+    }
     if (opts.prefix) result.text = opts.prefix + result.text;
     return result;
   }, []);

@@ -36,6 +36,7 @@ import { chatFileName, chatToStJsonl, chatToText } from '@/lib/chatExport';
 import { ChatImportError, parseChatFile } from '@/lib/chatImport';
 import type { Persona } from '@/types/project';
 import { useTextTokens, formatTokens, countTextNow } from '@/lib/textTokens';
+import { costLine } from '@/lib/modelPricing';
 import { formatSeconds, genStats, setAt, tokensPerSecond } from '@/lib/genStats';
 import type { CardData } from '@/types/card';
 import type { ChatImage, ChatMessage, GenStats } from '@/types/project';
@@ -325,7 +326,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
     written = written.replace(/\s+$/, '');
     // How long it took (a continue's: just the part it added).
     const added = written.slice(base.length);
-    const stats = added.trim() ? genStats(r.timing, r.outputTokens, () => countTextNow(added)) : undefined;
+    const stats = added.trim() ? genStats(r.timing, r.outputTokens, () => countTextNow(added), r.cost) : undefined;
     setMessages((m) =>
       m
         .map((x) => {
@@ -1096,8 +1097,10 @@ function Avatar({ role, persona }: { role: 'user' | 'assistant' | 'system'; pers
 /**
  * The portrait, and under it what SillyTavern shows there: the message's
  * number, how long a reply took to write (holding or hovering it says how
- * long the first token took), its tokens and tokens a second. With
- * avatars off the numbers keep the column to themselves.
+ * long the first token took), its tokens and tokens a second. Hovering the
+ * tokens (or the time, with them hidden) says what the reply cost, on
+ * connections that publish prices. With avatars off the numbers keep the
+ * column to themselves.
  */
 function MessageAside({ role, persona, id, tokens, gen }: { role: 'user' | 'assistant' | 'system'; persona?: Persona | null; id?: number; tokens?: number; gen?: GenStats }) {
   const s = useLlmStore((st) => st.chatSettings);
@@ -1105,15 +1108,16 @@ function MessageAside({ role, persona, id, tokens, gen }: { role: 'user' | 'assi
   const count = (s.showTokenCounts ?? true) && tokens ? tokens : undefined;
   const tps = (s.showTokensPerSecond ?? true) && gen ? tokensPerSecond(gen) : undefined;
   const any = id !== undefined || time || count !== undefined || tps !== undefined;
+  const cost = gen?.cost ? `\nCost: ${costLine(gen.cost)}${gen.cost.estimated ? ', from the model\'s prices' : ''}` : '';
   if ((s.avatarShape ?? 'circle') === 'none' && !any) return null;
   return (
     <div className="flex w-10 flex-shrink-0 flex-col items-center gap-0.5 text-[10px] leading-tight whitespace-nowrap text-slate-600 tabular-nums">
       <Avatar role={role} persona={persona} />
       {id !== undefined && <MessageId id={id} />}
       {time && (
-        <span title={`Took ${formatSeconds(time.ms)} to write${time.ttft !== undefined ? `; the first token came after ${formatSeconds(time.ttft)}` : ''}`}>{formatSeconds(time.ms)}</span>
+        <span title={`Took ${formatSeconds(time.ms)} to write${time.ttft !== undefined ? `; the first token came after ${formatSeconds(time.ttft)}` : ''}${count === undefined ? cost : ''}`}>{formatSeconds(time.ms)}</span>
       )}
-      {count !== undefined && <span title={`${count} tokens (estimated: o200k tokenizer; your model may count a little differently)`}>{formatTokens(count)}t</span>}
+      {count !== undefined && <span title={`${count} tokens (estimated: o200k tokenizer; your model may count a little differently)${cost}`}>{formatTokens(count)}t</span>}
       {tps !== undefined && <span title={`Tokens a second: ${gen?.tokens} written (reasoning included) in ${formatSeconds(gen?.ms ?? 0)}`}>{tps.toFixed(1)}t/s</span>}
     </div>
   );

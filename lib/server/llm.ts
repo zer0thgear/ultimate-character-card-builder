@@ -24,6 +24,8 @@ function openAiParams(kind: 'novelai' | 'openai', p: SamplerParams, baseUrl: str
   const copy = ['temperature', 'top_p', 'top_k', 'min_p', 'top_a', 'frequency_penalty', 'presence_penalty', 'repetition_penalty', 'seed'] as const;
   for (const k of copy) if (typeof p[k] === 'number') body[k] = p[k];
   if (p.stop?.length) body.stop = p.stop;
+  // OpenRouter says what a request cost, with its token counts, at the end.
+  if (kind === 'openai' && /openrouter\.ai/i.test(baseUrl)) body.usage = { include: true };
   if (kind === 'openai' && p.reasoning_effort) {
     if (/openrouter\.ai/i.test(baseUrl)) body.reasoning = { effort: p.reasoning_effort };
     else body.reasoning_effort = p.reasoning_effort;
@@ -72,7 +74,7 @@ async function* openAiStream(req: LlmRequest, signal: AbortSignal): AsyncGenerat
   const decoder = new TextDecoder();
   let buffer = '';
   let stopReason: string | undefined;
-  let usage: { input?: number; output?: number } | undefined;
+  let usage: { input?: number; output?: number; cost?: number } | undefined;
   // Some servers put reasoning inline between <think> tags instead of in
   // its own field; split it out so it's shown apart from the reply.
   let inThink = false;
@@ -113,7 +115,7 @@ async function* openAiStream(req: LlmRequest, signal: AbortSignal): AsyncGenerat
       if (!data || data === '[DONE]') continue;
       let json: {
         choices?: { delta?: { content?: string; reasoning_content?: string; reasoning?: string }; text?: string; finish_reason?: string }[];
-        usage?: { prompt_tokens?: number; completion_tokens?: number };
+        usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number };
         error?: { message?: string } | string;
       };
       try {
@@ -132,7 +134,7 @@ async function* openAiStream(req: LlmRequest, signal: AbortSignal): AsyncGenerat
       // Text completions stream { text } instead of a delta.
       else if (typeof choice?.text === 'string' && choice.text) yield* splitThink(choice.text);
       if (choice?.finish_reason) stopReason = choice.finish_reason;
-      if (json.usage) usage = { input: json.usage.prompt_tokens, output: json.usage.completion_tokens };
+      if (json.usage) usage = { input: json.usage.prompt_tokens, output: json.usage.completion_tokens, ...(typeof json.usage.cost === 'number' ? { cost: json.usage.cost } : {}) };
     }
   }
   yield { type: 'done', stopReason, usage };

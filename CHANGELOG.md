@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **What a reply cost**, on OpenRouter connections: hover a reply's token count (under its portrait) for what it cost, as OpenRouter charged it, with the tokens sent and written. A reply stopped early is worked out from the model's prices.
 - **☑ Select cards** to tag many at once: over each card list, pick cards (one by one, the whole page, or every card shown), then 🏷 Tag… puts any of your tags on them all or takes it off them all, and can make a new tag for them.
 - **Hide the tag list in the sidebars**, as SillyTavern's toggle: ▴ next to ⚙ tucks the My tags chips away (remembered between visits), leaving a 🏷 My tags ▸ line that still says when tags are filtering, with Clear.
 - **🏷 My tags and folders**, as SillyTavern's tags: your own tags, kept apart from the tags written in the cards. Filter the card lists on them (show only, or hide), colour and order them in ⚙ Manage tags, and set some as open or closed folders that show in the lists. Imported cards can bring their own tags across (asks by default), and a SillyTavern tag backup can be imported.

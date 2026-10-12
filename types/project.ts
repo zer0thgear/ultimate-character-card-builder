@@ -142,6 +142,21 @@ export interface GenStats {
   ttft?: number;
   /** Tokens written: the provider's count, or an estimate. */
   tokens?: number;
+  /** What the request cost, on connections that publish prices (OpenRouter). */
+  cost?: GenCost;
+}
+
+/** What a request cost: OpenRouter's own figure, or worked out from the
+ *  model's prices and the tokens sent and written. */
+export interface GenCost {
+  /** In dollars. */
+  dollars: number;
+  /** Tokens sent and written (reasoning included), as charged. */
+  input: number;
+  output: number;
+  /** Worked out here (from prices, and estimated tokens where the provider
+   *  didn't count them), not the provider's own figure. */
+  estimated?: boolean;
 }
 
 /** Where an author's note goes, as SillyTavern's choices: in the chat at a

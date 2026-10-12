@@ -78,7 +78,7 @@ export interface LlmMessage {
 export type LlmEvent =
   | { type: 'text'; text: string }
   | { type: 'reasoning'; text: string }
-  | { type: 'done'; stopReason?: string; usage?: { input?: number; output?: number; cacheRead?: number } }
+  | { type: 'done'; stopReason?: string; usage?: { input?: number; output?: number; cacheRead?: number; /** In dollars, where the provider says (OpenRouter). */ cost?: number } }
   | { type: 'error'; message: string; status?: number };
 
 /** The request the browser sends the proxy. */
