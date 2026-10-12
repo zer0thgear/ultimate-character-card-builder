@@ -1,15 +1,16 @@
-import type { GenStats } from '@/types/project';
+import type { GenCost, GenStats } from '@/types/project';
 
 // How long a reply took to write, shown under its portrait as SillyTavern
 // shows its message timer and tokens a second, with the wait for the first
 // token beside them.
 
-/** A finished generation's stats: its timing, and the tokens it wrote (the
- *  provider's count, or `estimate` of the text it wrote). */
-export function genStats(timing: { ms: number; firstMs?: number } | undefined, outputTokens: number | undefined, estimate: () => number): GenStats | undefined {
+/** A finished generation's stats: its timing, the tokens it wrote (the
+ *  provider's count, or `estimate` of the text it wrote), and what it cost
+ *  (where that's known). */
+export function genStats(timing: { ms: number; firstMs?: number } | undefined, outputTokens: number | undefined, estimate: () => number, cost?: GenCost): GenStats | undefined {
   if (!timing) return undefined;
   const tokens = outputTokens ?? estimate();
-  return { ms: Math.round(timing.ms), ...(timing.firstMs !== undefined ? { ttft: Math.round(timing.firstMs) } : {}), ...(tokens > 0 ? { tokens } : {}) };
+  return { ms: Math.round(timing.ms), ...(timing.firstMs !== undefined ? { ttft: Math.round(timing.firstMs) } : {}), ...(tokens > 0 ? { tokens } : {}), ...(cost ? { cost } : {}) };
 }
 
 /** Tokens a second, over the whole generation, as SillyTavern counts it. */

@@ -80,7 +80,7 @@ export function CompareDialog({
   const keep = (which: number[]) => {
     const kept = which.map((i) => results[i]).filter((r): r is NonNullable<typeof r> => !!r && !!r.text.trim());
     if (!kept.length) return;
-    onKeep(kept.map((r) => ({ text: r.text, reasoning: r.reasoning || undefined, model: r.model, sentWith: r.sentWith, gen: genStats(r.timing, r.outputTokens, () => countTextNow(r.text)) })));
+    onKeep(kept.map((r) => ({ text: r.text, reasoning: r.reasoning || undefined, model: r.model, sentWith: r.sentWith, gen: genStats(r.timing, r.outputTokens, () => countTextNow(r.text), r.cost) })));
     onClose();
   };
   const set = (i: number, patch: Partial<SidePick>) => setPicks((ps) => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)) as [SidePick, SidePick]);

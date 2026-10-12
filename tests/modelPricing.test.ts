@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatPrice, isOpenRouter, priceLabel } from '@/lib/modelPricing';
+import { formatPrice, isOpenRouter, priceLabel, requestCost, costLine } from '@/lib/modelPricing';
 
 describe('model prices', () => {
   it('shows OpenRouter per-token prices per 1M or per 1K tokens', () => {
@@ -51,5 +51,19 @@ describe('the most a request can cost', () => {
     expect(formatDollars(0.00003)).toBe('<$0.0001');
     expect(formatDollars(0.045)).toBe('$0.045');
     expect(formatDollars(0.198)).toBe('$0.20');
+  });
+
+  it("works out a request's cost: the provider's figure, or its tokens at the model's prices", () => {
+    const price = { input: 1e-6, output: 4e-6 };
+    const never = { input: () => { throw new Error('not needed'); }, output: () => { throw new Error('not needed'); } };
+    expect(requestCost({ input: 1000, output: 500, cost: 0.0042 }, price, never)).toEqual({ dollars: 0.0042, input: 1000, output: 500 });
+    expect(requestCost({ input: 1000, output: 500 }, price, never)).toEqual({ dollars: expect.closeTo(0.003, 12), input: 1000, output: 500, estimated: true });
+    // Stopped early: no usage, so the tokens are estimated.
+    expect(requestCost(undefined, price, { input: () => 2000, output: () => 100 })).toEqual({ dollars: expect.closeTo(0.0024, 12), input: 2000, output: 100, estimated: true });
+    // No price, or one that varies: unknown (and nothing's counted).
+    expect(requestCost(undefined, undefined, never)).toBeUndefined();
+    expect(requestCost({ input: 1, output: 1 }, { input: -1, output: -1 }, never)).toBeUndefined();
+    expect(costLine({ dollars: 0.0061, input: 3412, output: 1108, estimated: true })).toBe('about $0.0061 (3,412 tokens in · 1,108 out)');
+    expect(costLine({ dollars: 1.5, input: 10, output: 20 })).toBe('$1.50 (10 tokens in · 20 out)');
   });
 });

@@ -1,4 +1,5 @@
 import type { LlmConnection } from '@/types/llm';
+import type { GenCost } from '@/types/project';
 
 // Model prices for OpenRouter connections, shown per million tokens or per
 // thousand (Settings → LLM connections). OpenRouter quotes dollars per
@@ -59,4 +60,28 @@ export function priceLabel(p: ModelPrice, unit: PriceUnit): string {
   if (p.input === 0 && p.output === 0) return 'free';
   if (p.input < 0 || p.output < 0) return 'price varies';
   return `${formatPrice(p.input, unit)} in · ${formatPrice(p.output, unit)} out /${unit}`;
+}
+
+/**
+ * What a request cost: the provider's own figure when it gives one
+ * (OpenRouter does), else its tokens at the model's prices (counted by the
+ * provider, or `estimate`d). Undefined when neither is known, or the price
+ * varies.
+ */
+export function requestCost(
+  usage: { input?: number; output?: number; cost?: number } | undefined,
+  price: ModelPrice | undefined,
+  estimate: { input: () => number; output: () => number },
+): GenCost | undefined {
+  const exact = typeof usage?.cost === 'number' && usage.cost >= 0;
+  if (!exact && (!price || price.input < 0 || price.output < 0)) return undefined;
+  const input = usage?.input ?? estimate.input();
+  const output = usage?.output ?? estimate.output();
+  if (exact) return { dollars: usage!.cost!, input, output };
+  return { dollars: input * price!.input + output * price!.output, input, output, estimated: true };
+}
+
+/** "$0.0061 (3,412 in · 1,108 out)", with "about" when it's worked out here. */
+export function costLine(c: GenCost): string {
+  return `${c.estimated ? 'about ' : ''}${formatDollars(c.dollars)} (${c.input.toLocaleString('en-US')} tokens in · ${c.output.toLocaleString('en-US')} out)`;
 }
