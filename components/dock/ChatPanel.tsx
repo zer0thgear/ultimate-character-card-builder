@@ -125,6 +125,10 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   const [inspect, setInspect] = useState<BuiltPrompt | null>(null);
   const [lastPrompt, setLastPrompt] = useState<BuiltPrompt | null>(null);
   const [streamingId, setStreamingId] = useState<string | null>(null);
+  // A reply on its way, from the moment it's asked for: its speaker being
+  // picked, the scripts going over its prompt, then the stream. Nothing
+  // else may start a reply (or a swipe) meanwhile.
+  const replying = useRef(false);
   // 🧭 A guide for the next generation: used once, unless pinned.
   const [guide, setGuide] = useState('');
   const [guideOpen, setGuideOpen] = useState(false);
@@ -141,6 +145,8 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   // providers take one request at a time, and a reply sent meanwhile would
   // queue behind it or fail.
   const summarizing = summarizer.running;
+  // Something's being written: the chat's buttons, swipes and Auto wait.
+  const busy = running || summarizing || picking || !!remembering || streamingId !== null;
   const [showSummary, setShowSummary] = useState(false);
   // Search in this chat: the words (null: closed), and which match is shown.
   const [search, setSearch] = useState<string | null>(null);
@@ -335,7 +341,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   /** In a group: the next member speaks, without a message from you. */
   const groupNext = () => {
     const ms = useChatStore.getState().chat?.messages;
-    if (!ms || running || summarizing || picking || remembering) return;
+    if (!ms || busy) return;
     follow.current = true;
     void reply(ms).then((r) => {
       // Your turn: Auto waits for you.
@@ -367,7 +373,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
    * `continueFrom`, the model carries on from the target's text, by
    * prefilling it or with the preset's continue nudge.
    */
-  const reply = async (messages: ChatMessage[], target?: ChatMessage, continueFrom?: string, emptySend = false): Promise<{ text: string; error?: string }> => {
+  const writeReply = async (messages: ChatMessage[], target?: ChatMessage, continueFrom?: string, emptySend = false): Promise<{ text: string; error?: string }> => {
     // In a group: the version's own speaker, the one you picked, or the
     // group's order (which may leave it to you).
     let speaker = g ? (target?.speaker ?? replyAs ?? undefined) : undefined;
@@ -448,6 +454,16 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
     else void summarizer.summarizeIfDue(summaryRequest()).then(() => g && memory.updateIfDue(g, me.name));
     return { text: written, error: r.error };
   };
+  /** writeReply, one at a time (a second one asked for meanwhile is dropped). */
+  const reply: typeof writeReply = async (...args) => {
+    if (replying.current) return { text: '', error: 'A reply is already being written' };
+    replying.current = true;
+    try {
+      return await writeReply(...args);
+    } finally {
+      replying.current = false;
+    }
+  };
 
   /** The guide for this generation, cleared unless it's pinned. */
   const takeGuide = () => {
@@ -474,7 +490,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
 
   /** ↻ Another version of the last continue, beside the old one. */
   const rerollContinue = async (m: ChatMessage) => {
-    if (!chat || running || summarizing) return;
+    if (!chat || busy) return;
     const tree = treeOf(m);
     const base = rerollBase(tree);
     if (base === null) return;
@@ -487,7 +503,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
 
   /** Sends the message box (or `typed`, from a page in a message). */
   const send = async (typed?: string) => {
-    if (running || summarizing || picking || remembering || !chat) return;
+    if (busy || !chat) return;
     const text = (typed ?? input).trim();
     const messages = text ? [...chat.messages, newMessage('user', text)] : chat.messages;
     if (text) {
@@ -513,19 +529,19 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
     setInput,
     submit: (text) => void send(text),
     addMessage: (text) => {
-      if (running || summarizing || !chat) return;
+      if (busy || !chat) return;
       const m = newMessage('user', text);
       setMessages((ms) => [...ms, m]);
       sentToScripts(m.id);
     },
     trigger: async () => {
       const messages = useChatStore.getState().chat?.messages;
-      if (running || summarizing || !messages) return;
+      if (busy || !messages) return;
       follow.current = true;
       chase.current = false;
       await reply(messages, undefined, undefined, messages.at(-1)?.role !== 'user');
     },
-    busy: running || summarizing,
+    busy,
   };
 
   /** What Tavern Helper scripts ask of the chat (components/dock/TavernScripts.tsx). */
@@ -575,7 +591,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   };
 
   const regenerate = async () => {
-    if (!chat || running || summarizing) return;
+    if (!chat || busy) return;
     const last = chat.messages[chat.messages.length - 1];
     if (last?.role === 'assistant') await reply(chat.messages, last);
     else await reply(chat.messages);
@@ -613,7 +629,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   };
 
   const continueLast = async () => {
-    if (!chat || running || summarizing) return;
+    if (!chat || busy) return;
     const last = chat.messages[chat.messages.length - 1];
     if (last?.role !== 'assistant') return void (await reply(chat.messages));
     const tree = treeOf(last);
@@ -625,7 +641,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
 
   /** Writes your next message for you, into the box, to edit and send. */
   const impersonate = async () => {
-    if (!chat || running || summarizing) return;
+    if (!chat || busy) return;
     setInput('');
     const r = await complete(build(chat.messages, { mode: 'impersonate', guide: takeGuide() }), (full) => setInput(full));
     if (r.error) toast(r.error, 'error');
@@ -903,7 +919,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
                     streaming={streamingId === m.id}
                     streamReasoning={streamingId === m.id ? streamReasoning : ''}
                     isLast={i === chat.messages.length - 1}
-                    busy={running || summarizing}
+                    busy={busy}
                     onChange={(patch) => setMessages((ms) => ms.map((x) => (x.id === m.id ? { ...x, ...patch } : x)))}
                     onDelete={() => void deleteMessage(m)}
                     onDeleteAfter={async () => {
@@ -951,7 +967,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
 
       {treeFor && chat && (() => {
         const m = chat.messages.find((x) => x.id === treeFor);
-        return m ? <ContinueTreeDialog message={m} tree={treeOf(m)} busy={running || summarizing} onChoose={(id) => setTree(m.id, choose(treeOf(m), id))} onClose={() => setTreeFor(null)} /> : null;
+        return m ? <ContinueTreeDialog message={m} tree={treeOf(m)} busy={busy} onChoose={(id) => setTree(m.id, choose(treeOf(m), id))} onClose={() => setTreeFor(null)} /> : null;
       })()}
       {chat && (
         <div className="flex-shrink-0 border-t border-slate-800 p-2">
@@ -999,7 +1015,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
               replyAs={replyAs}
               setReplyAs={setReplyAs}
               nextSpeaker={replyAs ?? (g.group.settings.order === 'list' || g.group.settings.order === 'manual' ? (g.next(chat.messages) ?? undefined) : defaultSpeaker(chat.messages))}
-              busy={running || summarizing || picking || !!remembering}
+              busy={busy}
               status={picking ? 'Choosing who speaks…' : remembering ? `🧠 Updating ${speakerName({ speaker: remembering }) ?? 'a character'}'s memories…` : undefined}
               onNext={groupNext}
               auto={auto}
@@ -1032,13 +1048,13 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
           {/* One row on a phone too: the actions as icons (hold one for its
               name). */}
           <div className={cx('mt-1.5 flex items-center gap-1.5', phone ? 'flex-nowrap' : 'flex-wrap')}>
-            <Button size="sm" disabled={running || summarizing} onClick={() => void regenerate()} title={phone ? 'Regenerate: another version of the last reply' : 'Another version of the last reply'}>
+            <Button size="sm" disabled={busy} onClick={() => void regenerate()} title={phone ? 'Regenerate: another version of the last reply' : 'Another version of the last reply'}>
               {phone ? <span className="px-1 text-base leading-none">↻</span> : '↻ Regenerate'}
             </Button>
-            <Button size="sm" disabled={running || summarizing} onClick={() => void continueLast()} title="Continue the last reply">
+            <Button size="sm" disabled={busy} onClick={() => void continueLast()} title="Continue the last reply">
               {phone ? <span className="px-1 text-base leading-none">→</span> : '→ Continue'}
             </Button>
-            <Button size="sm" disabled={running || summarizing} onClick={() => void impersonate()} title={phone ? 'Impersonate: write your next message for you (it lands in the box to edit)' : 'Write your next message for you (it lands in the box to edit)'}>
+            <Button size="sm" disabled={busy} onClick={() => void impersonate()} title={phone ? 'Impersonate: write your next message for you (it lands in the box to edit)' : 'Write your next message for you (it lands in the box to edit)'}>
               {phone ? <span className="px-0.5 text-base leading-none">🎭</span> : '🎭 Impersonate'}
             </Button>
             <Button
@@ -1060,7 +1076,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
               {chat.authorsNote?.prompt.trim() && !phone ? " Author's note" : ''}
             </Button>
             {!phone && connections.length > 0 && (
-              <Button size="sm" disabled={running || summarizing} onClick={() => setComparing(true)} title={compareTarget ? 'Compare: the last reply written by two connections or presets at once, side by side, to keep either or both' : 'Compare: the next reply written by two connections or presets at once, side by side, to keep either or both'}>
+              <Button size="sm" disabled={busy} onClick={() => setComparing(true)} title={compareTarget ? 'Compare: the last reply written by two connections or presets at once, side by side, to keep either or both' : 'Compare: the next reply written by two connections or presets at once, side by side, to keep either or both'}>
                 ⚖ Compare
               </Button>
             )}
