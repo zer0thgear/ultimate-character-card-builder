@@ -1,6 +1,7 @@
 import type { CardData, Lorebook } from '@/types/card';
 import type { ChatMessage, ChatSession, GroupMember, GroupProject, GroupSettings } from '@/types/project';
 import { ENTRY_BOOK } from '@/lib/lorebookBank';
+import type { LlmMessage } from '@/types/llm';
 
 // Group chats: several cards in one chat. Each reply is written by one
 // member (the speaker), from a card built for that turn and run through the
@@ -340,6 +341,46 @@ export function nextSpeaker(members: Member[], history: ChatMessage[], settings:
   return pick(keen.length ? keen : eligible);
 }
 
+/** The Model order's request: the characters, the recent messages, and
+ *  who may speak next (anyone but the last speaker, unless self-responses
+ *  are allowed; or you). */
+export function directorMessages(members: Member[], history: ChatMessage[], settings: GroupSettings, userName: string): LlmMessage[] {
+  const active = members.filter((m) => !m.muted);
+  const lastSpeaker = [...history].reverse().find((m) => m.role === 'assistant' && m.speaker)?.speaker;
+  const choices = active.filter((m) => settings.allowSelfResponses || m.id !== lastSpeaker || active.length === 1).map((m) => memberName(m.card));
+  const names = new Map(members.map((m) => [m.id, memberName(m.card)]));
+  const recent = history
+    .slice(-12)
+    .map((m) => `${m.role === 'user' ? userName : (m.speaker && names.get(m.speaker)) || 'Narrator'}: ${shown(m).replace(/\s+/g, ' ').trim().slice(0, 600)}`)
+    .join('\n');
+  return [
+    {
+      role: 'system',
+      content:
+        `You direct a group roleplay chat between ${userName} and these characters. Decide who speaks next: whoever the last message addresses, or who would most naturally react, keeping the scene moving and giving everyone a turn over time. ` +
+        `If the last message asks ${userName} something directly, or the scene is waiting on them, it's ${userName}'s turn. Answer with the name only.`,
+    },
+    {
+      role: 'user',
+      content: `Characters:\n${active.map((m) => `- ${memberName(m.card)}: ${memberSummary(m)}`).join('\n')}\n\nRecent messages:\n${recent || '(none yet)'}\n\nWho speaks next? Answer with one of: ${[...choices, userName].join(', ')}.`,
+    },
+  ];
+}
+
+/** Who the Model order's answer names: a member, you, or (no name in it) nobody. */
+export function readDirector(text: string, members: Member[], userName: string): { speaker: string } | { user: true } | null {
+  const answer = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  const candidates = [...members.filter((m) => !m.muted).map((m) => ({ id: m.id, names: namesOf(m.card) })), { id: null, names: [userName] }];
+  // The name it says first.
+  let best: { id: string | null; at: number } | null = null;
+  for (const c of candidates)
+    for (const n of c.names) {
+      const m = new RegExp(`(^|[^\\p{L}\\p{N}_])${escapeRegex(n)}(?=$|[^\\p{L}\\p{N}_])`, 'iu').exec(answer);
+      if (m && (!best || m.index < best.at)) best = { id: c.id, at: m.index };
+    }
+  if (!best) return null;
+  return best.id ? { speaker: best.id } : { user: true };
+}
 /** A new group chat's opening: each member's greeting (or the first's),
  *  in their own words. */
 export function groupGreetings(members: Member[], settings: GroupSettings, make: (speaker: Member, text: string) => ChatMessage): ChatMessage[] {

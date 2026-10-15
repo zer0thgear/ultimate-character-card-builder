@@ -159,6 +159,7 @@ const ORDERS: { value: GroupSettings['order']; label: string; hint: string }[] =
   { value: 'list', label: 'List', hint: 'In the order below, in turn' },
   { value: 'pooled', label: 'Pooled', hint: "Someone who hasn't spoken since your last message" },
   { value: 'manual', label: 'Manual', hint: 'You pick who replies' },
+  { value: 'model', label: 'Model', hint: "A quick request to the writing assistant's connection picks who speaks next from the recent messages (or says it's your turn, which pauses Auto)" },
 ];
 
 function GroupDrawer({ onClose }: { onClose: () => void }) {

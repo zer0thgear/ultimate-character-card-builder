@@ -47,7 +47,7 @@ import { copyText } from '@/lib/clipboard';
 import { CODE_BLOCK_CLASS, CODE_CLASS, HEADING_CLASSES, formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
 import { ChatLink, ChatMedia, ChatRule } from '@/components/ChatMedia';
 import { HtmlPage, HtmlText, PageBridgeContext, runSlash, type PageBridge } from '@/components/ChatHtml';
-import { memberName, memoryTexts, namedHistory, trimGroupReply } from '@/lib/groupChat';
+import { directorMessages, memberName, memoryTexts, namedHistory, readDirector, trimGroupReply } from '@/lib/groupChat';
 import { GroupTurnBar } from '@/components/dock/GroupTurnBar';
 import { bankName } from '@/lib/lorebookBank';
 import { ScriptActionsHost, ScriptApprovals, ScriptButtons, logScriptRequest, useTavernScripts, type ScriptActions } from '@/components/dock/TavernScripts';
@@ -88,6 +88,9 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   // Tavern Helper scripts (the preset's and the card's): their own
   // generations run apart from the chat's.
   const scriptStream = useLlmStream();
+  // A group's Model order asks the writing assistant's connection who speaks.
+  const directorStream = useLlmStream();
+  const [picking, setPicking] = useState(false);
   const [input, setInput] = useState('');
   // In a group chat: who you picked to reply next (null: the group's order).
   const [replyAs, setReplyAs] = useState<string | null>(null);
@@ -311,12 +314,28 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   };
 
   const summaryRequest = () => ({ build, connection, params: overrides });
+  /** The Model order: who the writing assistant's connection says speaks next ('user': you). */
+  const pickSpeaker = async (messages: ChatMessage[]): Promise<string | 'user' | null> => {
+    if (!g) return null;
+    setPicking(true);
+    const r = await directorStream.runAssist(directorMessages(g.members, messages, g.group.settings, me.name), undefined, '👥 Who speaks next');
+    setPicking(false);
+    if (r.error) {
+      toast(`Couldn't ask who speaks next (${r.error}); going by the natural order.`, 'error');
+      return null;
+    }
+    const said = readDirector(r.text, g.members, me.name);
+    return said ? ('user' in said ? 'user' : said.speaker) : null;
+  };
   /** In a group: the next member speaks, without a message from you. */
   const groupNext = () => {
     const ms = useChatStore.getState().chat?.messages;
-    if (!ms || running || summarizing) return;
+    if (!ms || running || summarizing || picking) return;
     follow.current = true;
-    void reply(ms);
+    void reply(ms).then((r) => {
+      // Your turn: Auto waits for you.
+      if (r.error === YOUR_TURN) setAuto(false);
+    });
   };
   /** In a group, the name a character's message goes under (exports). */
   const speakerName = (m: ChatMessage) => {
@@ -346,7 +365,17 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   const reply = async (messages: ChatMessage[], target?: ChatMessage, continueFrom?: string, emptySend = false): Promise<{ text: string; error?: string }> => {
     // In a group: the version's own speaker, the one you picked, or the
     // group's order (which may leave it to you).
-    const speaker = g ? (target?.speaker ?? replyAs ?? g.next(messages) ?? undefined) : undefined;
+    let speaker = g ? (target?.speaker ?? replyAs ?? undefined) : undefined;
+    if (g && !speaker) {
+      if (g.group.settings.order === 'model') {
+        const pick = await pickSpeaker(messages);
+        if (pick === 'user') {
+          toast(`The model says it's your turn.`, 'info');
+          return { text: '', error: YOUR_TURN };
+        }
+        speaker = pick ?? g.next(messages) ?? undefined;
+      } else speaker = g.next(messages) ?? undefined;
+    }
     if (g && !speaker) {
       toast('Pick who replies next.', 'info');
       return { text: '', error: 'No speaker' };
@@ -453,7 +482,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
 
   /** Sends the message box (or `typed`, from a page in a message). */
   const send = async (typed?: string) => {
-    if (running || summarizing || !chat) return;
+    if (running || summarizing || picking || !chat) return;
     const text = (typed ?? input).trim();
     const messages = text ? [...chat.messages, newMessage('user', text)] : chat.messages;
     if (text) {
@@ -965,7 +994,8 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
               replyAs={replyAs}
               setReplyAs={setReplyAs}
               nextSpeaker={replyAs ?? (g.group.settings.order === 'list' || g.group.settings.order === 'manual' ? (g.next(chat.messages) ?? undefined) : defaultSpeaker(chat.messages))}
-              busy={running || summarizing}
+              busy={running || summarizing || picking}
+              picking={picking}
               onNext={groupNext}
               auto={auto}
               setAuto={setAuto}
@@ -1073,6 +1103,9 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
     </ChatHostContext.Provider>
   );
 }
+
+/** A group reply that wasn't written because it's your turn (the Model order). */
+const YOUR_TURN = 'your turn';
 
 // ─── Messages ────────────────────────────────────────────────────────────────
 

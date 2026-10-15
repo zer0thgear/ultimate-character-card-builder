@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newCard, newEntry, newLorebook } from '@/lib/cardSpec';
 import { newMessage } from '@/lib/chatPrompt';
-import { castScene, groupGreetings, groupTurn, memberSummary, mentions, namedHistory, nextSpeaker, trimGroupReply, type Member } from '@/lib/groupChat';
+import { castScene, directorMessages, groupGreetings, groupTurn, memberSummary, mentions, namedHistory, nextSpeaker, readDirector, trimGroupReply, type Member } from '@/lib/groupChat';
 import type { ChatMessage, GroupSettings } from '@/types/project';
 
 const card = (name: string, over: Partial<ReturnType<typeof newCard>['data']> = {}) => ({ ...newCard().data, name, description: `${name} is {{char}}, a knight.`, personality: `${name}'s brave.`, first_mes: `Hi, I'm ${name}.`, mes_example: `<START>\n{{char}}: ${name} speaks.`, ...over });
@@ -115,6 +115,20 @@ describe('group chats', () => {
     // Never yourself twice, unless allowed.
     expect(nextSpeaker([ms[0], ms[1]], [said('a', 'Ann again?')], s(), () => 0)).toBe('b');
     expect(nextSpeaker(ms.map((m) => ({ ...m, muted: m.id !== 'a' })), [said('a', 'x')], s())).toBe('a');
+  });
+
+  it('asks the model who speaks next, and reads its answer', () => {
+    const ms = members();
+    const ask = directorMessages(ms, [said('a', 'Hi.'), said(null, 'Hey Bob.')], s({ order: 'model' }), 'Max');
+    expect(ask[1].content).toContain('- Bob: Bob is Bob, a knight.');
+    expect(ask[1].content).toContain('Max: Hey Bob.');
+    // Not the last speaker again (unless allowed); you're always a choice.
+    expect(ask[1].content).toContain('Answer with one of: Bob, Cid, Max.');
+    expect(readDirector('Bob', ms, 'Max')).toEqual({ speaker: 'b' });
+    expect(readDirector('<think>Annie or Cid…</think>I think Cid should.', ms, 'Max')).toEqual({ speaker: 'c' });
+    expect(readDirector('annie', ms, 'Max')).toEqual({ speaker: 'a' });
+    expect(readDirector("It's Max's turn.", ms, 'Max')).toEqual({ user: true });
+    expect(readDirector('Nobody.', ms, 'Max')).toBeNull();
   });
 
   it("opens with every member's greeting, or the first's", () => {
