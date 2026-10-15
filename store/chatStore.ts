@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import type { AuthorsNote, ChatImage, ChatMessage, ChatSession, ChatSessionSummary, ChatSummary } from '@/types/project';
+import type { AuthorsNote, CharacterMemory, ChatImage, ChatMessage, ChatSession, ChatSessionSummary, ChatSummary } from '@/types/project';
 import { chatApi, ownerKey, type ChatOwner } from '@/lib/api';
 import { uuid } from '@/lib/uuid';
 import { useProjectStore } from '@/store/projectStore';
@@ -88,6 +88,8 @@ interface ChatState {
   setVars: (vars: Record<string, unknown>) => void;
   /** A group member marked in or out of the scene (undefined: by what they do). */
   setPresence: (memberId: string, value: 'in' | 'out' | undefined) => void;
+  /** A group member's memory of the chat (undefined: none). */
+  setMemory: (memberId: string, memory: CharacterMemory | undefined) => void;
   /** Adds a picture to the chat, or replaces one with the same id. */
   putImage: (image: ChatImage) => void;
   removeImage: (id: string) => void;
@@ -204,6 +206,15 @@ export const useChatStore = create<ChatState>((set, get) => {
         else delete presence[memberId];
         const chat: ChatSession = { ...c, presence };
         if (!Object.keys(presence).length) delete chat.presence;
+        return chat;
+      }),
+    setMemory: (memberId, memory) =>
+      updateChat((c) => {
+        const memories = { ...c.memories };
+        if (memory) memories[memberId] = memory;
+        else delete memories[memberId];
+        const chat: ChatSession = { ...c, memories };
+        if (!Object.keys(memories).length) delete chat.memories;
         return chat;
       }),
     setVars: (vars) =>

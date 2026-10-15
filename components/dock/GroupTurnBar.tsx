@@ -13,7 +13,7 @@ import { cx, inputClass } from '@/components/ui';
 // strategy, who's in the scene for that reply (click someone to mark them
 // in or out of this chat's scene).
 
-const ORDER_NAMES = { natural: 'natural order', list: 'list order', manual: 'you pick', pooled: 'pooled order' } as const;
+const ORDER_NAMES = { natural: 'natural order', list: 'list order', manual: 'you pick', pooled: 'pooled order', model: 'the model' } as const;
 
 export function GroupTurnBar({
   g,
@@ -22,6 +22,7 @@ export function GroupTurnBar({
   setReplyAs,
   nextSpeaker,
   busy,
+  status,
   onNext,
   auto,
   setAuto,
@@ -34,6 +35,9 @@ export function GroupTurnBar({
   /** Who the scene is shown for (who'd reply now, if anyone can say). */
   nextSpeaker: string | undefined;
   busy: boolean;
+  /** The Model order is asking who speaks. */
+  /** What's holding the next reply up (who speaks being chosen, memories being written). */
+  status?: string;
   onNext: () => void;
   auto: boolean;
   setAuto: (on: boolean) => void;
@@ -78,6 +82,7 @@ export function GroupTurnBar({
         >
           {auto ? '⏸ Auto' : '⏵ Auto'}
         </button>
+        {status && <span className="animate-pulse text-slate-500">{status}</span>}
       </div>
       {cast && (
         <div className="flex flex-wrap items-center gap-1" title="Who the next reply's prompt has in full (the speaker and the scene) and who as a summary (off-stage). Click someone to mark them in or out of this chat's scene; click again to go back to what they do.">

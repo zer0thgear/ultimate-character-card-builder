@@ -6,7 +6,7 @@ import type { ChatMessage, GroupProject } from '@/types/project';
 import { api, type ChatOwner } from '@/lib/api';
 import { newCard } from '@/lib/cardSpec';
 import { uuid } from '@/lib/uuid';
-import { groupGreetings, groupMembers, groupTurn, nextSpeaker, type GroupTurn, type Member } from '@/lib/groupChat';
+import { groupGreetings, groupMembers, groupTurn, nextSpeaker, type GroupTurn, type Member, type TurnExtras } from '@/lib/groupChat';
 import { useProjectStore } from '@/store/projectStore';
 import { useGroupStore } from '@/store/groupStore';
 
@@ -22,8 +22,8 @@ export interface GroupHost {
   /** Its members with their cards (a member whose card is gone is left out). */
   members: Member[];
   memberOf: (id: string | undefined) => Member | undefined;
-  /** The card and note for `speakerId`'s reply after `history`. */
-  turn: (speakerId: string, history: ChatMessage[], presence?: Record<string, 'in' | 'out'>) => GroupTurn;
+  /** The card and note for `speakerId`'s reply after `history` (with the chat's presence marks and memories). */
+  turn: (speakerId: string, history: ChatMessage[], extras?: TurnExtras) => GroupTurn;
   /** Who replies next by the group's order (null: you pick). */
   next: (history: ChatMessage[]) => string | null;
   /** A new chat's opening messages: the members' greetings. */
@@ -68,7 +68,7 @@ export function useGroupChatHost(): ChatHost | null {
       group,
       members,
       memberOf: (id) => (id ? byId.get(id) : undefined),
-      turn: (speakerId, history, presence) => groupTurn(group, members, speakerId, history, presence),
+      turn: (speakerId, history, extras) => groupTurn(group, members, speakerId, history, extras),
       next: (history) => nextSpeaker(members, history, group.settings),
       greetings: () => groupGreetings(members, group.settings, (m, text) => ({ id: uuid(), role: 'assistant', speaker: m.id, swipes: [text], swipe: 0, createdAt: Date.now() })),
     };

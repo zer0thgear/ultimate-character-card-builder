@@ -115,7 +115,7 @@ async function* openAiStream(req: LlmRequest, signal: AbortSignal): AsyncGenerat
       if (!data || data === '[DONE]') continue;
       let json: {
         choices?: { delta?: { content?: string; reasoning_content?: string; reasoning?: string }; text?: string; finish_reason?: string }[];
-        usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number };
+        usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number; prompt_tokens_details?: { cached_tokens?: number }; prompt_cache_hit_tokens?: number };
         error?: { message?: string } | string;
       };
       try {
@@ -134,7 +134,12 @@ async function* openAiStream(req: LlmRequest, signal: AbortSignal): AsyncGenerat
       // Text completions stream { text } instead of a delta.
       else if (typeof choice?.text === 'string' && choice.text) yield* splitThink(choice.text);
       if (choice?.finish_reason) stopReason = choice.finish_reason;
-      if (json.usage) usage = { input: json.usage.prompt_tokens, output: json.usage.completion_tokens, ...(typeof json.usage.cost === 'number' ? { cost: json.usage.cost } : {}) };
+      if (json.usage) {
+        // Input read from the provider's prompt cache (OpenAI and OpenRouter's
+        // field, or DeepSeek's).
+        const cached = json.usage.prompt_tokens_details?.cached_tokens ?? json.usage.prompt_cache_hit_tokens;
+        usage = { input: json.usage.prompt_tokens, output: json.usage.completion_tokens, ...(typeof cached === 'number' ? { cacheRead: cached } : {}), ...(typeof json.usage.cost === 'number' ? { cost: json.usage.cost } : {}) };
+      }
     }
   }
   yield { type: 'done', stopReason, usage };
@@ -175,7 +180,13 @@ async function* anthropicStream(req: LlmRequest, signal: AbortSignal): AsyncGene
     yield {
       type: 'done',
       stopReason: final.stop_reason ?? undefined,
-      usage: { input: final.usage.input_tokens, output: final.usage.output_tokens, cacheRead: final.usage.cache_read_input_tokens ?? undefined },
+      // Claude counts what it read from and wrote to the cache apart from the
+      // rest of the input: all three together are what was sent.
+      usage: {
+        input: final.usage.input_tokens + (final.usage.cache_read_input_tokens ?? 0) + (final.usage.cache_creation_input_tokens ?? 0),
+        output: final.usage.output_tokens,
+        cacheRead: final.usage.cache_read_input_tokens ?? undefined,
+      },
     };
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
