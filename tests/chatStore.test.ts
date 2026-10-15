@@ -34,7 +34,7 @@ describe('chat store', { timeout: 30_000 }, () => {
   beforeEach(async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     projectId = await newProject();
-    useChatStore.setState({ projectId: null, list: [], chat: null });
+    useChatStore.setState({ owner: null, projectId: null, list: [], chat: null });
     useProjectStore.setState({ summaries: [{ id: projectId, name: '', tags: [], createdAt: 1, updatedAt: 1 }] });
   });
   afterEach(async () => {

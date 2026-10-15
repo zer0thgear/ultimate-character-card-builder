@@ -173,3 +173,21 @@ export async function streamLlm(req: LlmRequest, onEvent: (e: LlmEvent) => void,
     if ((err as Error).name !== 'AbortError') throw err;
   }
 }
+
+/** Who a chat belongs to: a card (its project), or a group. */
+export type ChatOwner = { kind: 'card' | 'group'; id: string };
+export const ownerKey = (o: ChatOwner) => `${o.kind}:${o.id}`;
+
+/** A chat owner's chats and their pictures, wherever they're kept. */
+export function chatApi(owner: ChatOwner) {
+  const base = owner.kind === 'card' ? `/api/projects/${owner.id}` : `/api/groups/${owner.id}`;
+  return {
+    list: () => call<ChatSummary[]>(`${base}/chats`),
+    get: (chatId: string) => call<ChatSession>(`${base}/chats/${chatId}`),
+    save: (chat: ChatSession) => call<ChatSession>(`${base}/chats/${chat.id}`, json('PUT', chat)),
+    remove: (chatId: string) => call<{ ok: true }>(`${base}/chats/${chatId}`, { method: 'DELETE' }),
+    imageUrl: (file: string) => `${base}/chat-images/${file}`,
+    putImage: (file: string, png: Blob) => call<{ file: string }>(`${base}/chat-images/${file}`, { method: 'PUT', body: png, headers: { 'Content-Type': 'image/png' } }),
+    deleteImage: (file: string) => call<{ ok: true }>(`${base}/chat-images/${file}`, { method: 'DELETE' }),
+  };
+}
