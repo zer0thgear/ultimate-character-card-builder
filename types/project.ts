@@ -146,6 +146,9 @@ export interface GenStats {
   tokens?: number;
   /** What the request cost, on connections that publish prices (OpenRouter). */
   cost?: GenCost;
+  /** Tokens sent, and how many the provider read from its prompt cache. */
+  input?: number;
+  cached?: number;
 }
 
 /** What a request cost: OpenRouter's own figure, or worked out from the
@@ -221,6 +224,9 @@ export interface ChatSession {
   /** A group chat's members marked in or out of the scene by hand (Cast
    *  strategy), by their project id. */
   presence?: Record<string, 'in' | 'out'>;
+  /** A group chat's characters' memories, by their project id: their notes
+   *  on the chat so far, through message 	hrough (null: none yet). */
+  memories?: Record<string, CharacterMemory>;
   createdAt: number;
   updatedAt: number;
 }
@@ -385,8 +391,9 @@ export interface GroupMember {
  *  and join (every card in one), or Cast (the speaker in full, the others
  *  by how present they are; lib/groupChat.ts). */
 export type GroupStrategy = 'swap' | 'join' | 'cast';
-/** Who speaks next: SillyTavern's activation strategies. */
-export type GroupOrder = 'natural' | 'list' | 'manual' | 'pooled';
+/** Who speaks next: SillyTavern's activation strategies, or model: a
+ *  quick request picks (lib/groupChat.ts, directorMessages). */
+export type GroupOrder = 'natural' | 'list' | 'manual' | 'pooled' | 'model';
 
 export interface GroupSettings {
   strategy: GroupStrategy;
@@ -409,6 +416,15 @@ export interface GroupSettings {
   castRecent?: number;
   castSticky?: number;
   castBudget?: number;
+  /** Cast: what stays the same turn to turn first (so providers' prompt
+   *  caches hold), what changes with each speaker after the history. On
+   *  unless false. */
+  cacheLayout?: boolean;
+  /** Each character keeps a memory of each chat (what they've seen and
+   *  done), updated every memoryEvery messages, at most memoryWords long. */
+  memory?: boolean;
+  memoryEvery?: number;
+  memoryWords?: number;
 }
 
 export interface GroupProject {
@@ -421,6 +437,14 @@ export interface GroupProject {
   /** A lorebook from the bank that comes with the group's chats. */
   lorebookId?: string;
   createdAt: number;
+  updatedAt: number;
+}
+
+/** A character's memory of a group chat (lib/groupChat.ts, memoryMessages). */
+export interface CharacterMemory {
+  text: string;
+  /** The last message it covers. */
+  through: string | null;
   updatedAt: number;
 }
 

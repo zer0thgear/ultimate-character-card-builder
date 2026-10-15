@@ -442,7 +442,7 @@ const GROUPS = path.join(DATA_DIR, 'groups');
 export const groupDir = (id: string) => path.join(GROUPS, checkId(id));
 
 const STRATEGIES: GroupStrategy[] = ['swap', 'join', 'cast'];
-const ORDERS: GroupOrder[] = ['natural', 'list', 'manual', 'pooled'];
+const ORDERS: GroupOrder[] = ['natural', 'list', 'manual', 'pooled', 'model'];
 
 /** A group as sent, with only what a group holds (and in range). */
 function cleanGroup(g: GroupProject): GroupProject {
@@ -464,6 +464,10 @@ function cleanGroup(g: GroupProject): GroupProject {
   if (num(s.castRecent, 1, 100) !== undefined) settings.castRecent = num(s.castRecent, 1, 100);
   if (num(s.castSticky, 0, 100) !== undefined) settings.castSticky = num(s.castSticky, 0, 100);
   if (num(s.castBudget, 0, 1_000_000) !== undefined) settings.castBudget = num(s.castBudget, 0, 1_000_000);
+  if (s.cacheLayout === false) settings.cacheLayout = false;
+  if (s.memory === true) settings.memory = true;
+  if (num(s.memoryEvery, 1, 200) !== undefined) settings.memoryEvery = num(s.memoryEvery, 1, 200);
+  if (num(s.memoryWords, 20, 2000) !== undefined) settings.memoryWords = num(s.memoryWords, 20, 2000);
   const seen = new Set<string>();
   const members: GroupMember[] = (Array.isArray(g.members) ? g.members : [])
     .filter((m) => m && typeof m.projectId === 'string' && !seen.has(m.projectId) && seen.add(m.projectId))

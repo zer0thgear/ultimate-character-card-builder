@@ -52,6 +52,9 @@ export interface StreamResult {
   timing?: { ms: number; firstMs?: number };
   /** Tokens written, as the provider counted them (when it says). */
   outputTokens?: number;
+  /** Tokens sent, and how many of them the provider read from its prompt cache (when it says). */
+  inputTokens?: number;
+  cachedTokens?: number;
   /** What it cost, on connections that publish prices (OpenRouter). */
   cost?: GenCost;
 }
@@ -93,7 +96,7 @@ export function useLlmStream() {
     const result: StreamResult = { text: '', reasoning: '' };
     const t0 = performance.now();
     let first: number | undefined;
-    let usage: { input?: number; output?: number; cost?: number } | undefined;
+    let usage: { input?: number; output?: number; cacheRead?: number; cost?: number } | undefined;
     // A text-completion connection gets one prompt in its instruct
     // template: the chat's own (built from the card), or these messages
     // laid out in it.
@@ -118,6 +121,8 @@ export function useLlmStream() {
             result.stopReason = e.stopReason;
             usage = e.usage;
             if (e.usage?.output) result.outputTokens = e.usage.output;
+            if (e.usage?.input) result.inputTokens = e.usage.input;
+            if (typeof e.usage?.cacheRead === 'number') result.cachedTokens = e.usage.cacheRead;
           } else if (e.type === 'error') {
             result.error = e.message;
             setError(e.message);

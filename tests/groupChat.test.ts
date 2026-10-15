@@ -44,7 +44,7 @@ describe('group chats', () => {
   });
 
   it("builds the Cast card: the speaker and the scene in blocks of their own, the rest as summaries", () => {
-    const turn = groupTurn({ settings: s() }, members(), 'a', [said('b', 'Hi.')]);
+    const turn = groupTurn({ name: 'G', settings: s({ cacheLayout: false }) }, members(), 'a', [said('b', 'Hi.')]);
     expect(turn.card.name).toBe('Ann');
     expect(turn.card.description).toContain('<character name="Annie" speaking="yes">\nAnn is Annie, a knight.');
     expect(turn.card.description).toContain('<character name="Bob">\nBob is Bob, a knight.');
@@ -57,14 +57,39 @@ describe('group chats', () => {
   it('swaps to the speaker, or joins every card, and brings every lorebook', () => {
     const ms = members();
     ms[1].card.character_book = { ...newLorebook(), entries: [{ ...newEntry(), keys: ['sword'], content: "Bob's sword." }] };
-    const swap = groupTurn({ settings: s({ strategy: 'swap' }), scenario: 'At the inn.' }, ms, 'a', []);
+    const swap = groupTurn({ name: 'G', settings: s({ strategy: 'swap' }), scenario: 'At the inn.' }, ms, 'a', []);
     expect(swap.card.description).toBe('Ann is {{char}}, a knight.');
     expect(swap.card.scenario).toBe('At the inn.');
     expect(swap.card.character_book?.entries.map((e) => e.content)).toEqual(["Bob's sword."]);
-    const join = groupTurn({ settings: s({ strategy: 'join' }) }, ms, 'a', []);
+    const join = groupTurn({ name: 'G', settings: s({ strategy: 'join' }) }, ms, 'a', []);
     expect(join.card.description).toBe('### Annie\nAnn is Annie, a knight.\n\n### Bob\nBob is Bob, a knight.\n\n### Cid\n' + 'Cid is a very long-winded wizard. '.repeat(20).trim());
-    const muted = groupTurn({ settings: s({ strategy: 'join' }) }, ms.map((m) => (m.id === 'c' ? { ...m, muted: true } : m)), 'a', []);
+    const muted = groupTurn({ name: 'G', settings: s({ strategy: 'join' }) }, ms.map((m) => (m.id === 'c' ? { ...m, muted: true } : m)), 'a', []);
     expect(muted.card.description).not.toContain('Cid');
+  });
+
+  it('lays Cast out for prompt caches: the same start every turn, the speaker after the history', () => {
+    const history = [said('b', 'Hi.')];
+    const forAnn = groupTurn({ name: 'Lucky Star', settings: s(), scenario: 'School.' }, members(), 'a', history);
+    const forBob = groupTurn({ name: 'Lucky Star', settings: s(), scenario: 'School.' }, members(), 'b', [...history, said('a', 'Yo.')]);
+    // What comes before the history doesn't change with the speaker.
+    for (const k of ['name', 'description', 'personality', 'scenario', 'mes_example', 'system_prompt'] as const) expect(forAnn.card[k]).toBe(forBob.card[k]);
+    expect(forAnn.card.name).toBe('Lucky Star');
+    expect(forAnn.card.description).toContain('- Cid: The old wizard.');
+    // The speaker, the scene and the examples come last.
+    expect(forAnn.turnNote).toContain('<character name="Annie" speaking="yes">');
+    expect(forAnn.turnNote).toContain('<character name="Bob">');
+    expect(forAnn.turnNote).toContain('How Annie talks:');
+    expect(forAnn.turnNote.trim().endsWith("Write only Annie's next reply; don't write for the others or for {{user}}.]")).toBe(true);
+  });
+
+  it("puts each character's memory in their part", () => {
+    const memories = { a: 'Bob owes her money.', b: 'Ann was rude yesterday.' };
+    const cast = groupTurn({ name: 'G', settings: s() }, members(), 'a', [said('b', 'Hi.')], { memories });
+    expect(cast.turnNote).toContain("Annie's memories of this chat so far:\nBob owes her money.");
+    expect(cast.turnNote).toContain("Bob's memories of this chat so far:\nAnn was rude yesterday.");
+    const swap = groupTurn({ name: 'G', settings: s({ strategy: 'swap' }) }, members(), 'a', [], { memories });
+    expect(swap.card.description).toContain('Bob owes her money.');
+    expect(swap.card.description).not.toContain('rude');
   });
 
   it("writes a member's summary from their description when there's none", () => {

@@ -13,7 +13,7 @@ import { cx, inputClass } from '@/components/ui';
 // strategy, who's in the scene for that reply (click someone to mark them
 // in or out of this chat's scene).
 
-const ORDER_NAMES = { natural: 'natural order', list: 'list order', manual: 'you pick', pooled: 'pooled order' } as const;
+const ORDER_NAMES = { natural: 'natural order', list: 'list order', manual: 'you pick', pooled: 'pooled order', model: 'the model' } as const;
 
 export function GroupTurnBar({
   g,

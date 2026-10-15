@@ -47,7 +47,7 @@ import { copyText } from '@/lib/clipboard';
 import { CODE_BLOCK_CLASS, CODE_CLASS, HEADING_CLASSES, formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
 import { ChatLink, ChatMedia, ChatRule } from '@/components/ChatMedia';
 import { HtmlPage, HtmlText, PageBridgeContext, runSlash, type PageBridge } from '@/components/ChatHtml';
-import { memberName, namedHistory, trimGroupReply } from '@/lib/groupChat';
+import { memberName, memoryTexts, namedHistory, trimGroupReply } from '@/lib/groupChat';
 import { GroupTurnBar } from '@/components/dock/GroupTurnBar';
 import { bankName } from '@/lib/lorebookBank';
 import { ScriptActionsHost, ScriptApprovals, ScriptButtons, logScriptRequest, useTavernScripts, type ScriptActions } from '@/components/dock/TavernScripts';
@@ -294,7 +294,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
     // A group's reply is written from the card built for its speaker's turn
     // (lib/groupChat.ts), with the history under each member's name.
     const who = g ? (speaker ?? defaultSpeaker(messages)) : undefined;
-    const turn = g && who && g.memberOf(who) ? g.turn(who, messages, chat?.presence) : null;
+    const turn = g && who && g.memberOf(who) ? g.turn(who, messages, { presence: chat?.presence, memories: memoryTexts(chat) }) : null;
     const lc = turn ? withAttachedLore(turn.card, attachedLore) : loreCard;
     const hist = g ? namedHistory(history(messages), g.members) : history(messages);
     const over = overridesFor(c, p);
@@ -391,7 +391,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
     written = written.replace(/\s+$/, '');
     // How long it took (a continue's: just the part it added).
     const added = written.slice(base.length);
-    const stats = added.trim() ? genStats(r.timing, r.outputTokens, () => countTextNow(added), r.cost) : undefined;
+    const stats = added.trim() ? genStats(r.timing, r.outputTokens, () => countTextNow(added), r.cost, { tokens: r.inputTokens, cached: r.cachedTokens }) : undefined;
     setMessages((m) =>
       m
         .map((x) => {
@@ -1201,7 +1201,9 @@ function MessageAside({ role, persona, id, tokens, gen, speaker }: { role: 'user
   const count = (s.showTokenCounts ?? true) && tokens ? tokens : undefined;
   const tps = (s.showTokensPerSecond ?? true) && gen ? tokensPerSecond(gen) : undefined;
   const any = id !== undefined || time || count !== undefined || tps !== undefined;
-  const cost = gen?.cost ? `\nCost: ${costLine(gen.cost)}${gen.cost.estimated ? ', from the model\'s prices' : ''}` : '';
+  // What it sent, and how much of that the provider's prompt cache held.
+  const sent = gen?.input ? `\nSent ${formatTokens(gen.input)} tokens${gen.cached ? `, ${formatTokens(gen.cached)} (${Math.round((gen.cached / gen.input) * 100)}%) from the provider's cache` : ''}` : '';
+  const cost = `${sent}${gen?.cost ? `\nCost: ${costLine(gen.cost)}${gen.cost.estimated ? ', from the model\'s prices' : ''}` : ''}`;
   if ((s.avatarShape ?? 'circle') === 'none' && !any) return null;
   return (
     <div className="flex w-10 flex-shrink-0 flex-col items-center gap-0.5 text-[10px] leading-tight whitespace-nowrap text-slate-600 tabular-nums">
