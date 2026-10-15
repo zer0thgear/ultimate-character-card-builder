@@ -22,7 +22,7 @@ export function GroupTurnBar({
   setReplyAs,
   nextSpeaker,
   busy,
-  picking,
+  status,
   onNext,
   auto,
   setAuto,
@@ -36,7 +36,8 @@ export function GroupTurnBar({
   nextSpeaker: string | undefined;
   busy: boolean;
   /** The Model order is asking who speaks. */
-  picking?: boolean;
+  /** What's holding the next reply up (who speaks being chosen, memories being written). */
+  status?: string;
   onNext: () => void;
   auto: boolean;
   setAuto: (on: boolean) => void;
@@ -81,7 +82,7 @@ export function GroupTurnBar({
         >
           {auto ? '⏸ Auto' : '⏵ Auto'}
         </button>
-        {picking && <span className="animate-pulse text-slate-500">Choosing who speaks…</span>}
+        {status && <span className="animate-pulse text-slate-500">{status}</span>}
       </div>
       {cast && (
         <div className="flex flex-wrap items-center gap-1" title="Who the next reply's prompt has in full (the speaker and the scene) and who as a summary (off-stage). Click someone to mark them in or out of this chat's scene; click again to go back to what they do.">

@@ -47,6 +47,7 @@ import { copyText } from '@/lib/clipboard';
 import { CODE_BLOCK_CLASS, CODE_CLASS, HEADING_CLASSES, formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
 import { ChatLink, ChatMedia, ChatRule } from '@/components/ChatMedia';
 import { HtmlPage, HtmlText, PageBridgeContext, runSlash, type PageBridge } from '@/components/ChatHtml';
+import { useGroupMemory, useMemoryStatus } from '@/components/dock/groupMemory';
 import { directorMessages, memberName, memoryTexts, namedHistory, readDirector, trimGroupReply } from '@/lib/groupChat';
 import { GroupTurnBar } from '@/components/dock/GroupTurnBar';
 import { bankName } from '@/lib/lorebookBank';
@@ -91,6 +92,10 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   // A group's Model order asks the writing assistant's connection who speaks.
   const directorStream = useLlmStream();
   const [picking, setPicking] = useState(false);
+  // 🧠 A group's characters' memories, brought up to date every so many
+  // messages; the chat waits for them, as for the summary.
+  const memory = useGroupMemory();
+  const remembering = useMemoryStatus((s) => s.updating);
   const [input, setInput] = useState('');
   // In a group chat: who you picked to reply next (null: the group's order).
   const [replyAs, setReplyAs] = useState<string | null>(null);
@@ -330,7 +335,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   /** In a group: the next member speaks, without a message from you. */
   const groupNext = () => {
     const ms = useChatStore.getState().chat?.messages;
-    if (!ms || running || summarizing || picking) return;
+    if (!ms || running || summarizing || picking || remembering) return;
     follow.current = true;
     void reply(ms).then((r) => {
       // Your turn: Auto waits for you.
@@ -338,7 +343,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
     });
   };
   /** In a group, the name a character's message goes under (exports). */
-  const speakerName = (m: ChatMessage) => {
+  const speakerName = (m: Pick<ChatMessage, 'speaker'>) => {
     const c = g?.memberOf(m.speaker)?.card;
     return c ? memberName(c) : undefined;
   };
@@ -439,8 +444,8 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
       scripts.emit('generation_ended', n);
     } else scripts.emit('generation_stopped');
     if (r.error) toast(r.error, 'error');
-    // Every so many messages, the summary catches up.
-    else void summarizer.summarizeIfDue(summaryRequest());
+    // Every so many messages, the summary catches up, and the characters' memories.
+    else void summarizer.summarizeIfDue(summaryRequest()).then(() => g && memory.updateIfDue(g, me.name));
     return { text: written, error: r.error };
   };
 
@@ -482,7 +487,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
 
   /** Sends the message box (or `typed`, from a page in a message). */
   const send = async (typed?: string) => {
-    if (running || summarizing || picking || !chat) return;
+    if (running || summarizing || picking || remembering || !chat) return;
     const text = (typed ?? input).trim();
     const messages = text ? [...chat.messages, newMessage('user', text)] : chat.messages;
     if (text) {
@@ -994,8 +999,8 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
               replyAs={replyAs}
               setReplyAs={setReplyAs}
               nextSpeaker={replyAs ?? (g.group.settings.order === 'list' || g.group.settings.order === 'manual' ? (g.next(chat.messages) ?? undefined) : defaultSpeaker(chat.messages))}
-              busy={running || summarizing || picking}
-              picking={picking}
+              busy={running || summarizing || picking || !!remembering}
+              status={picking ? 'Choosing who speaks…' : remembering ? `🧠 Updating ${speakerName({ speaker: remembering }) ?? 'a character'}'s memories…` : undefined}
               onNext={groupNext}
               auto={auto}
               setAuto={setAuto}

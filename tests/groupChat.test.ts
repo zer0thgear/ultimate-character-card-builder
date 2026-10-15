@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newCard, newEntry, newLorebook } from '@/lib/cardSpec';
 import { newMessage } from '@/lib/chatPrompt';
-import { castScene, directorMessages, groupGreetings, groupTurn, memberSummary, mentions, namedHistory, nextSpeaker, readDirector, trimGroupReply, type Member } from '@/lib/groupChat';
+import { castScene, directorMessages, groupGreetings, groupTurn, memberSummary, memoriesDue, memoryMessages, mentions, namedHistory, nextSpeaker, readDirector, readMemory, sinceMemory, trimGroupReply, type Member } from '@/lib/groupChat';
 import type { ChatMessage, GroupSettings } from '@/types/project';
 
 const card = (name: string, over: Partial<ReturnType<typeof newCard>['data']> = {}) => ({ ...newCard().data, name, description: `${name} is {{char}}, a knight.`, personality: `${name}'s brave.`, first_mes: `Hi, I'm ${name}.`, mes_example: `<START>\n{{char}}: ${name} speaks.`, ...over });
@@ -129,6 +129,24 @@ describe('group chats', () => {
     expect(readDirector('annie', ms, 'Max')).toEqual({ speaker: 'a' });
     expect(readDirector("It's Max's turn.", ms, 'Max')).toEqual({ user: true });
     expect(readDirector('Nobody.', ms, 'Max')).toBeNull();
+  });
+
+  it('brings memories up to date from what they missed', () => {
+    const ms = members();
+    const history = [said(null, 'Hi all.'), said('a', 'Hello.'), said('b', 'Yo.'), said(null, 'Bob, the sword?')];
+    const memories = { a: { text: 'Max said hi.', through: history[0].id, updatedAt: 0 } };
+    expect(sinceMemory(history, memories.a).map((m) => m.swipes[0])).toEqual(['Hello.', 'Yo.', 'Bob, the sword?']);
+    // A memory whose last message is gone takes in the lot.
+    expect(sinceMemory(history, { ...memories.a, through: 'gone' })).toHaveLength(4);
+    expect(memoriesDue(ms, history, memories, s({ memoryEvery: 4 }))).toEqual(['b', 'c']);
+    expect(memoriesDue(ms.map((m) => (m.id === 'c' ? { ...m, muted: true } : m)), history, memories, s({ memoryEvery: 3 }))).toEqual(['a', 'b']);
+    const ask = memoryMessages(ms[0], ms, history, memories.a, s({ memoryWords: 80 }), 'Max');
+    expect(ask[0].content).toContain("You keep Annie's memories");
+    expect(ask[0].content).toContain('At most 80 words');
+    expect(ask[1].content).toContain("Annie's memories so far:\nMax said hi.");
+    expect(ask[1].content).toContain('Bob: Yo.\n\nMax: Bob, the sword?');
+    expect(ask[1].content).not.toContain('Hi all.');
+    expect(readMemory('<think>hm</think>\n<memory>\nBob has a sword.\n</memory>')).toBe('Bob has a sword.');
   });
 
   it("opens with every member's greeting, or the first's", () => {

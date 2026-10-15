@@ -1,5 +1,5 @@
 import type { CardData, Lorebook } from '@/types/card';
-import type { ChatMessage, ChatSession, GroupMember, GroupProject, GroupSettings } from '@/types/project';
+import type { CharacterMemory, ChatMessage, ChatSession, GroupMember, GroupProject, GroupSettings } from '@/types/project';
 import { ENTRY_BOOK } from '@/lib/lorebookBank';
 import type { LlmMessage } from '@/types/llm';
 
@@ -391,3 +391,53 @@ export function groupGreetings(members: Member[], settings: GroupSettings, make:
 /** A chat's memory texts by member (for groupTurn). */
 export const memoryTexts = (chat: Pick<ChatSession, 'memories'> | null | undefined): Record<string, string> =>
   Object.fromEntries(Object.entries(chat?.memories ?? {}).map(([id, m]) => [id, m.text]));
+
+// Memories: each character's notes on a chat, from their side, kept up by
+// the writing assistant every so many messages and sent in their part of
+// the prompt (memoryBlock). They hold what's slipped out of the history.
+
+export const MEMORY_EVERY = 10;
+export const MEMORY_WORDS = 150;
+
+/** The messages a memory hasn't taken in yet (all of them, if it has none or its last message is gone). */
+export function sinceMemory(history: ChatMessage[], memory: CharacterMemory | undefined): ChatMessage[] {
+  const at = memory?.through ? history.findIndex((m) => m.id === memory.through) : -1;
+  return history.slice(at + 1).filter((m) => shown(m).trim());
+}
+
+/** The members whose memories are due: memoryEvery or more messages new since. */
+export function memoriesDue(members: Member[], history: ChatMessage[], memories: ChatSession['memories'], settings: GroupSettings): string[] {
+  const every = settings.memoryEvery ?? MEMORY_EVERY;
+  return members.filter((m) => !m.muted && sinceMemory(history, memories?.[m.id]).length >= every).map((m) => m.id);
+}
+
+/** The request that brings `member`'s memory up to the end of `history`. */
+export function memoryMessages(member: Member, members: Member[], history: ChatMessage[], memory: CharacterMemory | undefined, settings: GroupSettings, userName: string): LlmMessage[] {
+  const name = memberName(member.card);
+  const words = settings.memoryWords ?? MEMORY_WORDS;
+  const names = new Map(members.map((m) => [m.id, memberName(m.card)]));
+  const fresh = sinceMemory(history, memory)
+    .slice(-60)
+    .map((m) => `${m.role === 'user' ? userName : (m.speaker && names.get(m.speaker)) || 'Narrator'}: ${shown(m).trim().slice(0, 1500)}`)
+    .join('\n\n');
+  return [
+    {
+      role: 'system',
+      content:
+        `You keep ${name}'s memories of a roleplay chat with ${userName} and others: short notes, from ${name}'s side, of what ${name} saw, did, learned and promised, and how they feel about the others now. ` +
+        `Only what ${name} would know: leave out what happened where they weren't. Keep what still matters from the old notes, drop what doesn't, and add what's new. ` +
+        `At most ${words} words, as plain notes. Answer with the notes only.`,
+    },
+    {
+      role: 'user',
+      content: `${name}: ${memberSummary(member)}\n\n${name}'s memories so far:\n${memory?.text.trim() || '(none yet)'}\n\nWhat's happened since:\n${fresh || '(nothing)'}\n\nWrite ${name}'s memories now.`,
+    },
+  ];
+}
+
+/** A memory as the model wrote it, without its thinking or wrapper. */
+export const readMemory = (text: string) =>
+  text
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/^\s*<memory>|<\/memory>\s*$/gi, '')
+    .trim();

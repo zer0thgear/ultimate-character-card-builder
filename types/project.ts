@@ -225,7 +225,7 @@ export interface ChatSession {
    *  strategy), by their project id. */
   presence?: Record<string, 'in' | 'out'>;
   /** A group chat's characters' memories, by their project id: their notes
-   *  on the chat so far, through message 	hrough (null: none yet). */
+   *  on the chat so far, through the message `through` (null: none yet). */
   memories?: Record<string, CharacterMemory>;
   createdAt: number;
   updatedAt: number;

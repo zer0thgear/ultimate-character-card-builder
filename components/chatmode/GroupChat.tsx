@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { GroupMember, GroupProject, GroupSettings, ProjectSummary } from '@/types/project';
 import { openNewGroup, useGroupUi, type NewGroupRequest } from '@/components/chatmode/groupUi';
 import { api } from '@/lib/api';
-import { CAST_RECENT, CAST_STICKY, JOIN_PREFIX, JOIN_SUFFIX, memberName, memberSummary } from '@/lib/groupChat';
+import { CAST_RECENT, CAST_STICKY, JOIN_PREFIX, JOIN_SUFFIX, MEMORY_EVERY, MEMORY_WORDS, memberName, memberSummary, sinceMemory } from '@/lib/groupChat';
 import { useGroupStore } from '@/store/groupStore';
 import { useProjectStore } from '@/store/projectStore';
 import { useChatStore } from '@/store/chatStore';
@@ -12,6 +12,9 @@ import { toast } from '@/store/uiStore';
 import { useLlmStream } from '@/hooks/useLlmStream';
 import { ChatPanel } from '@/components/dock/ChatPanel';
 import { useGroupChatHost } from '@/components/dock/chatHost';
+import { useGroupMemory, useMemoryStatus } from '@/components/dock/groupMemory';
+import { useLlmStore } from '@/store/llmStore';
+import { resolvePersona, usePersonaStore } from '@/store/personaStore';
 import { LorebookSelect } from '@/components/LorebookBank';
 import { AutoTextarea, Button, IconButton, Modal, NumberInput, Toggle, confirmDialog, cx, inputClass } from '@/components/ui';
 
@@ -169,6 +172,10 @@ function GroupDrawer({ onClose }: { onClose: () => void }) {
   const [adding, setAdding] = useState(false);
   const { runAssist } = useLlmStream();
   const [writing, setWriting] = useState<string | null>(null);
+  const host = useGroupChatHost();
+  const memory = useGroupMemory();
+  const { updating, stop: stopMemory } = useMemoryStatus();
+  const userName = resolvePersona(usePersonaStore((st) => st.personas), useLlmStore((st) => st.chatSettings), chat).name;
   if (!group) return null;
   const s = group.settings;
   const set = (patch: Partial<GroupSettings>) => update((g) => ({ ...g, settings: { ...g.settings, ...patch } }));
@@ -358,6 +365,67 @@ function GroupDrawer({ onClose }: { onClose: () => void }) {
             seconds after each reply
           </label>
           <Toggle checked={s.greetings !== 'first'} onChange={(v) => set({ greetings: v ? undefined : 'first' })} label={<span className="text-xs">New chats open with every character&apos;s greeting (off: the first&apos;s)</span>} />
+        </section>
+
+        <section className="flex flex-col gap-2">
+          <h3 className="text-xs font-medium tracking-wide text-slate-400 uppercase">Memories</h3>
+          <Toggle checked={!!s.memory} onChange={(v) => set({ memory: v || undefined })} label={<span className="text-xs">Characters keep memories of each chat</span>} />
+          <p className="text-xs text-slate-500">Each character&apos;s notes on the chat from their side (what they saw, did and feel), written by the writing assistant and sent in their part of the prompt, so what&apos;s slipped out of the history stays with them.</p>
+          {s.memory && (
+            <div className="flex flex-wrap gap-3 text-xs text-slate-400">
+              <label className="flex flex-col gap-0.5" title="A character's memory is brought up to date once this many messages are new since">
+                Update every (messages)
+                <NumberInput value={s.memoryEvery} onChange={(v) => set({ memoryEvery: v })} min={1} max={200} placeholder={String(MEMORY_EVERY)} className="w-24" allowEmpty />
+              </label>
+              <label className="flex flex-col gap-0.5" title="How long each memory may grow">
+                At most (words)
+                <NumberInput value={s.memoryWords} onChange={(v) => set({ memoryWords: v })} min={20} max={2000} step={10} placeholder={String(MEMORY_WORDS)} className="w-24" allowEmpty />
+              </label>
+            </div>
+          )}
+          {chat && host?.group && (
+            <>
+              {host.group.members.map((m) => {
+                const mem = chat.memories?.[m.id];
+                const fresh = sinceMemory(chat.messages, mem).length;
+                const through = mem?.through ? chat.messages.findIndex((x) => x.id === mem.through) : -1;
+                return (
+                  <label key={m.id} className="flex flex-col gap-0.5 text-xs text-slate-400">
+                    <span className="flex items-center gap-1">
+                      {memberName(m.card)}
+                      <span className="text-slate-500">
+                        {mem ? (through >= 0 ? `· up to #${through + 1}` : '') : '· none yet'}
+                        {fresh ? ` · ${fresh} new since` : ''}
+                      </span>
+                      <button type="button" disabled={!!updating || !chat.messages.length} onClick={() => void memory.update(host.group!, [m.id], userName)} className="ml-auto text-violet-300 hover:text-violet-200 disabled:opacity-50" title="The writing assistant brings it up to the last message">
+                        {updating === m.id ? '🧠 Updating…' : '🧠 Update'}
+                      </button>
+                    </span>
+                    <AutoTextarea
+                      value={mem?.text ?? ''}
+                      readOnly={updating === m.id}
+                      onChange={(e) => useChatStore.getState().setMemory(m.id, e.target.value ? { text: e.target.value, through: mem?.through ?? null, updatedAt: Date.now() } : undefined)}
+                      minRows={1}
+                      maxRows={8}
+                      placeholder={`What ${memberName(m.card)} remembers of this chat`}
+                      className="text-xs"
+                    />
+                  </label>
+                );
+              })}
+              <div className="flex gap-2">
+                {updating ? (
+                  <Button size="sm" variant="danger" onClick={() => stopMemory?.()}>
+                    ■ Stop
+                  </Button>
+                ) : (
+                  <Button size="sm" disabled={!chat.messages.length} onClick={() => void memory.update(host.group!, host.group!.members.filter((m) => !m.muted).map((m) => m.id), userName)} title="Bring every unmuted character's memory up to the last message">
+                    🧠 Update all now
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
         </section>
 
         <section className="flex flex-col gap-2">
