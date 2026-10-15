@@ -24,7 +24,8 @@ import { PersonaAvatar, PersonaPicker, avatarFrame } from '@/components/llm/Pers
 import { openLightbox } from '@/components/Lightbox';
 import { ChatPictureBubble, DescribeDialog, DrawButton, PendingPicture, useChatPictures, type DrawSpec } from '@/components/chatmode/ChatPictures';
 import { addContinue, addReroll, branchCount, choose, onPath, pathDepth, pathText, rerollBase, startTree, undoContinue, type ContinueNode } from '@/lib/continueTree';
-import { api } from '@/lib/api';
+import { api, ownerKey } from '@/lib/api';
+import { ChatHostContext, useCardChatHost, useChatHost, type ChatHost } from '@/components/dock/chatHost';
 import { resolvePersona, usePersonaStore } from '@/store/personaStore';
 import { ensureLorebooks, useLorebookStore } from '@/store/lorebookStore';
 import { lorebooksInPlay, withAttachedLore } from '@/lib/lorebookBank';
@@ -59,8 +60,10 @@ import { ChatSummaryPanel, useChatSummary } from '@/components/dock/ChatSummaryP
 
 /** `wide`: the chat has the window's width (Chat mode), so it keeps to a
  *  centred column as it does with the dock filling the window. */
-export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
-  const project = useProjectStore((s) => s.project);
+export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?: ChatHost } = {}) {
+  // What the chat is with: the open card, unless the caller says otherwise.
+  const cardHost = useCardChatHost();
+  const host = given ?? cardHost;
   const { chat, list, loadFor, newChat, openChat, deleteChat, rename, setGreeting, setGreetingEdit, setMessages, branchFrom } = useChatStore();
   const { connections, chatConnectionId, setChatConnection, chatSettings, presets } = useLlmStore();
   const personas = usePersonaStore((s) => s.personas);
@@ -85,7 +88,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const scriptActions = useRef<ScriptActions | null>(null);
   const scriptPreset = chatSettings.presetId && !textTemplates(connection) ? (presets.find((p) => p.id === chatSettings.presetId) ?? null) : null;
   const scripts = useTavernScripts({
-    card: project?.card.data ?? null,
+    card: host?.card ?? null,
     chat,
     preset: scriptPreset,
     settings: chatSettings,
@@ -127,16 +130,17 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   // ↓ during a reply: follow its end, not its start, until the next one.
   const chase = useRef(false);
 
+  const hostKey = host ? ownerKey(host.owner) : null;
   useEffect(() => {
-    if (project) void loadFor(project.id);
-  }, [project?.id, loadFor]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (host) void loadFor(host.owner);
+  }, [hostKey, loadFor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A greeting's 💬 in the editor opens a fresh chat with it.
   useEffect(() => {
-    if (pending === null || !project || useChatStore.getState().projectId !== project.id) return;
+    if (pending === null || !host?.projectId || useChatStore.getState().projectId !== host.projectId) return;
     clearPending();
     void newChat(pending);
-  }, [pending, project, clearPending, newChat, list]);
+  }, [pending, host?.projectId, clearPending, newChat, list]);
 
   // New text scrolls into view while following, but never past the start of
   // the reply being written, so it can be read from the top as it streams.
@@ -178,8 +182,8 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
     el.scrollTop = el.scrollHeight;
   };
 
-  if (!project) return null;
-  const card = project.card.data;
+  if (!host) return null;
+  const card = host.card;
   const greetingCount = 1 + card.alternate_greetings.length;
 
   const matches = search && chat ? chatMatches([{ id: 'greeting', text: chatGreeting(card, chat) }, ...chat.messages.map((m) => ({ id: m.id, text: messageText(m) }))], search) : [];
@@ -205,7 +209,8 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   /** The pictures drawn after a message (null: after the greeting), and one
    *  on its way there. */
   const picturesAfter = (after: string | null) => {
-    if (!chat || !project) return null;
+    if (!chat || !host.projectId) return null;
+    const projectId = host.projectId;
     const here = (chat.images ?? []).filter((img) => img.after === after);
     const p = pictures.pending;
     return (
@@ -217,7 +222,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
             <ChatPictureBubble
               key={img.id}
               image={img}
-              projectId={project.id}
+              projectId={projectId}
               busy={!!p && !p.error}
               onRedraw={() => void pictures.draw({ scene: img.scene, characters: img.characters }, img.after, img)}
               onEdit={() => setDescribing({ spec: { scene: img.scene, characters: img.characters }, replacing: img })}
@@ -248,7 +253,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   const regexScripts = chatRegexScripts(card, textTemplates(connection) ? null : preset, chatSettings);
   // The bank's lorebooks this chat brings in beside the card's: its own,
   // the persona's and the global ones (lib/lorebookBank.ts).
-  const attachedLore = lorebooksInPlay(bank, { projectId: project?.id, chatLorebookId: chat?.lorebookId, personaLorebookId: me.persona?.lorebookId, globalIds: chatSettings.globalLorebooks });
+  const attachedLore = lorebooksInPlay(bank, { projectId: host.projectId, chatLorebookId: chat?.lorebookId, personaLorebookId: me.persona?.lorebookId, globalIds: chatSettings.globalLorebooks });
   const loreCard = withAttachedLore(card, attachedLore);
   /** The preset's samplers over a connection's, when the chat uses them. */
   const overridesFor = (c: LlmConnection | null, p: ChatPreset | null): Partial<SamplerParams> => (p && chatSettings.presetSamplers && c ? presetParams(p, c.kind) : {});
@@ -587,6 +592,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
   };
 
   return (
+    <ChatHostContext.Provider value={host}>
     <div
       className="flex h-full min-h-0 flex-col"
       onKeyDown={(e) => {
@@ -938,7 +944,8 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
                 ⚖ Compare
               </Button>
             )}
-            {wide && (
+            {/* Chat pictures draw with the card's Image tab, so a card's chat only. */}
+            {wide && host.projectId && (
               <DrawButton
                 phone={phone}
                 disabled={!!pictures.pending && !pictures.pending.error}
@@ -978,6 +985,7 @@ export function ChatPanel({ wide = false }: { wide?: boolean } = {}) {
         />
       )}
     </div>
+    </ChatHostContext.Provider>
   );
 }
 
@@ -1071,11 +1079,11 @@ function renderNodes(nodes: FormatNode[]): React.ReactNode {
 }
 
 function Avatar({ role, persona }: { role: 'user' | 'assistant' | 'system'; persona?: Persona | null }) {
-  const project = useProjectStore((s) => s.project);
+  const host = useChatHost();
   const shape = useLlmStore((s) => s.chatSettings.avatarShape) ?? 'circle';
   if (shape === 'none') return null;
   // Tapping a picture shows it full size.
-  const url = role === 'user' ? (persona ? api.personaAvatarUrl(persona) : null) : project?.avatar ? `/api/projects/${project.id}/avatar?v=${project.avatar.version}` : null;
+  const url = role === 'user' ? (persona ? api.personaAvatarUrl(persona) : null) : (host?.avatarUrl({ role }) ?? null);
   const frame = avatarFrame(shape, 36);
   const face =
     role === 'user' ? (

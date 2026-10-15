@@ -2,13 +2,13 @@
 
 import { create } from 'zustand';
 import type { AuthorsNote, ChatImage, ChatMessage, ChatSession, ChatSessionSummary, ChatSummary } from '@/types/project';
-import { api } from '@/lib/api';
+import { chatApi, ownerKey, type ChatOwner } from '@/lib/api';
 import { uuid } from '@/lib/uuid';
 import { useProjectStore } from '@/store/projectStore';
 import { sumTallies, tallyChat } from '@/lib/chatStats';
 import { countTextNow, textCounterLoaded } from '@/lib/textTokens';
 
-// The open card's test chats. The greeting isn't stored as a message: the
+// The open card's (or group's) chats. The greeting isn't stored as a message: the
 // chat remembers which greeting opened it and reads it live from the card,
 // so editing the greeting and chatting again tests the edit.
 
@@ -59,10 +59,14 @@ export function branchOf(chat: ChatSession, until: number, id: string, now: numb
 }
 
 interface ChatState {
+  /** Whose chats these are: a card's, or a group's. */
+  owner: ChatOwner | null;
+  /** The card's project, when the owner is a card (the card lists' chat counts follow it). */
   projectId: string | null;
   list: ChatSummary[];
   chat: ChatSession | null;
-  loadFor: (projectId: string) => Promise<void>;
+  /** A card's chats (by its project id), or owner's. */
+  loadFor: (owner: ChatOwner | string) => Promise<void>;
   openChat: (id: string) => Promise<void>;
   newChat: (greeting: number) => Promise<void>;
   deleteChat: (id: string) => Promise<void>;
@@ -109,49 +113,61 @@ export const useChatStore = create<ChatState>((set, get) => {
     schedule();
   };
 
+  /** The open owner's chats on the server. */
+  const store = () => {
+    const { owner } = get();
+    return owner ? chatApi(owner) : null;
+  };
+
   return {
+    owner: null,
     projectId: null,
     list: [],
     chat: null,
 
-    loadFor: async (projectId) => {
-      if (get().projectId === projectId) return;
+    loadFor: async (who) => {
+      const owner: ChatOwner = typeof who === 'string' ? { kind: 'card', id: who } : who;
+      const key = ownerKey(owner);
+      const current = get().owner;
+      if (current && ownerKey(current) === key) return;
       await get().flush();
-      set({ projectId, list: [], chat: null });
-      const list = await api.listChats(projectId);
-      if (get().projectId !== projectId) return;
+      set({ owner, projectId: owner.kind === 'card' ? owner.id : null, list: [], chat: null });
+      const list = await chatApi(owner).list();
+      const now = get().owner;
+      if (!now || ownerKey(now) !== key) return;
       set({ list });
       if (list[0]) await get().openChat(list[0].id);
     },
 
     openChat: async (id) => {
-      const { projectId } = get();
-      if (!projectId) return;
+      const { owner } = get();
+      const s = store();
+      if (!s) return;
       await get().flush();
-      const chat = await api.getChat(projectId, id);
-      if (get().projectId === projectId) set({ chat });
+      const chat = await s.get(id);
+      if (get().owner === owner) set({ chat });
     },
 
     newChat: async (greeting) => {
-      const { projectId } = get();
-      if (!projectId) return;
+      const s = store();
+      if (!s) return;
       await get().flush();
       const now = Date.now();
       const chat: ChatSession = { id: uuid(), name: `Chat ${new Date(now).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}`, greeting, messages: [], createdAt: now, updatedAt: now };
-      const saved = await api.saveChat(projectId, chat);
-      set((s) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: 0, sent: 0, received: 0, tokens: 0, last: 0 }, ...s.list] }));
+      const saved = await s.save(chat);
+      set((st) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: 0, sent: 0, received: 0, tokens: 0, last: 0 }, ...st.list] }));
     },
 
     deleteChat: async (id) => {
-      const { projectId } = get();
-      if (!projectId) return;
+      const s = store();
+      if (!s) return;
       if (get().chat?.id === id) {
         if (timer) clearTimeout(timer);
         dirty = false;
         set({ chat: null });
       }
-      await api.deleteChat(projectId, id);
-      set((s) => ({ list: s.list.filter((c) => c.id !== id) }));
+      await s.remove(id);
+      set((st) => ({ list: st.list.filter((c) => c.id !== id) }));
     },
 
     rename: (name) => updateChat((c) => ({ ...c, name })),
@@ -190,8 +206,8 @@ export const useChatStore = create<ChatState>((set, get) => {
         // A picture goes with the message it follows.
         const ids = new Set(messages.map((m) => m.id));
         const gone = (c.images ?? []).filter((i) => i.after !== null && !ids.has(i.after));
-        const { projectId } = get();
-        if (projectId) for (const i of gone) void api.deleteChatImage(projectId, i.file).catch(() => {});
+        const s = store();
+        if (s) for (const i of gone) void s.deleteImage(i.file).catch(() => {});
         return { ...c, messages, ...(gone.length ? { images: c.images!.filter((i) => !gone.includes(i)) } : {}) };
       }),
     setSummary: (summary) =>
@@ -202,8 +218,9 @@ export const useChatStore = create<ChatState>((set, get) => {
       }),
     putImage: (image) => updateChat((c) => ({ ...c, images: (c.images ?? []).some((i) => i.id === image.id) ? c.images!.map((i) => (i.id === image.id ? image : i)) : [...(c.images ?? []), image] })),
     branchFrom: async (messageId) => {
-      const { projectId, chat } = get();
-      if (!projectId || !chat) return;
+      const { chat } = get();
+      const s = store();
+      if (!s || !chat) return;
       await get().flush();
       const until = chat.messages.findIndex((m) => m.id === messageId);
       if (until < 0) return;
@@ -213,29 +230,28 @@ export const useChatStore = create<ChatState>((set, get) => {
       const images: ChatImage[] = [];
       for (const img of branch.images ?? []) {
         try {
-          const blob = await (await fetch(api.chatImageUrl(projectId, img.file))).blob();
+          const blob = await (await fetch(s.imageUrl(img.file))).blob();
           const file = `${branch.id}-${uuid()}.png`;
-          await api.putChatImage(projectId, file, blob);
+          await s.putImage(file, blob);
           images.push({ ...img, file });
         } catch {
           /* a picture that can't be copied is left out */
         }
       }
-      const saved = await api.saveChat(projectId, { ...branch, images });
-      set((s) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: saved.messages.length, ...tallyChat(saved.messages, countMemo) }, ...s.list] }));
+      const saved = await s.save({ ...branch, images });
+      set((st) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: saved.messages.length, ...tallyChat(saved.messages, countMemo) }, ...st.list] }));
     },
     importChat: async (chat) => {
-      const { projectId } = get();
-      if (!projectId) return;
+      const s = store();
+      if (!s) return;
       await get().flush();
-      const saved = await api.saveChat(projectId, chat);
-      set((s) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: saved.messages.length, ...tallyChat(saved.messages, countMemo) }, ...s.list] }));
+      const saved = await s.save(chat);
+      set((st) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: saved.messages.length, ...tallyChat(saved.messages, countMemo) }, ...st.list] }));
     },
     removeImage: (id) =>
       updateChat((c) => {
         const image = c.images?.find((i) => i.id === id);
-        const { projectId } = get();
-        if (image && projectId) void api.deleteChatImage(projectId, image.file).catch(() => {});
+        if (image) void store()?.deleteImage(image.file).catch(() => {});
         return { ...c, images: (c.images ?? []).filter((i) => i.id !== id) };
       }),
 
@@ -244,10 +260,11 @@ export const useChatStore = create<ChatState>((set, get) => {
         clearTimeout(timer);
         timer = null;
       }
-      const { projectId, chat } = get();
-      if (!dirty || !projectId || !chat) return;
+      const { chat } = get();
+      const s = store();
+      if (!dirty || !s || !chat) return;
       dirty = false;
-      await api.saveChat(projectId, chat).catch((err) => {
+      await s.save(chat).catch((err) => {
         dirty = true;
         console.error('Chat save failed', err);
       });
