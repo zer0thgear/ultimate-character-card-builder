@@ -188,6 +188,8 @@ export interface BuildOptions {
   guide?: string;
   /** The chat's author's note (lib/authorsNote.ts). */
   authorsNote?: AuthorsNote;
+  /** Sent last, before any guide: in a group chat, whose reply this is. */
+  turnNote?: string;
   /** The chat's summary, and where it goes. */
   summary?: SummaryInjection;
   model?: string;
@@ -491,6 +493,7 @@ export function buildChatPrompt(card: CardData, history: ChatMessage[], settings
   const cardPhi = settings.useCardPostHistory && card.post_history_instructions.trim();
   sys(cardPhi ? 'Post-history instructions (card)' : 'Post-history instructions', cardPhi ? x(card.post_history_instructions, phiDefault) : phiDefault);
   if (mode === 'impersonate') sys('Impersonation prompt', x(DEFAULT_IMPERSONATION));
+  if (opts.turnNote?.trim()) sys('Whose turn', x(opts.turnNote));
   if (opts.guide?.trim()) sys('Guide (🧭)', x(guideText(settings.guideTemplate, opts.guide)));
 
   const toParts = (kept: ChatMessage[]) => historyParts(kept, injections, x, { char, user }, rx);

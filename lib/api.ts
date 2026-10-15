@@ -1,6 +1,6 @@
 import type { AppTagData } from '@/lib/appTags';
 import type { CardStats } from '@/lib/cardStats';
-import type { AppConfig, CardProject, CardVersion, CardVersionInfo, TrashedProject, BankLorebook, ChatSession, ChatSummary, StorySession, StorySummary, KeptImage, Persona, ProjectSummary, AvatarInfo, BrainstormSession, BrainstormSummary } from '@/types/project';
+import type { AppConfig, CardProject, CardVersion, CardVersionInfo, TrashedProject, BankLorebook, ChatSession, ChatSummary, StorySession, StorySummary, KeptImage, Persona, ProjectSummary, AvatarInfo, BrainstormSession, BrainstormSummary, GroupProject, GroupSummary } from '@/types/project';
 import type { LlmEvent, LlmRequest } from '@/types/llm';
 import type { Lorebook } from '@/types/card';
 import type { InstalledPack } from '@/lib/extensionPack';
@@ -29,6 +29,13 @@ export const api = {
   listProjects: () => call<ProjectSummary[]>('/api/projects'),
   createProject: (init: Partial<CardProject> = {}) => call<CardProject>('/api/projects', json('POST', init)),
   getProject: (id: string) => call<CardProject>(`/api/projects/${id}`),
+
+  // Groups (group chats; their chats go through chatApi).
+  listGroups: () => call<GroupSummary[]>('/api/groups'),
+  getGroup: (id: string) => call<GroupProject>(`/api/groups/${id}`),
+  saveGroup: (g: GroupProject) => call<GroupProject>(`/api/groups/${g.id}`, json('PUT', g)),
+  deleteGroup: (id: string) => call<{ ok: true }>(`/api/groups/${id}`, { method: 'DELETE' }),
+
   saveProject: (p: CardProject) => call<CardProject>(`/api/projects/${p.id}`, json('PUT', p)),
   deleteProject: (id: string) => call<{ ok: true }>(`/api/projects/${id}`, { method: 'DELETE' }),
   listVersions: (id: string) => call<CardVersionInfo[]>(`/api/projects/${id}/versions`),

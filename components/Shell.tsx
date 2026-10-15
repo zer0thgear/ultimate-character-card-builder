@@ -27,6 +27,8 @@ import { ExtDialogHost, openExtDialog } from '@/components/extensions/SandboxFra
 import { ReferencePickHost } from '@/components/llm/References';
 import { usePackStore } from '@/store/packStore';
 import { ChatCardActions, ChatCardList, ChatHeaderAvatar, ChatHome, ChatScreen, switchAppMode } from '@/components/chatmode/ChatMode';
+import { GroupHeader, GroupScreen, NewGroupHost } from '@/components/chatmode/GroupChat';
+import { useGroupStore } from '@/store/groupStore';
 import { CardListMeta } from '@/components/CardListMeta';
 import { CardPager, useCardPage } from '@/components/CardPager';
 import { CardSortControl, TagFilter, TagFilterNote, useSortedCards } from '@/components/CardSort';
@@ -48,6 +50,7 @@ import { ShortcutsDialog, openShortcuts } from '@/components/ShortcutsDialog';
 
 export function Shell() {
   const project = useProjectStore((s) => s.project);
+  const group = useGroupStore((s) => s.group);
   const loading = useProjectStore((s) => s.loading);
   const { sidebarOpen, setSidebarOpen, dockWidth, setDockWidth, phoneView } = useUiStore();
   const fullPane = useUiStore((s) => s.fullPane);
@@ -151,7 +154,7 @@ export function Shell() {
                 <ChatCardList className="w-full" />
               </SidebarFrame>
             )}
-            <div className="flex min-w-0 flex-1">{project ? <ChatScreen phone={phone} /> : <ChatHome loading={loading} />}</div>
+            <div className="flex min-w-0 flex-1">{project ? <ChatScreen phone={phone} /> : group ? <GroupScreen phone={phone} /> : <ChatHome loading={loading} />}</div>
           </>
         ) : (
           <>
@@ -214,6 +217,7 @@ export function Shell() {
       <VisionWriteHost />
       <ExtensionHosts />
       <ExtDialogHost />
+      <NewGroupHost />
       <ReferencePickHost />
       <AssistInspectorHost />
       <Lightbox />
@@ -235,6 +239,7 @@ function SaveStatus() {
 }
 
 function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
+  const group = useGroupStore((s) => s.group);
   const project = useProjectStore((s) => s.project);
   const { past, future, undo, redo } = useProjectStore();
   const { sidebarOpen, theme, setTheme, showAvatar, setShowAvatar, exportKeepsMetadata, exportMaxSize, exportCompression } = useUiStore();
@@ -259,9 +264,20 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
           ⌂
         </IconButton>
       )}
+      {chatMode && group && !project && (
+        <IconButton title="Close this group (back to the home screen)" onClick={() => void useGroupStore.getState().close()}>
+          ⌂
+        </IconButton>
+      )}
       {!(phone && project) && <span className="text-sm font-semibold tracking-tight text-violet-300">UCCB</span>}
       {/* On a phone, it's at the top of the ☰ drawer instead. */}
       {!phone && <ModeSwitch />}
+      {chatMode && group && !project && (
+        <>
+          {!phone && <span className="text-slate-700">/</span>}
+          <GroupHeader phone={phone} />
+        </>
+      )}
       {project && (
         <>
           {!phone && <span className="text-slate-700">/</span>}

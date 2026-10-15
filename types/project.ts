@@ -106,6 +106,8 @@ export interface ProjectSummary {
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
+  /** In a group chat, the member who wrote it (their card's project id). */
+  speaker?: string;
   /** Every version generated for this turn; `swipe` is the one shown. */
   swipes: string[];
   swipe: number;
@@ -216,6 +218,9 @@ export interface ChatSession {
   /** The chat's variables (SillyTavern's chat variables): what Tavern
    *  Helper scripts keep for this chat, and what {{getvar}} reads. */
   vars?: Record<string, unknown>;
+  /** A group chat's members marked in or out of the scene by hand (Cast
+   *  strategy), by their project id. */
+  presence?: Record<string, 'in' | 'out'>;
   createdAt: number;
   updatedAt: number;
 }
@@ -362,6 +367,64 @@ export interface BankLorebook {
 }
 
 export type ChatSummary = Pick<ChatSession, 'id' | 'name' | 'createdAt' | 'updatedAt'> & { messageCount: number } & ChatTally;
+
+// ─── Groups (group chats) ────────────────────────────────────────────────────
+
+/** A card in a group, by its project. */
+export interface GroupMember {
+  projectId: string;
+  /** Left out of replies (and of the Join strategy unless it includes them). */
+  muted?: boolean;
+  /** How readily they speak up in the natural order, 0–1 (SillyTavern's talkativeness). */
+  talkativeness?: number;
+  /** A line or two on who they are, for the Cast strategy's off-stage members. */
+  summary?: string;
+}
+
+/** How a group's reply is prompted: SillyTavern's swap (the speaker's card)
+ *  and join (every card in one), or Cast (the speaker in full, the others
+ *  by how present they are; lib/groupChat.ts). */
+export type GroupStrategy = 'swap' | 'join' | 'cast';
+/** Who speaks next: SillyTavern's activation strategies. */
+export type GroupOrder = 'natural' | 'list' | 'manual' | 'pooled';
+
+export interface GroupSettings {
+  strategy: GroupStrategy;
+  order: GroupOrder;
+  /** A member may reply to their own message. */
+  allowSelfResponses?: boolean;
+  /** Members keep the conversation going on their own, every `autoDelay` seconds. */
+  autoMode?: boolean;
+  autoDelay?: number;
+  /** Join: around each card's fields ({{char}} is that card's name). */
+  joinPrefix?: string;
+  joinSuffix?: string;
+  /** Join: muted members' cards go in too. */
+  joinMuted?: boolean;
+  /** A new chat opens with every member's greeting, or the first member's. */
+  greetings?: 'all' | 'first';
+  /** Cast: members who spoke or were named in the last `castRecent`
+   *  messages are in the scene, and stay `castSticky` more; past
+   *  `castBudget` tokens the least recent drop to their summary. */
+  castRecent?: number;
+  castSticky?: number;
+  castBudget?: number;
+}
+
+export interface GroupProject {
+  id: string;
+  name: string;
+  members: GroupMember[];
+  settings: GroupSettings;
+  /** The group's own scenario, over the members'. */
+  scenario?: string;
+  /** A lorebook from the bank that comes with the group's chats. */
+  lorebookId?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type GroupSummary = Pick<GroupProject, 'id' | 'name' | 'members' | 'createdAt' | 'updatedAt'> & { chats: number; lastChat?: number };
 
 // ─── Server config ───────────────────────────────────────────────────────────
 
