@@ -26,6 +26,7 @@ import { importCards } from '@/components/ImportCards';
 import { openLorebooks } from '@/components/LorebookBank';
 import type { ProjectSummary } from '@/types/project';
 import { AdventurePanel } from '@/components/adventure/AdventurePanel';
+import { GroupSidebarList, GroupsSection } from '@/components/chatmode/GroupChat';
 import { useAdventureStore } from '@/store/adventureStore';
 
 // Chat mode: the app as a chat frontend. Your cards and the ones imported
@@ -87,6 +88,7 @@ export function ChatCardList({ onPicked, className }: { onPicked?: () => void; c
           🔗
         </Button>
       </div>
+      <GroupSidebarList onPicked={onPicked} />
       {summaries.length > 1 && (
         <div className="flex gap-1 px-2 pb-2">
           {summaries.length > 6 && <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search name, tag, author…" className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs')} />}
@@ -182,6 +184,7 @@ export function ChatHome({ loading }: { loading: boolean }) {
           </Button>
           {total > 1 && <CardSortControl className="ml-auto w-44" />}
         </div>
+        <GroupsSection />
         <TagFilter cards={all} />
         <AppTagBar cards={all} />
         <CardSelectBar shown={summaries} page={pager.items} />

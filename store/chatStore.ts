@@ -68,7 +68,8 @@ interface ChatState {
   /** A card's chats (by its project id), or owner's. */
   loadFor: (owner: ChatOwner | string) => Promise<void>;
   openChat: (id: string) => Promise<void>;
-  newChat: (greeting: number) => Promise<void>;
+  /** A new chat opened by greeting greeting (-1: none), starting with messages (a group's greetings). */
+  newChat: (greeting: number, messages?: ChatMessage[]) => Promise<void>;
   deleteChat: (id: string) => Promise<void>;
   rename: (name: string) => void;
   setGreeting: (greeting: number) => void;
@@ -85,6 +86,8 @@ interface ChatState {
   setSummary: (summary: ChatSessionSummary | undefined) => void;
   /** The chat's variables (empty clears them). */
   setVars: (vars: Record<string, unknown>) => void;
+  /** A group member marked in or out of the scene (undefined: by what they do). */
+  setPresence: (memberId: string, value: 'in' | 'out' | undefined) => void;
   /** Adds a picture to the chat, or replaces one with the same id. */
   putImage: (image: ChatImage) => void;
   removeImage: (id: string) => void;
@@ -148,14 +151,14 @@ export const useChatStore = create<ChatState>((set, get) => {
       if (get().owner === owner) set({ chat });
     },
 
-    newChat: async (greeting) => {
+    newChat: async (greeting, messages = []) => {
       const s = store();
       if (!s) return;
       await get().flush();
       const now = Date.now();
-      const chat: ChatSession = { id: uuid(), name: `Chat ${new Date(now).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}`, greeting, messages: [], createdAt: now, updatedAt: now };
+      const chat: ChatSession = { id: uuid(), name: `Chat ${new Date(now).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}`, greeting, messages, createdAt: now, updatedAt: now };
       const saved = await s.save(chat);
-      set((st) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: 0, sent: 0, received: 0, tokens: 0, last: 0 }, ...st.list] }));
+      set((st) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: saved.messages.length, ...tallyChat(saved.messages, countMemo) }, ...st.list] }));
     },
 
     deleteChat: async (id) => {
@@ -192,6 +195,15 @@ export const useChatStore = create<ChatState>((set, get) => {
       updateChat((c) => {
         const chat: ChatSession = { ...c, authorsNote: note };
         if (!note) delete chat.authorsNote;
+        return chat;
+      }),
+    setPresence: (memberId, value) =>
+      updateChat((c) => {
+        const presence = { ...c.presence };
+        if (value) presence[memberId] = value;
+        else delete presence[memberId];
+        const chat: ChatSession = { ...c, presence };
+        if (!Object.keys(presence).length) delete chat.presence;
         return chat;
       }),
     setVars: (vars) =>

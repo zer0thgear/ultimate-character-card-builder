@@ -350,6 +350,7 @@ export function buildTextPrompt(card: CardData, history: ChatMessage[], settings
   const tailParts: PromptPart[] = [];
   if (phi.trim()) tailParts.push({ label: 'Post-history instructions', role: 'system', content: phi });
   if (mode === 'impersonate') tailParts.push({ label: 'Impersonation prompt', role: 'system', content: x(DEFAULT_IMPERSONATION) });
+  if (opts.turnNote?.trim()) tailParts.push({ label: 'Whose turn', role: 'system', content: x(opts.turnNote) });
   if (opts.guide?.trim()) tailParts.push({ label: 'Guide (🧭)', role: 'system', content: x(guideText(settings.guideTemplate, opts.guide)) });
 
   const chatText = (ps: PromptPart[]) => {

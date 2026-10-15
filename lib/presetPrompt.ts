@@ -159,6 +159,7 @@ export function buildPresetPrompt(card: CardData, history: ChatMessage[], settin
   if (continuing && !prefillContinue) after.push({ label: 'Continue nudge', role: 'system', content: x(preset.continueNudgePrompt) });
   if (mode === 'impersonate') after.push({ label: 'Impersonation prompt', role: 'system', content: x(preset.impersonationPrompt) });
   // 🧭 A guide goes last of all, nearest the reply.
+  if (opts.turnNote?.trim()) after.push({ label: 'Whose turn', role: 'system', content: x(opts.turnNote) });
   if (opts.guide?.trim()) after.push({ label: 'Guide (🧭)', role: 'system', content: x(guideText(settings.guideTemplate, opts.guide)) });
 
   // Fit the history into the context size, dropping the oldest first.

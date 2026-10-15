@@ -200,3 +200,34 @@ export function parseChatFile(text: string, card: CardData, userName: string, fi
     updatedAt: now,
   };
 }
+
+/**
+ * A chat file as a new group chat: every message kept (the first too, which
+ * is a greeting like any other in a group), each of the characters' given
+ * to the member of that name (`speakerOf`); a message under a name that
+ * isn't a member's is a system one.
+ */
+export function parseGroupChatFile(text: string, speakerOf: (name: string) => string | undefined, fileName = ''): ChatSession {
+  const lines = readLines(text);
+  const meta = lines.find((l) => !isMessage(l)) ?? {};
+  const raw = lines.filter(isMessage);
+  if (!raw.length) throw new ChatImportError('That chat has no messages in it.');
+  const messages = raw.map((l) => {
+    if (l.is_user === true) return messageOf(l, 'user');
+    const speaker = speakerOf(str(l.name));
+    return speaker ? { ...messageOf(l, 'assistant'), speaker } : messageOf(l, 'system');
+  });
+  const now = Date.now();
+  const created = parseSendDate(meta.create_date) ?? messages[0]?.createdAt ?? now;
+  const base = fileName.replace(/\.(jsonl|json)$/i, '').trim();
+  return {
+    id: uuid(),
+    name: base ? `${base} (imported)` : `Imported chat ${new Date(now).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}`,
+    greeting: -1,
+    messages,
+    ...(noteOf(meta) ? { authorsNote: noteOf(meta) } : {}),
+    ...(chatVars(meta) ? { vars: chatVars(meta) } : {}),
+    createdAt: created,
+    updatedAt: now,
+  };
+}

@@ -1,5 +1,5 @@
 import type { CardData } from '@/types/card';
-import type { ChatSession } from '@/types/project';
+import type { ChatMessage, ChatSession } from '@/types/project';
 import { expandMacros } from '@/lib/macros';
 import { chatGreeting, swipeDate } from '@/lib/chatPrompt';
 import { authorsNoteOf } from '@/lib/authorsNote';
@@ -48,7 +48,8 @@ function stNoteMetadata(chat: ChatSession): Record<string, string | number> {
   };
 }
 
-export function chatToStJsonl(chat: ChatSession, card: CardData, userName: string): string {
+/** speakerName: in a group chat, the name a character's message goes under. */
+export function chatToStJsonl(chat: ChatSession, card: CardData, userName: string, speakerName?: (m: ChatMessage) => string | undefined): string {
   const names = namesFor(card, userName);
   const x = (t: string) => expandMacros(t, { char: names.char, user: names.user });
   const created = new Date(chat.createdAt);
@@ -96,7 +97,7 @@ export function chatToStJsonl(chat: ChatSession, card: CardData, userName: strin
       return { gen_started: new Date(start).toISOString(), gen_finished: new Date(start + g.ms).toISOString() };
     };
     lines.push({
-      name: isUser ? names.user : m.role === 'system' ? 'System' : names.char,
+      name: isUser ? names.user : m.role === 'system' ? 'System' : (speakerName?.(m) ?? names.char),
       is_user: isUser,
       // SillyTavern's hidden messages are its system ones.
       is_system: m.role === 'system' || !!m.hidden,
@@ -116,14 +117,14 @@ export function chatToStJsonl(chat: ChatSession, card: CardData, userName: strin
 }
 
 /** The chat as plain text, for reading or sharing. */
-export function chatToText(chat: ChatSession, card: CardData, userName: string): string {
+export function chatToText(chat: ChatSession, card: CardData, userName: string, speakerName?: (m: ChatMessage) => string | undefined): string {
   const names = namesFor(card, userName);
   const x = (t: string) => expandMacros(t, { char: names.char, user: names.user });
   const out: string[] = [`${chat.name}\n${names.char} and ${names.user}\n`];
   const greeting = chatGreeting(card, chat);
   if (chat.greeting >= 0 && greeting?.trim()) out.push(`${names.char}:\n${x(greeting)}`);
   for (const m of chat.messages) {
-    const who = m.role === 'user' ? names.user : m.role === 'system' ? 'System' : names.char;
+    const who = m.role === 'user' ? names.user : m.role === 'system' ? 'System' : (speakerName?.(m) ?? names.char);
     out.push(`${who}:\n${x(m.swipes[m.swipe] ?? '')}`);
   }
   return out.join('\n\n') + '\n';

@@ -34,7 +34,8 @@ import { GlobalLorebooks, LorebookSelect, openLorebooks } from '@/components/Lor
 import { useMediaQuery, PHONE_QUERY } from '@/hooks/useMediaQuery';
 import { useKeyboard } from '@/hooks/useKeyboard';
 import { chatFileName, chatToStJsonl, chatToText } from '@/lib/chatExport';
-import { ChatImportError, parseChatFile } from '@/lib/chatImport';
+import { ChatImportError, parseChatFile, parseGroupChatFile } from '@/lib/chatImport';
+import { openNewGroup } from '@/components/chatmode/groupUi';
 import type { Persona } from '@/types/project';
 import { useTextTokens, formatTokens, countTextNow } from '@/lib/textTokens';
 import { costLine } from '@/lib/modelPricing';
@@ -46,6 +47,9 @@ import { copyText } from '@/lib/clipboard';
 import { CODE_BLOCK_CLASS, CODE_CLASS, HEADING_CLASSES, formatChat, hideComments, type FormatNode } from '@/lib/chatFormat';
 import { ChatLink, ChatMedia, ChatRule } from '@/components/ChatMedia';
 import { HtmlPage, HtmlText, PageBridgeContext, runSlash, type PageBridge } from '@/components/ChatHtml';
+import { memberName, namedHistory, trimGroupReply } from '@/lib/groupChat';
+import { GroupTurnBar } from '@/components/dock/GroupTurnBar';
+import { bankName } from '@/lib/lorebookBank';
 import { ScriptActionsHost, ScriptApprovals, ScriptButtons, logScriptRequest, useTavernScripts, type ScriptActions } from '@/components/dock/TavernScripts';
 import { rawPrompt } from '@/lib/tavernHelper';
 import { parseSlash } from '@/lib/pageBridge';
@@ -85,6 +89,18 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   // generations run apart from the chat's.
   const scriptStream = useLlmStream();
   const [input, setInput] = useState('');
+  // In a group chat: who you picked to reply next (null: the group's order).
+  const [replyAs, setReplyAs] = useState<string | null>(null);
+  // In a group chat: members carrying on by themselves (the group's setting, to start with).
+  const groupId = host?.group?.group.id;
+  const groupAuto = !!host?.group?.group.settings.autoMode;
+  const [auto, setAuto] = useState(groupAuto);
+  const [autoFor, setAutoFor] = useState(groupId);
+  if (autoFor !== groupId) {
+    setAutoFor(groupId);
+    setAuto(groupAuto);
+    setReplyAs(null);
+  }
   const scriptActions = useRef<ScriptActions | null>(null);
   const scriptPreset = chatSettings.presetId && !textTemplates(connection) ? (presets.find((p) => p.id === chatSettings.presetId) ?? null) : null;
   const scripts = useTavernScripts({
@@ -253,30 +269,62 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   const regexScripts = chatRegexScripts(card, textTemplates(connection) ? null : preset, chatSettings);
   // The bank's lorebooks this chat brings in beside the card's: its own,
   // the persona's and the global ones (lib/lorebookBank.ts).
-  const attachedLore = lorebooksInPlay(bank, { projectId: host.projectId, chatLorebookId: chat?.lorebookId, personaLorebookId: me.persona?.lorebookId, globalIds: chatSettings.globalLorebooks });
+  const g = host.group;
+  const groupBook = g?.group.lorebookId ? bank.find((b) => b.id === g.group.lorebookId) : undefined;
+  const attachedLore = [
+    ...lorebooksInPlay(bank, { projectId: host.projectId, chatLorebookId: chat?.lorebookId, personaLorebookId: me.persona?.lorebookId, globalIds: chatSettings.globalLorebooks }),
+    // A group's own lorebook comes with its chats.
+    ...(groupBook && groupBook.id !== chat?.lorebookId ? [{ id: groupBook.id, name: bankName(groupBook), source: 'chat' as const, book: groupBook.book }] : []),
+  ];
   const loreCard = withAttachedLore(card, attachedLore);
+  /** In a group: who writes when nobody's said (the one you picked, else
+   *  whoever spoke last, else the first who isn't muted). */
+  const defaultSpeaker = (messages: ChatMessage[]) =>
+    g ? (replyAs ?? [...messages].reverse().find((m) => m.role === 'assistant' && m.speaker && g.memberOf(m.speaker))?.speaker ?? g.members.find((m) => !m.muted)?.id ?? g.members[0]?.id) : undefined;
+  /** A group member's regex scripts (with the preset's), for their messages. */
+  const scriptsFor = (c: CardData) => (c === card ? regexScripts : chatRegexScripts(c, textTemplates(connection) ? null : preset, chatSettings));
   /** The preset's samplers over a connection's, when the chat uses them. */
   const overridesFor = (c: LlmConnection | null, p: ChatPreset | null): Partial<SamplerParams> => (p && chatSettings.presetSamplers && c ? presetParams(p, c.kind) : {});
   const overrides = overridesFor(connection, preset);
 
   /** The prompt for `messages` (greeting added), through the preset if one
    *  is on; `use` builds it for another connection and preset (⚖ Compare). */
-  const build = (messages: ChatMessage[], opts: BuildOptions = {}, use: { connection: LlmConnection | null; preset: ChatPreset | null } = { connection, preset }): BuiltPrompt => {
+  const build = (messages: ChatMessage[], opts: BuildOptions = {}, use: { connection: LlmConnection | null; preset: ChatPreset | null } = { connection, preset }, speaker?: string): BuiltPrompt => {
     const { connection: c, preset: p } = use;
+    // A group's reply is written from the card built for its speaker's turn
+    // (lib/groupChat.ts), with the history under each member's name.
+    const who = g ? (speaker ?? defaultSpeaker(messages)) : undefined;
+    const turn = g && who && g.memberOf(who) ? g.turn(who, messages, chat?.presence) : null;
+    const lc = turn ? withAttachedLore(turn.card, attachedLore) : loreCard;
+    const hist = g ? namedHistory(history(messages), g.members) : history(messages);
     const over = overridesFor(c, p);
     const summary = summaryInjection(useChatStore.getState().chat?.summary, summarySettings(chatSettings.summary));
     // {{getvar}} reads the chat's variables (and the global ones), which
     // Tavern Helper scripts keep.
     const vars = { ...chatSettings.thGlobalVars, ...useChatStore.getState().chat?.vars };
-    const full = { model: c?.model, kind: c?.kind, maxTokens: over.max_tokens ?? c?.params.max_tokens, maxContext: c?.params.max_context, summary, authorsNote: chat?.authorsNote, vars, ...opts };
+    const full = { model: c?.model, kind: c?.kind, maxTokens: over.max_tokens ?? c?.params.max_tokens, maxContext: c?.params.max_context, summary, authorsNote: chat?.authorsNote, vars, ...(turn ? { turnNote: turn.turnNote } : {}), ...opts };
     // A text-completion connection lays the prompt out in its instruct
     // template; a chat-completion preset's prompts don't apply to it.
     const text = textTemplates(c);
-    const built = text ? buildTextPrompt(loreCard, history(messages), settings, text.instruct, text.context, full) : p ? buildPresetPrompt(loreCard, history(messages), settings, p, full) : buildChatPrompt(loreCard, history(messages), settings, full);
+    const built = text ? buildTextPrompt(lc, hist, settings, text.instruct, text.context, full) : p ? buildPresetPrompt(lc, hist, settings, p, full) : buildChatPrompt(lc, hist, settings, full);
     return c ? { ...built, sentWith: sentWith(c, over, p) } : built;
   };
 
   const summaryRequest = () => ({ build, connection, params: overrides });
+  /** In a group: the next member speaks, without a message from you. */
+  const groupNext = () => {
+    const ms = useChatStore.getState().chat?.messages;
+    if (!ms || running || summarizing) return;
+    follow.current = true;
+    void reply(ms);
+  };
+  /** In a group, the name a character's message goes under (exports). */
+  const speakerName = (m: ChatMessage) => {
+    const c = g?.memberOf(m.speaker)?.card;
+    return c ? memberName(c) : undefined;
+  };
+  /** A new chat: a card's opens with its first greeting, a group's with its members'. */
+  const startChat = () => void (g ? newChat(-1, g.greetings()) : newChat(0));
 
   /** Streams a completion for `built`, calling `onText` with the reply so far. */
   const complete = async (built: BuiltPrompt, onText: (full: string) => void) => {
@@ -296,14 +344,26 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
    * prefilling it or with the preset's continue nudge.
    */
   const reply = async (messages: ChatMessage[], target?: ChatMessage, continueFrom?: string, emptySend = false): Promise<{ text: string; error?: string }> => {
+    // In a group: the version's own speaker, the one you picked, or the
+    // group's order (which may leave it to you).
+    const speaker = g ? (target?.speaker ?? replyAs ?? g.next(messages) ?? undefined) : undefined;
+    if (g && !speaker) {
+      toast('Pick who replies next.', 'info');
+      return { text: '', error: 'No speaker' };
+    }
+    if (g) setReplyAs(null);
+    const speakerCard = g?.memberOf(speaker)?.card;
+    /** A group reply without its speaker's name in front, ending where it
+     *  starts someone else's line. */
+    const own = (text: string) => (speakerCard && g ? trimGroupReply(text, memberName(speakerCard), [...g.members.filter((m) => m.id !== speaker).map((m) => memberName(m.card)), me.name]) : text);
     const guided = takeGuide();
     // The reply being continued is sent as `continueFrom`, not as it's
     // shown: a reroll continues from before the last continue, which
     // mustn't reach the model (a preset's continue nudge sends the reply
     // as history).
     const built = continueFrom !== undefined
-      ? build(target ? withShownText(messages, target.id, continueFrom) : messages, { mode: 'continue', continueText: continueFrom, guide: guided })
-      : build(target ? messages.filter((m) => m.id !== target.id) : messages, { emptySend, guide: guided });
+      ? build(target ? withShownText(messages, target.id, continueFrom) : messages, { mode: 'continue', continueText: continueFrom, guide: guided }, undefined, speaker)
+      : build(target ? messages.filter((m) => m.id !== target.id) : messages, { emptySend, guide: guided }, undefined, speaker);
     const id = target?.id ?? uuid();
     const base = continueFrom ?? '';
     let written = base;
@@ -313,7 +373,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
     scripts.emit('generation_started', kind, {}, false);
     scripts.emit('GENERATION_AFTER_COMMANDS', kind, {}, false);
     setStreamingId(id);
-    if (!target) setMessages((m) => [...m, { ...newMessage('assistant', '', connection?.model), id }]);
+    if (!target) setMessages((m) => [...m, { ...newMessage('assistant', '', connection?.model), id, ...(speaker ? { speaker } : {}) }]);
     else if (continueFrom === undefined)
       setMessages((m) =>
         m.map((x) => (x.id === id ? { ...x, swipes: [...x.swipes, ''], swipe: x.swipes.length, swipeDates: [...x.swipes.map((_, i) => x.swipeDates?.[i] ?? x.createdAt), Date.now()] } : x)),
@@ -322,7 +382,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
       // A new reply or version starts at its first word: models often open
       // with a line break or a space. A continue keeps its own (a new
       // paragraph is a line break), joined as written.
-      const body = continueFrom === undefined ? full.replace(/^\s+/, '') : full;
+      const body = continueFrom === undefined ? own(full).replace(/^\s+/, '') : own(full);
       written = base + (continueFrom && body && !/^\s/.test(body) && !/\s$/.test(base) ? ' ' : '') + body;
       setMessages((m) => m.map((x) => (x.id === id ? { ...x, swipes: x.swipes.map((s, i) => (i === x.swipe ? written : s)) } : x)));
     });
@@ -490,6 +550,8 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   /** ⚖ Compare redoes the last reply when it's the character's, or writes
    *  the next one. */
   const compareTarget = chat?.messages.at(-1)?.role === 'assistant' ? chat.messages.at(-1) : undefined;
+  /** In a group, who ⚖ Compare writes as: the reply's own speaker, or who'd write by default. */
+  const compareSpeaker = compareTarget?.speaker ?? (g ? defaultSpeaker(chat?.messages ?? []) : undefined);
   const keepCompared = (kept: KeptReply[]) => {
     const now = Date.now();
     if (compareTarget) {
@@ -512,7 +574,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
       );
     } else {
       const m = newMessage('assistant', kept[0].text, kept[kept.length - 1].model);
-      setMessages((ms) => [...ms, { ...m, sentWith: kept[kept.length - 1].sentWith, swipes: kept.map((k) => k.text), swipe: kept.length - 1, swipeDates: kept.map(() => now), reasoning: kept.map((k) => k.reasoning), gen: kept.map((k) => k.gen) }]);
+      setMessages((ms) => [...ms, { ...m, ...(compareSpeaker ? { speaker: compareSpeaker } : {}), sentWith: kept[kept.length - 1].sentWith, swipes: kept.map((k) => k.text), swipe: kept.length - 1, swipeDates: kept.map(() => now), reasoning: kept.map((k) => k.reasoning), gen: kept.map((k) => k.gen) }]);
     }
   };
 
@@ -580,7 +642,10 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
     const [file] = await pickFiles('.jsonl,.json');
     if (!file) return;
     try {
-      const imported = parseChatFile(await file.text(), card, me.name, file.name);
+      // A group's: each character's messages go to the member of that name.
+      const imported = g
+        ? parseGroupChatFile(await file.text(), (name) => g.members.find((m) => [memberName(m.card), m.card.name].includes(name.trim()))?.id, file.name)
+        : parseChatFile(await file.text(), card, me.name, file.name);
       await useChatStore.getState().importChat(imported);
       toast(`Imported "${imported.name}": ${imported.messages.length} message${imported.messages.length === 1 ? '' : 's'}.`, 'success');
     } catch (err) {
@@ -615,7 +680,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
               </option>
             ))}
           </select>
-          <Button size="sm" variant="primary" onClick={() => void newChat(0)}>
+          <Button size="sm" variant="primary" onClick={startChat}>
             + New
           </Button>
           {chat && (
@@ -632,9 +697,12 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
                 <div className="absolute top-full right-0 z-30 mt-1 w-64 rounded-md border border-slate-700 bg-slate-900 p-1 shadow-xl" onMouseLeave={() => setExportOpen(false)}>
                   {[
                     ...(phone ? [{ label: '✎ Rename', hint: '', run: renameChat }] : []),
-                    { label: '⬇ SillyTavern / Chub (.jsonl)', hint: 'Import it in SillyTavern (Manage chat files → Import) or Chub', run: () => downloadBlob(chatToStJsonl(chat, card, me.name), `${chatFileName(chat, card)}.jsonl`, 'application/jsonl') },
-                    { label: '⬇ Plain text (.txt)', hint: 'For reading or sharing', run: () => downloadBlob(chatToText(chat, card, me.name), `${chatFileName(chat, card)}.txt`, 'text/plain') },
-                    { label: '⬆ Import a chat…', hint: 'A chat saved by SillyTavern or exported from Chub (.jsonl), as a new chat with this card', run: () => void importChatFile() },
+                    { label: '⬇ SillyTavern / Chub (.jsonl)', hint: 'Import it in SillyTavern (Manage chat files → Import) or Chub', run: () => downloadBlob(chatToStJsonl(chat, card, me.name, speakerName), `${chatFileName(chat, card)}.jsonl`, 'application/jsonl') },
+                    { label: '⬇ Plain text (.txt)', hint: 'For reading or sharing', run: () => downloadBlob(chatToText(chat, card, me.name, speakerName), `${chatFileName(chat, card)}.txt`, 'text/plain') },
+                    { label: '⬆ Import a chat…', hint: g ? 'A group chat saved by SillyTavern (.jsonl), as a new chat of this group (messages go to the characters of the same names)' : 'A chat saved by SillyTavern or exported from Chub (.jsonl), as a new chat with this card', run: () => void importChatFile() },
+                    ...(host.projectId && !g
+                      ? [{ label: '👥 Make a group chat from this…', hint: 'A new group with this character and others you pick, starting with a copy of this chat (this chat stays as it is)', run: () => openNewGroup({ projectId: host.projectId!, chat, name: card.nickname || card.name || 'Character' }) }]
+                      : []),
                     ...(phone
                       ? [
                           { label: '🔎 Search this chat', hint: '', run: () => setSearch('') },
@@ -754,7 +822,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
             <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-slate-500">
               {wide ? `Chat with ${card.name || 'this character'}.` : 'Test how the card plays.'}
               <div className="flex flex-wrap justify-center gap-2">
-                <Button variant="primary" onClick={() => void newChat(0)}>
+                <Button variant="primary" onClick={startChat}>
                   Start a chat
                 </Button>
                 <Button variant="ghost" onClick={() => void importChatFile()} title="A chat saved by SillyTavern or exported from Chub (.jsonl)">
@@ -764,6 +832,8 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
             </div>
           ) : (
             <div className={cx('flex flex-col gap-3', column.className)} style={column.style}>
+              {/* A group chat opens with its members' greetings, as messages. */}
+              {!g && (
               <div data-msg="greeting" className={ring('greeting')}>
               <GreetingBubble
                 card={card}
@@ -781,16 +851,17 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
                 scripts={regexScripts}
               />
               </div>
+              )}
               {picturesAfter(null)}
               {chat.messages.map((m, i) => (
                 <div key={m.id} data-msg={m.id} className="flex flex-col gap-3">
                   <div className={ring(m.id)}>
                   <Bubble
-                    card={card}
+                    card={g?.memberOf(m.speaker)?.card ?? card}
                     message={m}
                     messageId={showIds ? i + 1 : undefined}
                     depth={chat.messages.length - 1 - i}
-                    scripts={regexScripts}
+                    scripts={scriptsFor(g?.memberOf(m.speaker)?.card ?? card)}
                     display={scripts.displayFor(m.id, messageText(m))}
                     showTime={showTimes}
                     userName={me.name}
@@ -887,6 +958,20 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
               </button>
             </div>
           )}
+          {g && chat && (
+            <GroupTurnBar
+              g={g}
+              chat={chat}
+              replyAs={replyAs}
+              setReplyAs={setReplyAs}
+              nextSpeaker={replyAs ?? (g.group.settings.order === 'list' || g.group.settings.order === 'manual' ? (g.next(chat.messages) ?? undefined) : defaultSpeaker(chat.messages))}
+              busy={running || summarizing}
+              onNext={groupNext}
+              auto={auto}
+              setAuto={setAuto}
+              holdAuto={!!input.trim()}
+            />
+          )}
           {scripts.frames}
           <ScriptActionsHost actionsRef={scriptActions} actions={scriptActionsNow} />
           <ScriptApprovals pending={scripts.pending} presetName={scriptPreset?.name} cardName={card.name || 'This character'} />
@@ -968,7 +1053,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
         <CompareDialog
           regenerating={!!compareTarget}
           prepare={(side) => ({
-            built: build(compareTarget ? chat.messages.filter((m) => m.id !== compareTarget.id) : chat.messages, { guide: guide.trim() || undefined }, side),
+            built: build(compareTarget ? chat.messages.filter((m) => m.id !== compareTarget.id) : chat.messages, { guide: guide.trim() || undefined }, side, compareSpeaker),
             params: overridesFor(side.connection, side.preset),
           })}
           onKeep={keepCompared}
@@ -1078,12 +1163,12 @@ function renderNodes(nodes: FormatNode[]): React.ReactNode {
   );
 }
 
-function Avatar({ role, persona }: { role: 'user' | 'assistant' | 'system'; persona?: Persona | null }) {
+function Avatar({ role, persona, speaker }: { role: 'user' | 'assistant' | 'system'; persona?: Persona | null; speaker?: string }) {
   const host = useChatHost();
   const shape = useLlmStore((s) => s.chatSettings.avatarShape) ?? 'circle';
   if (shape === 'none') return null;
   // Tapping a picture shows it full size.
-  const url = role === 'user' ? (persona ? api.personaAvatarUrl(persona) : null) : (host?.avatarUrl({ role }) ?? null);
+  const url = role === 'user' ? (persona ? api.personaAvatarUrl(persona) : null) : (host?.avatarUrl({ role, speaker }) ?? null);
   const frame = avatarFrame(shape, 36);
   const face =
     role === 'user' ? (
@@ -1110,7 +1195,7 @@ function Avatar({ role, persona }: { role: 'user' | 'assistant' | 'system'; pers
  * connections that publish prices. With avatars off the numbers keep the
  * column to themselves.
  */
-function MessageAside({ role, persona, id, tokens, gen }: { role: 'user' | 'assistant' | 'system'; persona?: Persona | null; id?: number; tokens?: number; gen?: GenStats }) {
+function MessageAside({ role, persona, id, tokens, gen, speaker }: { role: 'user' | 'assistant' | 'system'; persona?: Persona | null; id?: number; tokens?: number; gen?: GenStats; speaker?: string }) {
   const s = useLlmStore((st) => st.chatSettings);
   const time = (s.showGenTime ?? true) && gen ? gen : undefined;
   const count = (s.showTokenCounts ?? true) && tokens ? tokens : undefined;
@@ -1120,7 +1205,7 @@ function MessageAside({ role, persona, id, tokens, gen }: { role: 'user' | 'assi
   if ((s.avatarShape ?? 'circle') === 'none' && !any) return null;
   return (
     <div className="flex w-10 flex-shrink-0 flex-col items-center gap-0.5 text-[10px] leading-tight whitespace-nowrap text-slate-600 tabular-nums">
-      <Avatar role={role} persona={persona} />
+      <Avatar role={role} persona={persona} speaker={speaker} />
       {id !== undefined && <MessageId id={id} />}
       {time && (
         <span title={`Took ${formatSeconds(time.ms)} to write${time.ttft !== undefined ? `; the first token came after ${formatSeconds(time.ttft)}` : ''}${count === undefined ? cost : ''}`}>{formatSeconds(time.ms)}</span>
@@ -1432,7 +1517,7 @@ function Bubble({
   useArrowSwipe(box, next, prev);
   return (
     <div ref={box} className={cx('group flex gap-2', right && 'flex-row-reverse', flat && 'border-b border-slate-800/70 pb-3')}>
-      <MessageAside role={m.role} persona={persona} id={messageId} tokens={text ? tokens : undefined} gen={streaming ? undefined : m.gen?.[m.swipe]} />
+      <MessageAside role={m.role} persona={persona} id={messageId} tokens={text ? tokens : undefined} gen={streaming ? undefined : m.gen?.[m.swipe]} speaker={m.speaker} />
       <div className={cx('min-w-0 flex-1', flat ? 'px-1' : cx('rounded-lg px-3 py-2', isUser ? 'bg-sky-500/10' : 'bg-slate-900'), m.hidden && 'rounded-lg border border-dashed border-slate-700 opacity-60')} {...swipe.props} style={swipe.style}>
         <div className={cx('mb-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs', mirror && 'flex-row-reverse')}>
           <span className="min-w-0 truncate font-semibold text-slate-200">{isUser ? userName || 'User' : card.nickname || card.name || 'Character'}</span>

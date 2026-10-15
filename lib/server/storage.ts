@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { cleanTagData, type AppTagData } from '@/lib/appTags';
-import type { AppConfig, BankLorebook, CardProject, ChatSession, ChatSummary, Persona, ProjectSummary, StorySession, StorySummary, TrashedProject, BrainstormSession, BrainstormSummary } from '@/types/project';
+import type { AppConfig, BankLorebook, CardProject, ChatSession, ChatSummary, GroupMember, GroupOrder, GroupProject, GroupSettings, GroupStrategy, GroupSummary, Persona, ProjectSummary, StorySession, StorySummary, TrashedProject, BrainstormSession, BrainstormSummary } from '@/types/project';
 import { DEFAULT_CONFIG } from '@/types/project';
 import type { AdventureSession, AdventureSummary } from '@/types/adventure';
 import { newCard } from '@/lib/cardSpec';
@@ -344,11 +344,13 @@ export function chatImagePath(id: string, file: string) {
 
 // ─── Chats ───────────────────────────────────────────────────────────────────
 
-const chatPath = (projectId: string, chatId: string) => path.join(projectDir(projectId), 'chats', `${checkId(chatId)}.json`);
+// A card's chats are kept in its project's folder, a group's in the
+// group's: <base>/chats/<chatId>.json and <base>/chat-images/.
+const chatPathIn = (base: string, chatId: string) => path.join(base, 'chats', `${checkId(chatId)}.json`);
 
-/** Every chat of a card, whole (a damaged one left out). */
-async function readChats(projectId: string): Promise<ChatSession[]> {
-  const dir = path.join(projectDir(projectId), 'chats');
+/** Every chat in a folder, whole (a damaged one left out). */
+async function readChatsIn(base: string): Promise<ChatSession[]> {
+  const dir = path.join(base, 'chats');
   let files: string[];
   try {
     files = await fs.readdir(dir);
@@ -360,6 +362,7 @@ async function readChats(projectId: string): Promise<ChatSession[]> {
   );
   return chats.filter((c): c is ChatSession => !!c);
 }
+const readChats = (projectId: string) => readChatsIn(projectDir(projectId));
 
 /** 📊 A card's numbers across its chats (lib/cardStats.ts). */
 export async function projectStats(projectId: string): Promise<CardStats> {
@@ -367,11 +370,12 @@ export async function projectStats(projectId: string): Promise<CardStats> {
   return cardStats(await readChats(projectId), countText);
 }
 
-export async function listChats(projectId: string): Promise<ChatSummary[]> {
-  return (await readChats(projectId))
+async function listChatsIn(base: string): Promise<ChatSummary[]> {
+  return (await readChatsIn(base))
     .map((c) => ({ id: c.id, name: c.name, createdAt: c.createdAt, updatedAt: c.updatedAt, messageCount: c.messages.length, ...tallyChat(c.messages, countText) }))
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }
+export const listChats = (projectId: string) => listChatsIn(projectDir(projectId));
 
 /** The same estimate the editor's token counts make (lib/textTokens.ts). */
 const countText = (text: string) => (text ? countTokens(text) : 0);
@@ -408,25 +412,114 @@ async function chatStats(projectId: string): Promise<Pick<ProjectSummary, 'chats
   return { chats: found.length, messages: found.reduce((n, s) => n + s.messages, 0), ...(last ? { lastChat: last } : {}), ...tally };
 }
 
-export async function getChat(projectId: string, chatId: string): Promise<ChatSession> {
-  const c = await readJson<ChatSession>(chatPath(projectId, chatId));
+async function getChatIn(base: string, chatId: string): Promise<ChatSession> {
+  const c = await readJson<ChatSession>(chatPathIn(base, chatId));
   if (!c) throw new NotFoundError(`No chat ${chatId}`);
   return c;
 }
+export const getChat = (projectId: string, chatId: string) => getChatIn(projectDir(projectId), chatId);
 
-export async function saveChat(projectId: string, chat: ChatSession): Promise<ChatSession> {
+async function saveChatIn(base: string, chat: ChatSession): Promise<ChatSession> {
   const saved = { ...chat, updatedAt: Date.now() };
-  await writeFileAtomic(chatPath(projectId, chat.id), JSON.stringify(saved));
+  await writeFileAtomic(chatPathIn(base, chat.id), JSON.stringify(saved));
   return saved;
 }
+export const saveChat = (projectId: string, chat: ChatSession) => saveChatIn(projectDir(projectId), chat);
 
-export async function deleteChat(projectId: string, chatId: string) {
-  await removeJson(chatPath(projectId, chatId));
-  const dir = path.join(projectDir(projectId), 'chat-images');
+async function deleteChatIn(base: string, chatId: string) {
+  await removeJson(chatPathIn(base, chatId));
+  const dir = path.join(base, 'chat-images');
   const files = await fs.readdir(dir).catch(() => [] as string[]);
   await Promise.all(files.filter((f) => f.startsWith(`${checkId(chatId)}-`)).map((f) => fs.rm(path.join(dir, f), { force: true })));
 }
+export const deleteChat = (projectId: string, chatId: string) => deleteChatIn(projectDir(projectId), chatId);
 
+// ─── Groups (group chats) ────────────────────────────────────────────────────
+//   data/groups/<id>/group.json   GroupProject
+//   data/groups/<id>/chats/       its chats, as a card's
+
+const GROUPS = path.join(DATA_DIR, 'groups');
+export const groupDir = (id: string) => path.join(GROUPS, checkId(id));
+
+const STRATEGIES: GroupStrategy[] = ['swap', 'join', 'cast'];
+const ORDERS: GroupOrder[] = ['natural', 'list', 'manual', 'pooled'];
+
+/** A group as sent, with only what a group holds (and in range). */
+function cleanGroup(g: GroupProject): GroupProject {
+  if (!g || typeof g !== 'object') throw new BadRequestError('Not a group');
+  const s = (g.settings ?? {}) as Partial<GroupSettings>;
+  const num = (v: unknown, min: number, max: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : undefined);
+  const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+  const settings: GroupSettings = {
+    strategy: STRATEGIES.includes(s.strategy as GroupStrategy) ? (s.strategy as GroupStrategy) : 'cast',
+    order: ORDERS.includes(s.order as GroupOrder) ? (s.order as GroupOrder) : 'natural',
+  };
+  if (s.allowSelfResponses === true) settings.allowSelfResponses = true;
+  if (s.autoMode === true) settings.autoMode = true;
+  if (num(s.autoDelay, 1, 600) !== undefined) settings.autoDelay = num(s.autoDelay, 1, 600);
+  if (str(s.joinPrefix) !== undefined) settings.joinPrefix = str(s.joinPrefix);
+  if (str(s.joinSuffix) !== undefined) settings.joinSuffix = str(s.joinSuffix);
+  if (s.joinMuted === true) settings.joinMuted = true;
+  if (s.greetings === 'first') settings.greetings = 'first';
+  if (num(s.castRecent, 1, 100) !== undefined) settings.castRecent = num(s.castRecent, 1, 100);
+  if (num(s.castSticky, 0, 100) !== undefined) settings.castSticky = num(s.castSticky, 0, 100);
+  if (num(s.castBudget, 0, 1_000_000) !== undefined) settings.castBudget = num(s.castBudget, 0, 1_000_000);
+  const seen = new Set<string>();
+  const members: GroupMember[] = (Array.isArray(g.members) ? g.members : [])
+    .filter((m) => m && typeof m.projectId === 'string' && !seen.has(m.projectId) && seen.add(m.projectId))
+    .map((m) => ({
+      projectId: checkId(m.projectId),
+      ...(m.muted === true ? { muted: true } : {}),
+      ...(num(m.talkativeness, 0, 1) !== undefined ? { talkativeness: num(m.talkativeness, 0, 1) } : {}),
+      ...(typeof m.summary === 'string' && m.summary.trim() ? { summary: m.summary } : {}),
+    }));
+  const now = Date.now();
+  return {
+    id: checkId(g.id),
+    name: typeof g.name === 'string' && g.name.trim() ? g.name : 'Group',
+    members,
+    settings,
+    ...(typeof g.scenario === 'string' && g.scenario.trim() ? { scenario: g.scenario } : {}),
+    ...(typeof g.lorebookId === 'string' && g.lorebookId ? { lorebookId: checkId(g.lorebookId) } : {}),
+    createdAt: typeof g.createdAt === 'number' ? g.createdAt : now,
+    updatedAt: now,
+  };
+}
+
+export async function listGroups(): Promise<GroupSummary[]> {
+  const ids = await fs.readdir(GROUPS).catch(() => [] as string[]);
+  const groups = await Promise.all(
+    ids.map(async (id) => {
+      const g = await readJson<GroupProject>(path.join(GROUPS, id, 'group.json')).catch(() => null);
+      if (!g) return null;
+      const chats = await listChatsIn(path.join(GROUPS, id));
+      return { id: g.id, name: g.name, members: g.members, createdAt: g.createdAt, updatedAt: g.updatedAt, chats: chats.length, ...(chats[0] ? { lastChat: chats[0].updatedAt } : {}) };
+    }),
+  );
+  return groups.filter((g): g is GroupSummary => !!g).sort((a, b) => (b.lastChat ?? b.updatedAt) - (a.lastChat ?? a.updatedAt));
+}
+
+export async function getGroup(id: string): Promise<GroupProject> {
+  const g = await readJson<GroupProject>(path.join(groupDir(id), 'group.json'));
+  if (!g) throw new NotFoundError(`No group ${id}`);
+  return g;
+}
+
+export async function saveGroup(g: GroupProject): Promise<GroupProject> {
+  const clean = cleanGroup(g);
+  await writeFileAtomic(path.join(groupDir(clean.id), 'group.json'), JSON.stringify(clean, null, 2));
+  return clean;
+}
+
+/** A group and its chats, gone (its members' cards stay). */
+export async function deleteGroup(id: string) {
+  await fs.rm(groupDir(id), { recursive: true, force: true });
+}
+
+export const listGroupChats = (groupId: string) => listChatsIn(groupDir(groupId));
+export const getGroupChat = (groupId: string, chatId: string) => getChatIn(groupDir(groupId), chatId);
+export const saveGroupChat = (groupId: string, chat: ChatSession) => saveChatIn(groupDir(groupId), chat);
+export const deleteGroupChat = (groupId: string, chatId: string) => deleteChatIn(groupDir(groupId), chatId);
 // ─── Stories (Writing mode) ──────────────────────────────────────────────────
 
 const storyPath = (projectId: string, storyId: string) => path.join(projectDir(projectId), 'stories', `${checkId(storyId)}.json`);
