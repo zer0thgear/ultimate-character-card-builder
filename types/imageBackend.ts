@@ -25,6 +25,8 @@ export interface ImageConnection {
   /** ComfyUI: your workflow, or null for UCCB's built-in txt2img one. */
   workflow: ComfyWorkflow | null;
   workflowName?: string;
+  /** Extra headers sent to its server with each request (lib/connectionHeaders.ts). */
+  headers?: Record<string, string>;
 }
 
 /** One gen for A1111 or ComfyUI, built in the browser (lib/imageBackends.ts). */

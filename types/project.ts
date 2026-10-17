@@ -471,6 +471,9 @@ export interface AppConfig {
   versionHistory: boolean;
   /** How many a card keeps; past it, the oldest unnamed ones go. */
   versionsToKeep: number;
+  /** How UCCB is running, as the server says (never saved). Hosted: on a
+   *  server behind a sign-in (docs/HOSTING.md), its folders inside filesDir. */
+  server?: { hosted: boolean; filesDir?: string };
 }
 
 export const DEFAULT_CONFIG: AppConfig = {

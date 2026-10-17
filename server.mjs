@@ -4,6 +4,10 @@
 // check uses the connection's real address; other devices on the Wi-Fi get
 // a 403 page saying why.
 //
+// On a server (docs/HOSTING.md), UCCB_HOSTED=1 trades that check for a
+// sign-in (scripts/gate.mjs): its own password, Cloudflare Access, or both,
+// and it listens on this machine only, for the tunnel in front of it.
+//
 //   node server.mjs          production (after `next build`)
 //   node server.mjs --dev    development, with hot reload
 
@@ -13,6 +17,7 @@ import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { isAllowed, isTailscale, plainAddress, refuseRequest } from './scripts/access.mjs';
+import { createGate } from './scripts/gate.mjs';
 
 const dev = process.argv.includes('--dev');
 // Set before Next loads, which reads it as it starts.
@@ -20,6 +25,17 @@ process.env.NODE_ENV ??= dev ? 'development' : 'production';
 const { default: next } = await import('next');
 const port = Number(process.env.PORT) || 3210;
 const dataDir = path.resolve(process.env.UCCB_DATA_DIR ?? path.join(process.cwd(), 'data'));
+
+// The sign-in, if one's set (always, when hosted).
+let gate;
+try {
+  gate = await createGate({ dataDir });
+} catch (err) {
+  console.error(`UCCB can't start: ${err.message}`);
+  process.exit(1);
+}
+// Hosted: where people come from is the sign-in's business, not the address's.
+const addressChecked = !gate.hosted;
 
 // The home-network switch lives in data/config.json; read it at most every
 // few seconds, so turning it on or off takes effect without a restart.
@@ -81,8 +97,8 @@ await app.prepare();
 const handle = app.getRequestHandler();
 const upgrade = app.getUpgradeHandler();
 
-const server = createServer((req, res) => {
-  if (!allowed(req.socket)) {
+const server = createServer(async (req, res) => {
+  if (addressChecked && !allowed(req.socket)) {
     res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(DENIED);
     return;
@@ -93,15 +109,30 @@ const server = createServer((req, res) => {
     res.end(why === 'host' ? WRONG_HOST(req.headers.host) : JSON.stringify({ error: 'Refused a change sent from another website.' }));
     return;
   }
+  try {
+    if (await gate.handle(req, res)) return;
+  } catch (err) {
+    console.error('Sign-in check failed', err);
+    if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'text/plain' });
+    return void res.end('Sign-in check failed.');
+  }
   void handle(req, res);
 });
 // Hot reload's websocket (dev) goes through the same check.
-server.on('upgrade', (req, socket, head) => {
-  if (!allowed(req.socket) || refusal(req)) return socket.destroy();
+server.on('upgrade', async (req, socket, head) => {
+  if ((addressChecked && !allowed(req.socket)) || refusal(req) || !(await gate.allowsUpgrade(req).catch(() => false))) return socket.destroy();
   void upgrade(req, socket, head);
 });
 
-server.listen(port, () => {
+// Hosted: only this machine (the tunnel) reaches the port, unless UCCB_BIND says otherwise.
+const bind = process.env.UCCB_BIND?.trim() || (gate.hosted ? '127.0.0.1' : undefined);
+server.listen(port, bind, () => {
+  if (gate.hosted) {
+    const how = [gate.password && 'its password', gate.access && `Cloudflare Access (${gate.accessTeam})`].filter(Boolean).join(' and ');
+    console.log(`UCCB ${dev ? '(dev) ' : ''}hosted, listening on ${bind ?? 'every address'}:${port}; signing in with ${how}.`);
+    if (!process.env.UCCB_ALLOWED_HOSTS?.trim()) console.log('  Set UCCB_ALLOWED_HOSTS to the address you open it by (e.g. uccb.example.com), or it will turn requests away.');
+    return;
+  }
   const tailscale = Object.values(os.networkInterfaces())
     .flat()
     .filter((a) => a && a.family === 'IPv4' && isTailscale(a.address))
@@ -116,4 +147,5 @@ server.listen(port, () => {
   }
   if (tailscale.length) console.log(`  From your Tailscale devices: http://${name}:${port} (or http://${tailscale[0]}:${port})`);
   console.log(`  Other devices: ${allowLan() ? 'home network allowed too' : 'Tailscale only (home network off in Settings)'}`);
+  if (gate.password || gate.access) console.log(`  Signing in with ${[gate.password && 'its password', gate.access && 'Cloudflare Access'].filter(Boolean).join(' and ')}.`);
 });

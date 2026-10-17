@@ -10,9 +10,16 @@ import type { AdventureSession, AdventureSummary } from '@/types/adventure';
 
 // The browser side of the local API routes (app/api/*).
 
+/** The sign-in (docs/HOSTING.md) ran out: off to sign in again, back here after. */
+function signInAgain(res: Response) {
+  if (res.status !== 401 || !res.headers.get('X-UCCB-Sign-In') || typeof window === 'undefined') return;
+  window.location.assign(`/_uccb/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+}
+
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
+    signInAgain(res);
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `${res.status} ${res.statusText}`);
   }
@@ -159,6 +166,7 @@ export const api = {
 export async function streamLlm(req: LlmRequest, onEvent: (e: LlmEvent) => void, signal?: AbortSignal): Promise<void> {
   const res = await fetch('/api/llm/chat', { ...json('POST', req), signal });
   if (!res.ok || !res.body) {
+    signInAgain(res);
     const body = await res.json().catch(() => ({}));
     onEvent({ type: 'error', message: body.error ?? `${res.status} ${res.statusText}` });
     return;

@@ -13,6 +13,7 @@ import { PackError, validatePack, type InstalledPack } from '@/lib/extensionPack
 import { countTokens } from 'gpt-tokenizer';
 import { sumTallies, tallyChat, type ChatTally } from '@/lib/chatStats';
 import { cardStats, type CardStats } from '@/lib/cardStats';
+import { confineFolder, isHosted } from '@/lib/server/hostedPaths';
 
 // Everything UCCB saves lives under data/ (gitignored):
 //   data/config.json                    AppConfig
@@ -110,13 +111,31 @@ export async function writeFileAtomic(file: string, data: string | Uint8Array, {
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
+/** Hosted (lib/server/hostedPaths.ts): the one folder settings' folders stay in. */
+export const FILES_DIR = path.join(DATA_DIR, 'files');
+
 export async function getConfig(): Promise<AppConfig> {
-  return { ...DEFAULT_CONFIG, ...((await readJson<Partial<AppConfig>>(path.join(DATA_DIR, 'config.json'))) ?? {}) };
+  const cfg = { ...DEFAULT_CONFIG, ...((await readJson<Partial<AppConfig>>(path.join(DATA_DIR, 'config.json'))) ?? {}) };
+  delete cfg.server;
+  if (!isHosted()) return cfg;
+  // A config brought from home (or edited by hand) can't reach outside.
+  return {
+    ...cfg,
+    outputDir: cfg.outputDir ? (confineFolder(cfg.outputDir, FILES_DIR) ?? '') : '',
+    libraryFolders: cfg.libraryFolders.map((f) => confineFolder(f, FILES_DIR)).filter((f): f is string => !!f),
+  };
 }
 
 export async function setConfig(patch: Partial<AppConfig>): Promise<AppConfig> {
   const next = { ...(await getConfig()), ...patch };
+  delete next.server;
   next.libraryFolders = [...new Set(next.libraryFolders.map((f) => f.trim()).filter(Boolean))];
+  if (isHosted()) {
+    const outside = [next.outputDir, ...next.libraryFolders].filter((f) => f.trim() && !confineFolder(f, FILES_DIR));
+    if (outside.length) throw new BadRequestError(`On this server, folders go inside ${FILES_DIR} (a name like "gens" goes there): ${outside.join(', ')}`);
+    next.outputDir = next.outputDir.trim() ? confineFolder(next.outputDir, FILES_DIR)! : '';
+    next.libraryFolders = [...new Set(next.libraryFolders.map((f) => confineFolder(f, FILES_DIR)!))];
+  }
   next.recentGensDays = Math.max(0, Math.round(Number(next.recentGensDays) || 0));
   next.versionHistory = next.versionHistory !== false;
   next.versionsToKeep = Math.max(1, Math.min(500, Math.round(Number(next.versionsToKeep) || DEFAULT_CONFIG.versionsToKeep)));

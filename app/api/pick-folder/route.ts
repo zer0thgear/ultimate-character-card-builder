@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { handle, jsonBody } from '@/lib/server/http';
+import { isHosted } from '@/lib/server/hostedPaths';
 
 // Opens the OS's own folder picker on this machine (UCCB is a local app),
 // so folders don't have to be typed. Windows only; elsewhere the caller
@@ -16,7 +17,8 @@ if ($f.ShowDialog($owner) -eq 'OK') { [Console]::Out.Write($f.SelectedPath) }
 
 export async function POST(req: Request) {
   return handle(async () => {
-    if (process.platform !== 'win32') return Response.json({ path: '', unsupported: true });
+    // On a server, a dialog would open on the server's own screen (if any).
+    if (process.platform !== 'win32' || isHosted()) return Response.json({ path: '', unsupported: true });
     const { initial = '', title = 'Choose a folder' } = await jsonBody<{ initial?: string; title?: string }>(req).catch(() => ({} as { initial?: string; title?: string }));
     const picked = await new Promise<string>((resolve) => {
       execFile(

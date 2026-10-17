@@ -183,7 +183,13 @@ export const useConfigStore = create<ConfigState>((set) => ({
   load: async () => set({ config: await api.getConfig(), loaded: true }),
   update: async (patch) => {
     set((s) => ({ config: { ...s.config, ...patch } }));
-    set({ config: await api.setConfig(patch) });
+    try {
+      set({ config: await api.setConfig(patch) });
+    } catch (err) {
+      // Refused (a folder outside a hosted server's files): back to what's saved.
+      toast((err as Error).message, 'error');
+      set({ config: await api.getConfig().catch(() => DEFAULT_CONFIG) });
+    }
   },
 }));
 

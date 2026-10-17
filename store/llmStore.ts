@@ -195,7 +195,7 @@ useLlmStore.subscribe((s, prev) => {
  *  own borrows the NovelAI key from Settings. */
 export function requestConnection(c: LlmConnection) {
   const apiKey = c.kind === 'novelai' && !c.apiKey ? useSessionStore.getState().apiKey : c.apiKey;
-  return { kind: c.kind, baseUrl: c.baseUrl, apiKey, model: c.model, params: c.params };
+  return { kind: c.kind, baseUrl: c.baseUrl, apiKey, model: c.model, params: c.params, ...(c.headers && Object.keys(c.headers).length ? { headers: c.headers } : {}) };
 }
 
 export const connectionById = (id: string | null) => useLlmStore.getState().connections.find((c) => c.id === id) ?? null;
