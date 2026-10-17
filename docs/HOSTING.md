@@ -6,7 +6,7 @@ UCCB is made to run on your own computer and reach your other devices over Tails
 
 - **There's a sign-in in front of everything.** You can use UCCB's own password, Cloudflare Access, or both (both is best). With `UCCB_HOSTED=1`, UCCB won't start without at least one of them. Without a sign-in, anyone who found the address could use your API keys and read and change your cards.
 - **It's still one person's UCCB.** Everyone who signs in shares the same cards, chats, settings and keys. The sign-in keeps other people out; it doesn't give each person their own UCCB.
-- **The server makes the calls, so backends on your home PC are out of reach.** LLM requests, A1111 and ComfyUI requests go through UCCB's server. A connection pointing at `localhost` or a home-network address (KoboldCpp, text-generation-webui, a local ComfyUI…) won't work from a VPS. Hosted services (OpenRouter, NovelAI, Anthropic, OpenAI-compatible APIs) work as usual. NovelAI images go straight from your browser and work too.
+- **The server makes the calls, so backends on your home PC need a way in.** LLM requests, A1111 and ComfyUI requests go through UCCB's server. A connection pointing at `localhost` or a home-network address (KoboldCpp, text-generation-webui, a local ComfyUI…) won't reach them from a VPS as it is; [Backends on your own PC](#backends-on-your-own-pc) shows two ways. Hosted services (OpenRouter, NovelAI, Anthropic, OpenAI-compatible APIs) work as usual. NovelAI images go straight from your browser and work too.
 - **Folders in Settings → Folders are on the server**, inside the data folder's `files` folder. Type a name like `gens` and it goes to `data/files/gens`. Anything outside that folder is refused, so a signed-in browser can't read or write the rest of the server. The folder picker isn't available.
 - **"Who can connect" goes away from Settings → General.** The address check that lets in this computer and Tailscale devices is off; the sign-in does that job instead. UCCB listens on `127.0.0.1` only, so only the tunnel on the same machine reaches it.
 
@@ -129,6 +129,33 @@ journalctl -u uccb -f
 ```
 
 The log's first line says how it's signing people in. Open `https://uccb.example.com`, sign in to Access and then with your password, and you're in. To sign out of UCCB's password on a device, use **Settings → General → Sign out on this device**.
+
+## Backends on your own PC
+
+UCCB's server has to reach the backend, and your router won't let the VPS start that connection. So the PC reaches out instead, and the VPS sends requests back along that line. The PC has to be on, with the backend running, whenever you use it.
+
+### With a Cloudflare Tunnel and a service token
+
+This uses what you've already set up, and nothing on the PC is reachable without the token.
+
+1. **A tunnel on the PC.** Install `cloudflared` on the PC and make a second tunnel (Zero Trust → Networks → Tunnels → Create a tunnel), with a public hostname for each backend, say `kobold.example.com` → HTTP `localhost:5001`, or `comfy.example.com` → HTTP `localhost:8188`.
+2. **A service token.** Zero Trust → Access → Service Auth → Service Tokens → **Create Service Token**. Copy the **Client ID** and **Client Secret** (the secret is only shown once).
+3. **Lock the hostnames.** Add a self-hosted Access application for `kobold.example.com` (and any others) with one policy whose **Action** is **Service Auth** and which **Includes** that service token. Requests without the token are turned away at Cloudflare.
+4. **In UCCB**, point the connection at the tunnel (`https://kobold.example.com/v1` for KoboldCpp's OpenAI-compatible API, `https://comfy.example.com` for ComfyUI), open **+ Extra headers**, click **+ Cloudflare Access service token**, and paste the Client ID and Client Secret. **Test connection** (or **List**, or the Image settings' test) shows whether it gets through.
+
+The extra headers are sent by UCCB's server only, never by your browser, and only to that connection's server. They're kept with the connection in `data/settings.json`, like its key.
+
+The ~100-second idle limit applies on this tunnel too. If a backend takes longer than that before its first token (a huge prompt on a slow card, say), the request fails with a 524; streaming replies are fine once tokens flow.
+
+### With an SSH tunnel
+
+No Cloudflare and no UCCB settings: from the PC, run
+
+```bash
+ssh -N -R 5001:localhost:5001 you@your-vps
+```
+
+and on the VPS, `http://localhost:5001` is your PC's KoboldCpp. Point the connection there, as you would at home. Add a `-R` for each backend. The port only listens on the VPS's own loopback, so nothing is public. Keep it running with `autossh` or a scheduled task, so it comes back after the PC sleeps or the network drops.
 
 ## Keeping it going
 

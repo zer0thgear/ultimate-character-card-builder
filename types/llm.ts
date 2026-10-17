@@ -59,6 +59,8 @@ export interface LlmConnection {
   /** The instruct and context templates it uses (built-in or imported). */
   instructId?: string;
   contextId?: string;
+  /** Extra headers sent to its server with each request (lib/connectionHeaders.ts). */
+  headers?: Record<string, string>;
 }
 
 /** A picture sent with a message, for vision models: base64, no data: prefix. */
@@ -83,7 +85,7 @@ export type LlmEvent =
 
 /** The request the browser sends the proxy. */
 export interface LlmRequest {
-  connection: Pick<LlmConnection, 'kind' | 'baseUrl' | 'apiKey' | 'model' | 'params'>;
+  connection: Pick<LlmConnection, 'kind' | 'baseUrl' | 'apiKey' | 'model' | 'params' | 'headers'>;
   messages: LlmMessage[];
   /** The last message is the start of the reply (a prefill) and must stay
    *  last, rather than being answered by a new user turn. */

@@ -8,6 +8,7 @@ import { addImageConnection, loadBackendOptions, removeImageConnection, selectIm
 import { DEFAULT_URLS, IMAGE_KIND_LABELS, describeSlots, findComfySlots, parseComfyWorkflow } from '@/lib/imageBackends';
 import type { ImageBackendKind, ImageConnection } from '@/types/imageBackend';
 import { Button, confirmDialog, cx, inputClass, pickFiles } from '@/components/ui';
+import { HeadersEditor } from '@/components/HeadersEditor';
 
 // Settings → Image: where gens are made. NovelAI (with the key from
 // General), A1111 and its forks, or ComfyUI; the Image tab uses the one
@@ -142,6 +143,7 @@ function ImageConnectionEditor({ connection: c, onOpenGeneral }: { connection: I
           </div>
         </label>
       </div>
+      <HeadersEditor key={c.id} value={c.headers} onChange={(headers) => set({ headers })} />
       {c.kind === 'a1111' && <p className="text-xs text-slate-500">Start A1111 or Forge with --api (and --listen to reach it from another machine). The checkpoint, sampler and scheduler are picked in the Image tab.</p>}
       {c.kind === 'comfyui' && (
         <div className="flex flex-col gap-2 rounded-md border border-slate-800 p-2.5">

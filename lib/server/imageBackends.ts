@@ -4,12 +4,13 @@ import type { BackendGenRequest, BackendOptions, ImageConnection } from '@/types
 import { a1111Payload, builtInWorkflow, fillComfyWorkflow, unfilledPlaceholders } from '@/lib/imageBackends';
 import { isPng, readTextChunks, replaceTextChunks } from '@/lib/png';
 import { BadRequestError } from '@/lib/server/storage';
+import { cleanHeaders } from '@/lib/connectionHeaders';
 
 // A1111 (and Forge, reForge, SD.Next: the same /sdapi/v1) and ComfyUI,
 // reached from UCCB's server so neither needs CORS turned on, and a login
 // never reaches the browser's network log. A gen comes back as PNG bytes.
 
-export type BackendConnection = Pick<ImageConnection, 'kind' | 'baseUrl' | 'auth' | 'workflow'>;
+export type BackendConnection = Pick<ImageConnection, 'kind' | 'baseUrl' | 'auth' | 'workflow' | 'headers'>;
 
 const base = (c: BackendConnection) => {
   const url = c.baseUrl.trim().replace(/\/+$/, '');
@@ -18,7 +19,8 @@ const base = (c: BackendConnection) => {
 };
 
 function headers(c: BackendConnection, json = true): Record<string, string> {
-  const h: Record<string, string> = json ? { 'Content-Type': 'application/json' } : {};
+  // The connection's extra headers (lib/connectionHeaders.ts) first; its login and the body's type are UCCB's.
+  const h: Record<string, string> = { ...cleanHeaders(c.headers), ...(json ? { 'Content-Type': 'application/json' } : {}) };
   const auth = c.auth.trim();
   if (auth) h.Authorization = c.kind === 'a1111' && auth.includes(':') ? `Basic ${Buffer.from(auth).toString('base64')}` : `Bearer ${auth}`;
   return h;

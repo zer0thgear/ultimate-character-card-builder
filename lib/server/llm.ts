@@ -3,12 +3,19 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { LlmEvent, LlmRequest, SamplerParams } from '@/types/llm';
 import { NOVELAI_TEXT_BASE } from '@/types/llm';
 import { VISION_HINT, sseData, toAnthropic, toOpenAiMessage } from '@/lib/llmShape';
+import { cleanHeaders } from '@/lib/connectionHeaders';
 
 // The providers behind /api/llm/chat, each turned into the same stream of
 // LlmEvents. Keys arrive with each request from the browser (which keeps
 // them in data/settings.json) and are only ever sent to the provider itself.
 
 const trimSlash = (s: string) => s.replace(/\/+$/, '');
+
+/** A request's headers: the connection's extra ones (lib/connectionHeaders.ts), then its key. */
+const connectionHeaders = (conn: LlmRequest['connection']): Record<string, string> => ({
+  ...cleanHeaders(conn.headers),
+  ...(conn.apiKey ? { Authorization: `Bearer ${conn.apiKey}` } : {}),
+});
 
 function baseUrlFor(req: LlmRequest): string {
   if (req.connection.kind === 'novelai') return NOVELAI_TEXT_BASE;
@@ -54,10 +61,7 @@ async function* openAiStream(req: LlmRequest, signal: AbortSignal): AsyncGenerat
   const text = typeof req.prompt === 'string';
   const res = await fetch(`${base}/${text ? 'completions' : 'chat/completions'}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(req.connection.apiKey ? { Authorization: `Bearer ${req.connection.apiKey}` } : {}),
-    },
+    headers: { ...connectionHeaders(req.connection), 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: req.connection.model,
       ...(text ? { prompt: req.prompt } : { messages: req.messages.map(toOpenAiMessage) }),
@@ -146,7 +150,7 @@ async function* openAiStream(req: LlmRequest, signal: AbortSignal): AsyncGenerat
 }
 
 async function* anthropicStream(req: LlmRequest, signal: AbortSignal): AsyncGenerator<LlmEvent> {
-  const client = new Anthropic({ apiKey: req.connection.apiKey });
+  const client = new Anthropic({ apiKey: req.connection.apiKey, defaultHeaders: cleanHeaders(req.connection.headers) });
   const { system, messages } = toAnthropic(req.messages, { prefill: req.prefill });
   const p = req.connection.params;
   // Only what's set is sent: current models reject temperature/top_p/top_k,
@@ -222,13 +226,13 @@ export function streamChat(req: LlmRequest, signal: AbortSignal): AsyncGenerator
 /** Model ids the connection offers, for its model picker. */
 export async function listModels(conn: LlmRequest['connection']): Promise<string[]> {
   if (conn.kind === 'anthropic') {
-    const client = new Anthropic({ apiKey: conn.apiKey });
+    const client = new Anthropic({ apiKey: conn.apiKey, defaultHeaders: cleanHeaders(conn.headers) });
     const ids: string[] = [];
     for await (const m of client.models.list()) ids.push(m.id);
     return ids;
   }
   const res = await fetch(`${baseUrlFor({ connection: conn, messages: [] })}/models`, {
-    headers: conn.apiKey ? { Authorization: `Bearer ${conn.apiKey}` } : {},
+    headers: connectionHeaders(conn),
   });
   if (!res.ok) throw new Error(`${res.status}: ${await errorText(res)}`);
   const json = (await res.json()) as { data?: { id: string }[] };

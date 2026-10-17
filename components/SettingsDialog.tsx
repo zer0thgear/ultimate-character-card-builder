@@ -20,6 +20,7 @@ import { PromptTemplateEditor } from '@/components/llm/PromptTemplateEditor';
 import { newCard } from '@/lib/cardSpec';
 import { useModelPrices } from '@/hooks/useModelPrices';
 import { MaxRequestCost } from '@/components/llm/MaxRequestCost';
+import { HeadersEditor } from '@/components/HeadersEditor';
 import { formatPrice, isOpenRouter, priceLabel } from '@/lib/modelPricing';
 import { useProjectStore } from '@/store/projectStore';
 import { AccountStatus } from '@/components/AccountStatus';
@@ -481,6 +482,7 @@ function ConnectionEditor({ connection: c }: { connection: LlmConnection }) {
             </Button>
           </div>
         </label>
+        <HeadersEditor key={c.id} value={c.headers} onChange={(headers) => set({ headers })} />
         <label className="flex flex-col gap-1 text-xs text-slate-400">
           Model
           <div className="flex gap-1">
