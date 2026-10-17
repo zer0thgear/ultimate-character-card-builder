@@ -7,6 +7,7 @@
     "dev": "node server.mjs --dev",
     "build": "next build",
     "start": "node server.mjs",
+    "hash-password": "node scripts/hash-password.mjs",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

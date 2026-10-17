@@ -112,14 +112,17 @@ function GeneralTab() {
       <Row label="Version history" hint="Earlier versions of each card, kept at the start of each editing session and before changes to many fields at once. 🕘 beside undo shows them, to compare or restore.">
         <VersionHistorySettings />
       </Row>
-      <Row label="Who can connect" hint="UCCB always accepts this computer and your Tailscale devices. Changes apply within a few seconds.">
-        <Toggle checked={config.allowLan} onChange={(allowLan) => void update({ allowLan })} label="Also allow devices on the home network" />
-        <p className="text-xs text-slate-500">
-          {config.allowLan
-            ? 'Anyone on this Wi-Fi can open UCCB, use your API keys and change your cards.'
-            : 'Other devices on the Wi-Fi are turned away; use Tailscale to reach UCCB from your phone.'}
-        </p>
-      </Row>
+      {!config.server?.hosted && (
+        <Row label="Who can connect" hint="UCCB always accepts this computer and your Tailscale devices. Changes apply within a few seconds.">
+          <Toggle checked={config.allowLan} onChange={(allowLan) => void update({ allowLan })} label="Also allow devices on the home network" />
+          <p className="text-xs text-slate-500">
+            {config.allowLan
+              ? 'Anyone on this Wi-Fi can open UCCB, use your API keys and change your cards.'
+              : 'Other devices on the Wi-Fi are turned away; use Tailscale to reach UCCB from your phone.'}
+          </p>
+        </Row>
+      )}
+      <SignInRow />
       <Row label="Theme">
         <div className="flex gap-2">
           <Button size="sm" variant={theme === 'dark' ? 'primary' : 'secondary'} onClick={() => setTheme('dark')}>
@@ -167,11 +170,44 @@ function GeneralTab() {
   );
 }
 
+/** How UCCB is signed in to (docs/HOSTING.md), and signing out: shown when it has a sign-in. */
+function SignInRow() {
+  const [status, setStatus] = useState<{ hosted: boolean; password: boolean; access: boolean } | null>(null);
+  useEffect(() => {
+    let live = true;
+    void fetch('/_uccb/status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => live && setStatus(s), () => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+  if (!status || (!status.password && !status.access)) return null;
+  const how = [status.password && 'its password', status.access && 'Cloudflare Access'].filter(Boolean).join(' and ');
+  return (
+    <Row label="Signing in" hint={`${status.hosted ? 'UCCB is running on a server. ' : ''}Every device signs in with ${how} before it can open UCCB.`}>
+      {status.password && (
+        <form method="post" action="/_uccb/logout">
+          <Button size="sm" type="submit">
+            Sign out on this device
+          </Button>
+        </form>
+      )}
+      <p className="text-xs text-slate-500">
+        Anyone signed in can use your connections (and their API keys) and change your cards.
+        {status.access ? ' To end a Cloudflare Access session, open /cdn-cgi/access/logout on this address.' : ''}
+      </p>
+    </Row>
+  );
+}
+
 function FolderInput({ value, onChange, title, placeholder }: { value: string; onChange: (v: string) => void; title: string; placeholder?: string }) {
   const [draft, setDraft] = useState(value);
+  const hosted = useConfigStore((s) => !!s.config.server?.hosted);
   return (
     <div className="flex gap-2">
       <input value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={() => draft !== value && onChange(draft.trim())} placeholder={placeholder} className={inputClass} />
+      {!hosted && (
       <Button
         size="sm"
         onClick={async () => {
@@ -185,6 +221,7 @@ function FolderInput({ value, onChange, title, placeholder }: { value: string; o
       >
         Browse…
       </Button>
+      )}
     </div>
   );
 }
@@ -232,10 +269,16 @@ function RecentGensRow() {
 function FoldersTab() {
   const { config, update } = useConfigStore();
   const [adding, setAdding] = useState('');
+  const hosted = config.server?.hosted;
   return (
     <div className="flex flex-col gap-5">
+      {hosted && (
+        <p className="rounded-md bg-slate-950 px-3 py-2 text-xs text-slate-400">
+          UCCB is running on a server, so these folders are on the server, inside <code className="text-slate-300">{config.server?.filesDir}</code>. Type a name (like <code className="text-slate-300">gens</code>) and it goes there.
+        </p>
+      )}
       <Row label="Output folder" hint="Where “Save to folder” writes gens. Nothing is written until you save one (or turn on auto-save).">
-        <FolderInput value={config.outputDir} onChange={(outputDir) => void update({ outputDir })} title="Folder for saved gens" placeholder="e.g. D:\Gens\UCCB" />
+        <FolderInput key={config.outputDir} value={config.outputDir} onChange={(outputDir) => void update({ outputDir })} title="Folder for saved gens" placeholder={hosted ? 'e.g. gens' : 'e.g. D:\\Gens\\UCCB'} />
         <Toggle checked={config.outputPerCard} onChange={(outputPerCard) => void update({ outputPerCard })} label="Put each card's gens in a subfolder named after it" />
         <Toggle checked={config.autoSaveGens} onChange={(autoSaveGens) => void update({ autoSaveGens })} disabled={!config.outputDir} label="Save every gen as it arrives" />
       </Row>
@@ -258,6 +301,7 @@ function FoldersTab() {
             onClick={async () => {
               let path = adding.trim();
               if (!path) {
+                if (hosted) return;
                 const r = await api.pickFolder('', 'Add a folder to the gen library');
                 if (r.unsupported) return toast('No folder picker on this system; type the path instead.');
                 path = r.path;
@@ -267,7 +311,7 @@ function FoldersTab() {
               setAdding('');
             }}
           >
-            {adding.trim() ? 'Add' : 'Browse…'}
+            {adding.trim() || hosted ? 'Add' : 'Browse…'}
           </Button>
         </div>
         {config.outputDir && !config.libraryFolders.includes(config.outputDir) && (

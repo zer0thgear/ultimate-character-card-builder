@@ -49,6 +49,8 @@ UCCB only accepts connections from this computer and your Tailscale devices; any
 
 It also only answers to names that point at it: localhost, the computer's name or IP address, its Tailscale name (`….ts.net`) or a `.local` name. That stops a website you visit from using your browser to read or change your cards and keys. If you open UCCB by another name (say a hosts-file entry like `uccb.home.arpa`), start it with `UCCB_ALLOWED_HOSTS` set to that name; several can be separated by commas.
 
+To run it on a server instead (a VPS behind a Cloudflare Tunnel, say) and open it from anywhere behind a sign-in, see [docs/HOSTING.md](docs/HOSTING.md).
+
 ## Privacy and where things are kept
 
 Everything stays on this machine, under `data/` (which git ignores):
