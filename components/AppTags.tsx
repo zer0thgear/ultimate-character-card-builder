@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { uuid } from '@/lib/uuid';
 import { NO_TAG_FILTER, cycleFilter, importCandidates, isFolder, mergeTagBackup, openFolders, parseTagBackup, sortTags, tagUse, tagsOf, type AppTag, type FolderEntry, type TagFolder, type TagImport } from '@/lib/appTags';
 import { ensureAppTags, useAppTagStore } from '@/store/appTagStore';
+import { authorTagName, authorsIn, cardAuthor } from '@/lib/authorTags';
 import { useProjectStore } from '@/store/projectStore';
 import { toast, useUiStore } from '@/store/uiStore';
 import { Button, IconButton, Modal, Toggle, choiceDialog, confirmDialog, cx, downloadBlob, inputClass, pickFiles } from '@/components/ui';
@@ -425,6 +426,7 @@ function ManageTagsDialog() {
             </select>
           </label>
         </div>
+        <AuthorTagsSection />
         <div className="flex gap-2">
           <input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && add()} placeholder="New tag name" className={cx(inputClass, 'flex-1')} />
           <Button variant="primary" onClick={add} disabled={!name.trim()}>
@@ -486,6 +488,115 @@ function ManageTagsDialog() {
   );
 }
 
+/** Author tags (lib/authorTags.ts): on for imports, every card at once,
+ *  and aliases for authors with other names. */
+function AuthorTagsSection() {
+  const authors = useAppTagStore((s) => s.authors);
+  const tags = useAppTagStore((s) => s.tags);
+  const summaries = useProjectStore((s) => s.summaries);
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState('');
+  const [other, setOther] = useState({ from: '', to: '' });
+  const store = useAppTagStore.getState();
+  const cards = summaries.map((s) => ({ id: s.id, author: s.creator ?? '' }));
+  const withAuthor = cards.filter((c) => c.author.trim());
+  const list = authorsIn(cards);
+  // Aliases for names none of your cards have yet.
+  const extra = Object.keys(authors.aliases).filter((a) => !list.some((x) => x.author.toLowerCase() === a.toLowerCase()));
+  const shown = [...list, ...extra.map((author) => ({ author, cards: 0 }))].filter((x) => !filter.trim() || x.author.toLowerCase().includes(filter.trim().toLowerCase()) || authorTagName(x.author, authors.aliases).toLowerCase().includes(filter.trim().toLowerCase()));
+
+  const tagAll = () => {
+    const n = store.tagByAuthor(withAuthor);
+    toast(n ? `Tagged ${n} card${n === 1 ? '' : 's'} with their author.` : 'Every card already has its author’s tag.', 'success');
+  };
+  /** Sends an author's cards to another tag (or back to their own name), retagging them if author tags are on. */
+  const setAlias = (author: string, to: string) => {
+    const aliases = Object.fromEntries(Object.entries(authors.aliases).filter(([from]) => from.toLowerCase() !== author.toLowerCase()));
+    if (to.trim() && to.trim().toLowerCase() !== author.trim().toLowerCase()) aliases[author.trim()] = to.trim();
+    store.setOptions({ authors: { ...authors, aliases } });
+    if (authors.on) useAppTagStore.getState().tagByAuthor(withAuthor.filter((c) => c.author.toLowerCase() === author.trim().toLowerCase()));
+  };
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-slate-800 p-3">
+      <Toggle
+        checked={authors.on}
+        onChange={(on) => store.setOptions({ authors: { ...authors, on } })}
+        label="Tag imported cards with their author"
+        title="Each imported card gets a tag named after its author (its creator field, or the creator in its Chub link), or the tag their alias says"
+      />
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+        <Button size="sm" onClick={tagAll} disabled={!withAuthor.length} title="Give every card its author's tag now (and move it to an alias's tag)">
+          Tag all {withAuthor.length} card{withAuthor.length === 1 ? '' : 's'} by author
+        </Button>
+        <button type="button" className="text-violet-300 hover:underline" onClick={() => setOpen(!open)}>
+          {open ? 'Hide' : 'Authors and aliases'} ({list.length})
+        </button>
+      </div>
+      {open && (
+        <div className="flex flex-col gap-1.5 text-xs">
+          <p className="text-slate-500">An author&apos;s cards get the tag on the right: their own name unless you give another (an author&apos;s other account, or any tag).</p>
+          {list.length + extra.length > 12 && <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Find an author…" className={cx(inputClass, 'py-1 text-xs')} />}
+          <datalist id="author-alias-tags">
+            {tags.map((t) => (
+              <option key={t.id} value={t.name} />
+            ))}
+          </datalist>
+          <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto pr-1">
+            {shown.map((a) => (
+              <AuthorRow key={a.author.toLowerCase()} author={a.author} cards={a.cards} alias={authorTagName(a.author, authors.aliases)} onAlias={(to) => setAlias(a.author, to)} />
+            ))}
+          </ul>
+          <div className="flex flex-wrap items-center gap-1">
+            <input value={other.from} onChange={(e) => setOther({ ...other, from: e.target.value })} placeholder="Another name" className={cx(inputClass, 'w-36 py-1 text-xs')} />
+            <span className="text-slate-500">→</span>
+            <input value={other.to} onChange={(e) => setOther({ ...other, to: e.target.value })} list="author-alias-tags" placeholder="its tag" className={cx(inputClass, 'w-36 py-1 text-xs')} />
+            <Button
+              size="sm"
+              disabled={!other.from.trim() || !other.to.trim()}
+              onClick={() => {
+                setAlias(other.from, other.to);
+                setOther({ from: '', to: '' });
+              }}
+              title="For a name none of your cards has yet: cards by it get that tag when they're imported"
+            >
+              + Alias
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AuthorRow({ author, cards, alias, onAlias }: { author: string; cards: number; alias: string; onAlias: (to: string) => void }) {
+  const [draft, setDraft] = useState(alias);
+  const [was, setWas] = useState(alias);
+  if (was !== alias) {
+    setWas(alias);
+    setDraft(alias);
+  }
+  const commit = () => draft.trim() !== alias && onAlias(draft.trim() || author);
+  return (
+    <li className="flex items-center gap-2 rounded bg-slate-950/40 px-2 py-1">
+      <span className="min-w-0 flex-1 truncate text-slate-300" title={author}>
+        {author}
+      </span>
+      <span className="w-14 text-right text-[11px] text-slate-500">{cards ? `${cards} card${cards === 1 ? '' : 's'}` : 'no cards'}</span>
+      <span className="text-slate-500">→</span>
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && commit()}
+        list="author-alias-tags"
+        aria-label={`${author}'s tag`}
+        className={cx(inputClass, 'w-40 py-1 text-xs', draft.trim().toLowerCase() !== author.toLowerCase() && 'border-violet-600')}
+      />
+    </li>
+  );
+}
+
 /** The dialogs, mounted once. */
 export function AppTagHosts() {
   return (
@@ -541,4 +652,6 @@ export async function offerCardTags(imported: { projectId: string; card: CardDat
     const all = [...names, ...inFolders];
     if (all.length) useAppTagStore.getState().addToCard(e.projectId, all);
   }
+  // And each its author's tag, if that's on (lib/authorTags.ts).
+  if (useAppTagStore.getState().authors.on) useAppTagStore.getState().tagByAuthor(imported.map((i) => ({ id: i.projectId, author: cardAuthor(i.card) })));
 }

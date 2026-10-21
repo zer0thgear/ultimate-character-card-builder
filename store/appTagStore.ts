@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
 import { uuid } from '@/lib/uuid';
+import { tagCardsByAuthor } from '@/lib/authorTags';
 import { EMPTY_TAG_DATA, addTagsToCard, copyCardTags, findTag, newTag, removeTag, setTagOnCards, type AppTag, type AppTagData } from '@/lib/appTags';
 
 // Your app tags (lib/appTags.ts): SillyTavern's tags, kept by UCCB rather
@@ -30,12 +31,14 @@ interface AppTagState extends AppTagData {
   /** Puts a tag on all these cards, or takes it off them all. */
   setTagOnCards: (cardIds: string[], tagId: string, on: boolean) => void;
   copyCard: (from: string, to: string) => void;
-  setOptions: (patch: Partial<Pick<AppTagData, 'folders' | 'importMode'>>) => void;
+  setOptions: (patch: Partial<Pick<AppTagData, 'folders' | 'importMode' | 'authors'>>) => void;
+  /** Gives these cards their authors' tags (lib/authorTags.ts); how many changed. */
+  tagByAuthor: (cards: { id: string; author: string }[]) => number;
   /** Replaces everything (a backup merged in). */
   replace: (data: AppTagData) => void;
 }
 
-const dataOf = (s: AppTagData): AppTagData => ({ tags: s.tags, map: s.map, folders: s.folders, importMode: s.importMode });
+const dataOf = (s: AppTagData): AppTagData => ({ tags: s.tags, map: s.map, folders: s.folders, importMode: s.importMode, authors: s.authors });
 
 export const useAppTagStore = create<AppTagState>((set, get) => {
   const save = () => {
@@ -91,6 +94,11 @@ export const useAppTagStore = create<AppTagState>((set, get) => {
     setTagOnCards: (cardIds, tagId, on) => change((s) => setTagOnCards(s, cardIds, tagId, on)),
     copyCard: (from, to) => change((s) => copyCardTags(s, from, to)),
     setOptions: (patch) => change((s) => ({ ...s, ...patch })),
+    tagByAuthor: (cards) => {
+      const r = tagCardsByAuthor(dataOf(get()), cards, get().authors.aliases, uuid);
+      if (r.changed) change(() => r.data);
+      return r.changed;
+    },
     replace: (data) => change(() => dataOf(data)),
   };
 });
