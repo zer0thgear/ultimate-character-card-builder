@@ -8,6 +8,7 @@ import { pickFiles } from '@/components/ui';
 import type { CardProject } from '@/types/project';
 import type { CardData } from '@/types/card';
 import { offerCardLore } from '@/components/LorebookBank';
+import { offerChubLore } from '@/components/ChubLore';
 import { offerCardTags } from '@/components/AppTags';
 
 // Importing card files from disk: any number at once (picked, or dropped),
@@ -38,5 +39,6 @@ export async function importCards(init: Partial<CardProject> = {}, given?: File[
   // and a card with a lorebook asks whether to add it to the bank.
   await offerCardTags(lore);
   await offerCardLore(lore);
+  await offerChubLore(lore, true);
   return names.length;
 }

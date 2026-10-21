@@ -53,15 +53,16 @@ function useStoryContext(): StoryContext | null {
   const personas = usePersonaStore((s) => s.personas);
   const chatSettings = useLlmStore((s) => s.chatSettings);
   const projectId = useProjectStore((s) => s.project?.id);
+  const linked = useProjectStore((s) => s.project?.lorebookIds);
   const bank = useLorebookStore((s) => s.books);
   useEffect(ensureLorebooks, []);
   return useMemo(() => {
     if (!card) return null;
     const me = resolvePersona(personas, chatSettings);
     // The bank's global and persona lorebooks come along, as in chats.
-    const attached = lorebooksInPlay(bank, { projectId, personaLorebookId: me.persona?.lorebookId, globalIds: chatSettings.globalLorebooks });
+    const attached = lorebooksInPlay(bank, { projectId, personaLorebookId: me.persona?.lorebookId, cardLorebookIds: linked, globalIds: chatSettings.globalLorebooks });
     return { card, userName: me.name, userDescription: me.description, loreBook: combineLorebooks(card.character_book, attached) };
-  }, [card, personas, chatSettings, bank, projectId]);
+  }, [card, personas, chatSettings, bank, projectId, linked]);
 }
 
 /** Logs a story request to the assistant's log, so 🔍 can show it. */

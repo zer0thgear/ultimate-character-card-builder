@@ -41,7 +41,7 @@ function useAdventureCtx(adventure: AdventureSession | null): AdventureCtx | nul
     if (!project) return null;
     const me = resolvePersona(personas, chatSettings, adventure);
     // The bank's global and persona lorebooks come along, as in chats.
-    const attached = lorebooksInPlay(bank, { projectId: project.id, personaLorebookId: me.persona?.lorebookId, globalIds: chatSettings.globalLorebooks });
+    const attached = lorebooksInPlay(bank, { projectId: project.id, personaLorebookId: me.persona?.lorebookId, cardLorebookIds: project.lorebookIds, globalIds: chatSettings.globalLorebooks });
     return {
       card: project.card.data,
       userName: me.name,

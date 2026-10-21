@@ -28,10 +28,22 @@ export interface AppTag {
   createdAt: number;
   /** Left off the cards in the lists (still filters, still a folder). */
   hideOnCard?: boolean;
+  /** Made for an author (lib/authorTags.ts): a card has one of these. */
+  author?: boolean;
 }
 
 /** What to do with the tags written in a card when it's imported. */
 export type TagImport = 'ask' | 'none' | 'all' | 'existing';
+
+/** Author tags (lib/authorTags.ts). */
+export interface AuthorTagSettings {
+  /** Imported cards get their author's tag. */
+  on: boolean;
+  /** An author's name (any case) → the tag their cards get instead. */
+  aliases: Record<string, string>;
+}
+
+export const NO_AUTHOR_TAGS: AuthorTagSettings = { on: false, aliases: {} };
 
 export interface AppTagData {
   tags: AppTag[];
@@ -40,9 +52,10 @@ export interface AppTagData {
   /** "Tags as Folders": folder tags show as folders in the card lists. */
   folders: boolean;
   importMode: TagImport;
+  authors: AuthorTagSettings;
 }
 
-export const EMPTY_TAG_DATA: AppTagData = { tags: [], map: {}, folders: true, importMode: 'ask' };
+export const EMPTY_TAG_DATA: AppTagData = { tags: [], map: {}, folders: true, importMode: 'ask', authors: NO_AUTHOR_TAGS };
 
 /** A card list's filter on app tags: shown only with all of `include`
  *  (the folders you're in among them), hidden with any of `exclude`. */
@@ -218,6 +231,7 @@ export function cleanTagData(raw: unknown): AppTagData {
       order: typeof x.order === 'number' && Number.isFinite(x.order) ? x.order : tags.length,
       createdAt: typeof x.createdAt === 'number' ? x.createdAt : 0,
       ...(x.hideOnCard === true ? { hideOnCard: true } : {}),
+      ...(x.author === true ? { author: true } : {}),
     });
   }
   const map: Record<string, string[]> = {};
@@ -229,7 +243,16 @@ export function cleanTagData(raw: unknown): AppTagData {
     }
   }
   const importMode = (['ask', 'none', 'all', 'existing'] as const).find((m) => m === o.importMode) ?? 'ask';
-  return { tags, map, folders: o.folders !== false, importMode };
+  return { tags, map, folders: o.folders !== false, importMode, authors: cleanAuthorSettings(o.authors) };
+}
+
+/** Saved author-tag settings, made sound. */
+export function cleanAuthorSettings(raw: unknown): AuthorTagSettings {
+  const o = (raw && typeof raw === 'object' ? raw : {}) as { on?: unknown; aliases?: unknown };
+  const aliases: Record<string, string> = {};
+  if (o.aliases && typeof o.aliases === 'object' && !Array.isArray(o.aliases))
+    for (const [from, to] of Object.entries(o.aliases as Record<string, unknown>)) if (from.trim() && typeof to === 'string' && to.trim()) aliases[from.trim()] = to.trim();
+  return { on: o.on === true, aliases };
 }
 
 /** `data` without the tag (taken off every card, and out of `filter`s). */

@@ -60,6 +60,8 @@ interface ProjectState {
   setNotes: (notes: string) => void;
   /** The card's own lorebook-sync choice (undefined: the global setting). */
   setLorebookSync: (sync: boolean | undefined) => void;
+  /** The card's linked lorebooks from the bank (CardProject.lorebookIds). */
+  setLorebookIds: (ids: string[]) => void;
   /** The card's world for Adventure mode (not part of card undo). */
   setAdventureWorld: (world: AdventureWorld) => void;
   undo: () => void;
@@ -290,6 +292,15 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       if (!p) return;
       const next: CardProject = { ...p, lorebookSync: sync };
       if (sync === undefined) delete next.lorebookSync;
+      set({ project: next });
+      schedule();
+    },
+
+    setLorebookIds: (ids) => {
+      const p = get().project;
+      if (!p) return;
+      const next: CardProject = { ...p, lorebookIds: [...new Set(ids)] };
+      if (!next.lorebookIds?.length) delete next.lorebookIds;
       set({ project: next });
       schedule();
     },

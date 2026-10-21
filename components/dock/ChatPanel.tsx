@@ -120,6 +120,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
     model: connection?.model,
     input,
     actions: scriptActions,
+    lorebookIds: host?.lorebookIds,
   });
   const [showSettings, setShowSettings] = useState(false);
   const [inspect, setInspect] = useState<BuiltPrompt | null>(null);
@@ -286,7 +287,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   const g = host.group;
   const groupBook = g?.group.lorebookId ? bank.find((b) => b.id === g.group.lorebookId) : undefined;
   const attachedLore = [
-    ...lorebooksInPlay(bank, { projectId: host.projectId, chatLorebookId: chat?.lorebookId, personaLorebookId: me.persona?.lorebookId, globalIds: chatSettings.globalLorebooks }),
+    ...lorebooksInPlay(bank, { projectId: host.projectId, chatLorebookId: chat?.lorebookId, personaLorebookId: me.persona?.lorebookId, cardLorebookIds: host.lorebookIds, globalIds: chatSettings.globalLorebooks }),
     // A group's own lorebook comes with its chats.
     ...(groupBook && groupBook.id !== chat?.lorebookId ? [{ id: groupBook.id, name: bankName(groupBook), source: 'chat' as const, book: groupBook.book }] : []),
   ];

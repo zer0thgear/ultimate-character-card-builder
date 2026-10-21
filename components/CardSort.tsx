@@ -15,7 +15,7 @@ export function useSortedCards<T extends ProjectSummary>(cards: T[]) {
   const tags = useUiStore((s) => s.cardTags?.[s.appMode]) ?? NO_TAGS;
   const author = useUiStore((s) => s.cardAuthor?.[s.appMode]) ?? '';
   const appTags = useUiStore((s) => s.cardAppTags?.[s.appMode]) ?? NO_TAG_FILTER;
-  const tagData = useAppTagStore(useShallow((s) => ({ tags: s.tags, map: s.map, folders: s.folders, importMode: s.importMode })));
+  const tagData = useAppTagStore(useShallow((s) => ({ tags: s.tags, map: s.map, folders: s.folders, importMode: s.importMode, authors: s.authors })));
   useEffect(ensureAppTags, []);
   // Your app tags filter too, and set folders above the cards (lib/appTags.ts).
   const { cards: sorted, folders } = useMemo(() => applyAppTags(sortCards(byAuthor(withTags(cards, tags), author), sort), tagData, appTags), [cards, sort, tags, author, tagData, appTags]);

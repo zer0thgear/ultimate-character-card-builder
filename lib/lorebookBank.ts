@@ -11,7 +11,8 @@ import { uuid } from '@/lib/uuid';
 // them as one lorebook (lib/lorebookScan.ts).
 
 /** Where an attached lorebook comes in from. */
-export type LoreSource = 'chat' | 'persona' | 'global';
+/** card: one of the card's linked lorebooks (CardProject.lorebookIds). */
+export type LoreSource = 'chat' | 'persona' | 'card' | 'global';
 
 export interface AttachedLorebook {
   id: string;
@@ -43,11 +44,13 @@ export interface LoreLinks {
   projectId?: string;
   chatLorebookId?: string;
   personaLorebookId?: string;
+  /** The card's linked lorebooks (a group's: its members'). */
+  cardLorebookIds?: string[];
   globalIds?: string[];
 }
 
 /** The bank lorebooks a chat brings in, in SillyTavern's order (chat,
- *  persona, global), each once. Missing ids (a deleted book) are skipped. */
+ *  persona, the card's linked ones, global), each once. Missing ids (a deleted book) are skipped. */
 export function lorebooksInPlay(bank: BankLorebook[], links: LoreLinks): AttachedLorebook[] {
   const byId = new Map(bank.map((b) => [b.id, b]));
   const seen = new Set<string>();
@@ -62,6 +65,7 @@ export function lorebooksInPlay(bank: BankLorebook[], links: LoreLinks): Attache
   };
   add(links.chatLorebookId, 'chat');
   add(links.personaLorebookId, 'persona');
+  for (const id of links.cardLorebookIds ?? []) add(id, 'card');
   for (const id of links.globalIds ?? []) add(id, 'global');
   return out;
 }
@@ -73,7 +77,7 @@ export const entryBook = (e: LorebookEntry) => (typeof e[ENTRY_BOOK] === 'string
 
 /**
  * The card's lorebook and the attached ones as one lorebook for the scan:
- * chat and persona entries first, then the card's, then the global ones.
+ * chat and persona entries first, then the card's, then its linked books', then the global ones.
  * Scan depth and token budget are the card's where it sets them, else the
  * first attached book's that does; recursion is on if any book has it.
  * Undefined when there's nothing to scan.
@@ -81,9 +85,11 @@ export const entryBook = (e: LorebookEntry) => (typeof e[ENTRY_BOOK] === 'string
 export function combineLorebooks(cardBook: Lorebook | undefined, attached: AttachedLorebook[]): Lorebook | undefined {
   if (!attached.length) return cardBook;
   const tag = (a: AttachedLorebook) => a.book.entries.map((e) => ({ ...e, [ENTRY_BOOK]: a.name }));
-  const first = attached.filter((a) => a.source !== 'global');
+  const first = attached.filter((a) => a.source === 'chat' || a.source === 'persona');
+  // The card's linked lorebooks right after its own.
+  const linked = attached.filter((a) => a.source === 'card');
   const global = attached.filter((a) => a.source === 'global');
-  const entries = [...first.flatMap(tag), ...(cardBook?.entries ?? []), ...global.flatMap(tag)];
+  const entries = [...first.flatMap(tag), ...(cardBook?.entries ?? []), ...linked.flatMap(tag), ...global.flatMap(tag)];
   if (!entries.length) return cardBook;
   const books = [...(cardBook ? [cardBook] : []), ...attached.map((a) => a.book)];
   return {

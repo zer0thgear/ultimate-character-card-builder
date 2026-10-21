@@ -14,6 +14,7 @@ import { countTokens } from 'gpt-tokenizer';
 import { sumTallies, tallyChat, type ChatTally } from '@/lib/chatStats';
 import { cardStats, type CardStats } from '@/lib/cardStats';
 import { confineFolder, isHosted } from '@/lib/server/hostedPaths';
+import { cardAuthor } from '@/lib/authorTags';
 
 // Everything UCCB saves lives under data/ (gitignored):
 //   data/config.json                    AppConfig
@@ -196,7 +197,8 @@ export async function listProjects(): Promise<ProjectSummary[]> {
         tags: p.card?.data?.tags ?? [],
         avatar: p.avatar,
         ...(p.chatOnly ? { chatOnly: true } : {}),
-        ...(p.card?.data?.creator?.trim() ? { creator: p.card.data.creator.trim() } : {}),
+        // The author, from the card's Chub path if its creator field is blank (lib/authorTags.ts).
+        ...(p.card?.data && cardAuthor(p.card.data) ? { creator: cardAuthor(p.card.data) } : {}),
         ...(notesSnippet(p.card?.data?.creator_notes) ? { notes: notesSnippet(p.card?.data?.creator_notes) } : {}),
         ...(await chatStats(id)),
         createdAt: p.createdAt,
@@ -711,6 +713,7 @@ export async function saveLorebook(b: BankLorebook): Promise<BankLorebook> {
     id: checkId(b.id),
     book,
     ...(b.fromCard && typeof b.fromCard.projectId === 'string' ? { fromCard: { projectId: b.fromCard.projectId, name: String(b.fromCard.name ?? '') } } : {}),
+    ...(b.chub && typeof b.chub.path === 'string' && b.chub.path ? { chub: { path: b.chub.path, ...(typeof b.chub.id === 'number' ? { id: b.chub.id } : {}) } } : {}),
     createdAt: typeof b.createdAt === 'number' ? b.createdAt : now,
     updatedAt: now,
   };

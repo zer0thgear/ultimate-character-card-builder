@@ -42,6 +42,8 @@ export interface ChatHost {
   projectId?: string;
   /** The picture beside a message of a character's (none: no picture). */
   avatarUrl: (m?: Pick<ChatMessage, 'role' | 'speaker'>) => string | null;
+  /** Bank lorebooks linked to the card (a group's: to its members), which come along. */
+  lorebookIds: string[];
   group?: GroupHost;
 }
 
@@ -51,7 +53,7 @@ export function useCardChatHost(): ChatHost | null {
   return useMemo(() => {
     if (!project) return null;
     const avatar = project.avatar ? `/api/projects/${project.id}/avatar?v=${project.avatar.version}` : null;
-    return { owner: { kind: 'card', id: project.id }, card: project.card.data, projectId: project.id, avatarUrl: () => avatar };
+    return { owner: { kind: 'card', id: project.id }, card: project.card.data, projectId: project.id, avatarUrl: () => avatar, lorebookIds: project.lorebookIds ?? [] };
   }, [project]);
 }
 
@@ -79,6 +81,7 @@ export function useGroupChatHost(): ChatHost | null {
         const p = m?.speaker ? projects[m.speaker] : undefined;
         return p ? api.avatarUrl(p.id, p.avatar) : null;
       },
+      lorebookIds: [...new Set(group.members.flatMap((m) => projects[m.projectId]?.lorebookIds ?? []))],
       group: g,
     };
   }, [group, projects]);

@@ -35,7 +35,8 @@ import { CardSortControl, TagFilter, TagFilterNote, useSortedCards } from '@/com
 import { AppTagBar, AppTagHosts, FolderRow, FolderTile, openCardTags } from '@/components/AppTags';
 import { CardSelectBar, CardSelectHost, PickMark, useCardPicks } from '@/components/CardSelect';
 import { cardMatches, chatStatsDetail, sortDetail } from '@/lib/cardSort';
-import { importFromUrl, overwriteCard } from '@/components/ImportUrl';
+import { importFromUrl, overwriteCard, updateFromSource } from '@/components/ImportUrl';
+import { sourceLinks } from '@/lib/importLinks';
 import { importCards } from '@/components/ImportCards';
 import { TrashDialog, duplicateCard, openTrash } from '@/components/TrashDialog';
 import { LorebooksDialog, openLorebooks } from '@/components/LorebookBank';
@@ -253,6 +254,9 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
 
   // From a file or a link (components/ImportUrl.tsx).
   const overwrite = () => overwriteCard();
+  // Fetched again from where it came from, if it says.
+  const source = project ? sourceLinks(project.card.data)[0] : undefined;
+  const sourceHost = source ? new URL(source).hostname.replace(/^www\./, '') : '';
 
   return (
     <header className="flex h-11 flex-shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-950 px-2">
@@ -324,6 +328,11 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
                 <IconButton title={showAvatar ? 'Hide the avatar strip' : 'Show the avatar strip'} onClick={() => setShowAvatar(!showAvatar)}>
                   {showAvatar ? '▣' : '□'}
                 </IconButton>
+                {source && (
+                  <Button size="sm" variant="ghost" onClick={() => void updateFromSource()} title={`Fetch this card again from ${sourceHost} and take its text as it is there now (undo brings this back; a new picture is offered)`}>
+                    ⟳ Update
+                  </Button>
+                )}
                 <Button size="sm" variant="ghost" onClick={() => void overwrite()} title="Replace this card's text with another card's, from a file or a link (Chub, Cardbox); its picture too if you choose">
                   Overwrite…
                 </Button>
@@ -341,6 +350,7 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
                     { label: 'JSON (V3)', run: async () => exportJson(project) },
                     { label: 'CHARX', run: () => exportCharx(project, imageOpts) },
                     // The header has no room for it on a phone.
+                    ...(phone && !chatMode && source ? [{ label: `⟳ Update from ${sourceHost}`, run: updateFromSource }] : []),
                     ...(phone && !chatMode ? [{ label: 'Overwrite (from a file or URL)…', run: overwrite }] : []),
                   ].map((o) => (
                     <button
