@@ -21,7 +21,8 @@ import { CardSortControl, TagFilter, TagFilterNote, useSortedCards } from '@/com
 import { AppTagBar, FolderRow, FolderTile, openCardTags } from '@/components/AppTags';
 import { CardSelectBar, PickMark, useCardPicks } from '@/components/CardSelect';
 import { cardMatches, chatStatsDetail, sortDetail } from '@/lib/cardSort';
-import { importFromUrl } from '@/components/ImportUrl';
+import { importFromUrl, updateFromSource } from '@/components/ImportUrl';
+import { sourceLinks } from '@/lib/importLinks';
 import { importCards } from '@/components/ImportCards';
 import { openLorebooks } from '@/components/LorebookBank';
 import type { ProjectSummary } from '@/types/project';
@@ -295,6 +296,11 @@ export function ChatCardActions({ phone }: { phone: boolean }) {
             🛠 Open in Builder
           </Button>
         ))}
+      {!phone && sourceLinks(project.card.data).length > 0 && (
+        <IconButton title="⟳ Update: fetch this card again from where it came from and take its text as it is there now (undo brings this back)" onClick={() => void updateFromSource()}>
+          ⟳
+        </IconButton>
+      )}
       <SourceButton source={project.card.data.source} compact={phone} className="h-7 text-sm" />
       <Button size="sm" variant={chatCardOpen ? 'primary' : 'secondary'} onClick={() => setChatCardOpen(!chatCardOpen)} title="The card's definitions and lorebook, to read or change">
         📝{!phone && ' Card'}

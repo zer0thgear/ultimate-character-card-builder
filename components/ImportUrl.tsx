@@ -11,7 +11,9 @@ import { fromBase64 } from '@/lib/requestImage';
 import { choiceDialog, confirmDialog, pickFiles, textDialog } from '@/components/ui';
 import type { CardProject } from '@/types/project';
 import type { CardData, CharacterCard } from '@/types/card';
-import { splitLinks } from '@/lib/importLinks';
+import { changedFields, sourceLinks, splitLinks } from '@/lib/importLinks';
+import { missingChubLore } from '@/lib/chubLore';
+import { useLorebookStore } from '@/store/lorebookStore';
 
 // Import from URL, as SillyTavern has it: paste Chub (or Cardbox) links, one
 // per line, and the cards come in with their pictures. UCCB's server fetches
@@ -144,4 +146,76 @@ export async function overwriteCard() {
   } catch (err) {
     toast(`Text replaced, but the picture couldn't be: ${(err as Error).message}`, 'error');
   }
+}
+
+/** Whether two pictures are the same file. */
+async function samePicture(current: string | null, next: Blob): Promise<boolean> {
+  if (!current) return false;
+  try {
+    const res = await fetch(current);
+    if (!res.ok) return false;
+    const [a, b] = await Promise.all([res.arrayBuffer(), next.arrayBuffer()]);
+    if (a.byteLength !== b.byteLength) return false;
+    const x = new Uint8Array(a);
+    const y = new Uint8Array(b);
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * ⟳ Update: fetches the open card again from its source (lib/importLinks.ts,
+ * sourceLinks) and puts it in place of the card's text, as Overwrite does:
+ * undo (or the version kept) brings the old text back, and gens, chats,
+ * notes, tags and linked lorebooks stay. A new picture there is offered,
+ * not taken; lorebooks it newly links on Chub are fetched and linked.
+ */
+export async function updateFromSource() {
+  const project = useProjectStore.getState().project;
+  if (!project) return;
+  const links = sourceLinks(project.card.data);
+  if (!links.length) return toast("This card doesn't say where it came from, so it can't be fetched again.", 'error');
+  toast('Fetching the card again…', 'info');
+  let got: Fetched | null = null;
+  const errors: string[] = [];
+  for (const link of links) {
+    try {
+      got = await fetchCard(link);
+      break;
+    } catch (err) {
+      errors.push((err as Error).message);
+    }
+  }
+  if (!got) return toast(`Couldn't fetch it: ${errors[0]}`, 'error');
+  const store = useProjectStore.getState();
+  // Another card was opened meanwhile.
+  if (store.project?.id !== project.id) return;
+  const before = store.project.card;
+  // Where it came from stays, with the link it was just fetched from.
+  got.card.data.source = [...new Set([...(before.data.source ?? []), ...(got.card.data.source ?? [])])];
+  const changed = changedFields(before.data, got.card.data);
+  const name = before.data.name || 'The card';
+  if (changed.length) {
+    store.replaceCard(got.card);
+    toast(`Updated ${name} from ${got.from}: ${changed.length > 4 ? `${changed.slice(0, 4).join(', ')} and ${changed.length - 4} more` : changed.join(', ')} changed.`, 'success', {
+      label: 'Undo',
+      run: () => {
+        if (useProjectStore.getState().project?.id === project.id) useProjectStore.getState().undo();
+      },
+    });
+  }
+  const picture = got.avatar && !(await samePicture(api.avatarUrl(project.id, project.avatar), got.avatar)) ? got.avatar : null;
+  if (!changed.length && !picture) toast(`${name} is up to date with ${got.from}.`, 'success');
+  if (picture)
+    toast(`${changed.length ? 'Its' : `${name}'s text is up to date, but its`} picture on ${got.from} is different.`, 'info', {
+      label: 'Use the new picture',
+      run: () => {
+        const s = useProjectStore.getState();
+        if (s.project?.id === project.id) void s.setAvatar(picture).then(() => toast('Picture replaced.', 'success'), (err: Error) => toast(err.message, 'error'));
+      },
+    });
+  // Lorebooks it links on Chub now that aren't linked here.
+  if (missingChubLore(got.card.data, store.project.lorebookIds, useLorebookStore.getState().books).length) await offerChubLore([{ projectId: project.id, card: got.card.data }], false);
 }

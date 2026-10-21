@@ -214,7 +214,8 @@ export const useToastStore = create<ToastState>((set) => ({
   push: (text, tone = 'info', action) => {
     const id = ++toastId;
     set((s) => ({ toasts: [...s.toasts.slice(-4), { id, text, tone, action }] }));
-    setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), tone === 'error' ? 8000 : 4000);
+    // One with something to do (Undo, say) stays long enough to do it.
+    setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), action ? 10000 : tone === 'error' ? 8000 : 4000);
   },
   dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 }));
