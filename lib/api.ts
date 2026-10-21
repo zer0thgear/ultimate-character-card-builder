@@ -118,6 +118,9 @@ export const api = {
   saveLorebook: (b: BankLorebook) => call<BankLorebook>(`/api/lorebooks/${b.id}`, json('PUT', b)),
   syncCardLorebook: (projectId: string, book: Lorebook, syncByDefault: boolean) => call<{ synced: boolean; updatedAt?: number }>(`/api/projects/${projectId}/lorebook`, json('PUT', { book, syncByDefault })),
   deleteLorebook: (id: string) => call<{ ok: true }>(`/api/lorebooks/${id}`, { method: 'DELETE' }),
+  chubLorebook: (path: string) => call<{ book: Lorebook; id?: number; source: string }>('/api/lorebooks/chub', json('POST', { path })),
+  /** Links bank lorebooks to a card that isn't open (or unlinks them). */
+  linkLorebooks: (projectId: string, change: { add?: string[]; remove?: string[] }) => call<{ lorebookIds: string[] }>(`/api/projects/${projectId}/linked-lorebooks`, json('PUT', change)),
   listPacks: () => call<InstalledPack[]>('/api/packs'),
   installPack: (p: InstalledPack) => call<InstalledPack>('/api/packs', json('POST', p)),
   savePack: (p: InstalledPack) => call<InstalledPack>(`/api/packs/${p.pack.id}`, json('PUT', p)),

@@ -1,6 +1,8 @@
 import 'server-only';
 import { BadRequestError, NotFoundError } from '@/lib/server/storage';
 import type { UrlCardImport } from '@/lib/extensions/types';
+import type { Lorebook } from '@/types/card';
+import { normalizeLorebook } from '@/lib/cardSpec';
 
 // Characters from Chub (chub.ai, characterhub.org), as SillyTavern's
 // "Import from URL" fetches them: the project's definition from Chub's API,
@@ -181,5 +183,42 @@ async function chubPicture(link: string | undefined, hosts: string[]): Promise<U
   } catch {
     // The card comes without a picture rather than not at all.
     return undefined;
+  }
+}
+
+/**
+ * A lorebook on Chub by its path ("lorebooks/creator/name", as a card's
+ * linked lorebooks name them; lib/chubLore.ts), as a lorebook with its
+ * name. From Chub's API, or the mirror's (Cardbox) if Chub won't give it
+ * (hidden where you are) or can't be reached.
+ */
+export async function chubLorebook(path: string): Promise<{ book: Lorebook; id?: number; source: string }> {
+  const clean = path.trim().replace(/^\/+|\/+$/g, '');
+  const parts = clean.split('/');
+  if (parts.length !== 3 || parts[0] !== 'lorebooks' || !parts.slice(1).every((p) => /^[\w.~-]+$/.test(p))) throw new BadRequestError(`"${path}" isn't a Chub lorebook path (lorebooks/creator/name).`);
+  const fetchFrom = async (apiBase: string, source: string) => {
+    const res = await fetch(`${apiBase}/api/${parts.map(encodeURIComponent).join('/')}?full=true`, {
+      headers: { Accept: 'application/json', 'User-Agent': 'UCCB' },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (res.status === 404) throw new NotFoundError(`${source} has no lorebook at ${clean}.`);
+    if (!res.ok) {
+      const why = (await res.text().catch(() => '')).trim().slice(0, 200);
+      throw new Error(`${source} said ${res.status} for ${clean}${why && !why.startsWith('<') ? `: ${why}` : '.'}`);
+    }
+    const json = (await res.json()) as { node?: { id?: number; name?: string; definition?: { embedded_lorebook?: unknown } } };
+    const book = normalizeLorebook(json.node?.definition?.embedded_lorebook);
+    if (!book) throw new BadRequestError(`${source}'s reply for ${clean} had no lorebook in it.`);
+    // Chub's name for it, which the book itself may not carry.
+    if (!book.name?.trim() && json.node?.name) book.name = json.node.name;
+    return { book, ...(typeof json.node?.id === 'number' ? { id: json.node.id } : {}), source };
+  };
+  try {
+    return await fetchFrom('https://api.chub.ai', 'Chub');
+  } catch (err) {
+    const mirror = Object.values(CHUB_MIRRORS)[0];
+    const viaMirror = await fetchFrom(mirror.apiBase, mirror.name).catch(() => null);
+    if (!viaMirror) throw err;
+    return { ...viaMirror, source: `${mirror.name} (Chub didn't give it)` };
   }
 }

@@ -24,6 +24,7 @@ import { useLorebookStore } from '@/store/lorebookStore';
 import { openLorebooks, pickBankLorebook } from '@/components/LorebookBank';
 import { bankName, cardBookForBank, copyFromCard, hasCardLore, sameLore, syncsLorebook } from '@/lib/lorebookBank';
 import { WizardButton } from '@/components/loreWizard/LoreWizard';
+import { LinkedLorebooks } from '@/components/ChubLore';
 
 /** Editing a lorebook of the bank (components/LorebookBank.tsx) rather than
  *  the open card's: content is edited in place, without the card's ✨ tools. */
@@ -101,6 +102,7 @@ export function LorebookPanel() {
   if (!book) {
     return (
       <div className="flex flex-col gap-3">
+        {projectId && <LinkedLorebooks />}
         <Empty>
           This card has no lorebook. A lorebook holds facts that are added to the prompt only when their keywords come up in the chat.
           <div className="mt-3 flex flex-wrap justify-center gap-2">
@@ -120,6 +122,7 @@ export function LorebookPanel() {
 
   return (
     <div className="flex flex-col gap-3">
+      {projectId && <LinkedLorebooks />}
       <CardSyncRow />
       <LorebookEditor
         book={book}

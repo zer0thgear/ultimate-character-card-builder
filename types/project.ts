@@ -72,6 +72,10 @@ export interface CardProject {
   /** Keep the card's lorebook and its copy in the Lorebooks bank in step
    *  (lib/lorebookSync); unset follows the chat settings' syncCardLorebooks. */
   lorebookSync?: boolean;
+  /** Lorebooks from the bank that come with this card's chats, beside its
+   *  own (SillyTavern's "additional lorebooks"; Chub's linked lorebooks,
+   *  lib/chubLore.ts). Not part of the exported card. */
+  lorebookIds?: string[];
   createdAt: number;
   updatedAt: number;
 }
@@ -368,6 +372,9 @@ export interface BankLorebook {
   /** The card it was imported from, if it came out of one. That card's
    *  own chats skip it, since they already have the card's lorebook. */
   fromCard?: { projectId: string; name: string };
+  /** Fetched from Chub (a card's linked lorebook): its path there
+   *  ("lorebooks/creator/name"), so it's fetched once for every card that links it. */
+  chub?: { path: string; id?: number };
   createdAt: number;
   updatedAt: number;
 }

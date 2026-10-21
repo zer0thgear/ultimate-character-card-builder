@@ -610,10 +610,10 @@
   // and bindings are kept here (they're read synchronously); entries are
   // asked of the chat each time.
 
-  const wb = () => state.worldbooks || { names: [], global: [], charPrimary: null, chat: null };
+  const wb = () => state.worldbooks || { names: [], global: [], charPrimary: null, charAdditional: [], chat: null };
   const getWorldbookNames = () => wb().names.slice();
   const getGlobalWorldbookNames = () => wb().global.slice();
-  const getCharWorldbookNames = () => ({ primary: wb().charPrimary, additional: [] });
+  const getCharWorldbookNames = () => ({ primary: wb().charPrimary, additional: (wb().charAdditional || []).slice() });
   const getChatWorldbookName = () => wb().chat;
   const rebindGlobalWorldbooks = (names) => call('bindGlobalWorldbooks', { names });
   const rebindChatWorldbook = (_chat, name) => call('bindChatWorldbook', { name });

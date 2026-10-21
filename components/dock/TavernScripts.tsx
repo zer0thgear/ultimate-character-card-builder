@@ -156,6 +156,7 @@ export function useTavernScripts({
   model,
   input,
   actions,
+  lorebookIds,
 }: {
   card: CardData | null;
   chat: ChatSession | null;
@@ -169,6 +170,8 @@ export function useTavernScripts({
   input: string;
   /** Set by the chat once it's rendered (its actions need what it builds). */
   actions: RefObject<ScriptActions | null>;
+  /** The card's linked lorebooks (its "additional" ones, to scripts). */
+  lorebookIds?: string[];
 }) {
   const on = settings.runScripts !== false;
   const all = useMemo(() => {
@@ -249,9 +252,10 @@ export function useTavernScripts({
       names: [...(card?.character_book ? [cardBookName(card)] : []), ...bank.map(bankName)],
       global: ofIds(settings.globalLorebooks ?? []),
       charPrimary: card?.character_book ? cardBookName(card) : null,
+      charAdditional: ofIds(lorebookIds ?? []),
       chat: ofIds([chat?.lorebookId])[0] ?? null,
     };
-  }, [bank, card, settings.globalLorebooks, chat?.lorebookId]);
+  }, [bank, card, settings.globalLorebooks, chat?.lorebookId, lorebookIds]);
   const loreSettingsPart = useMemo(
     () => ({
       selected_global_lorebooks: worldbooksPart.global,

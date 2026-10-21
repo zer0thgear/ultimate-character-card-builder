@@ -713,6 +713,7 @@ export async function saveLorebook(b: BankLorebook): Promise<BankLorebook> {
     id: checkId(b.id),
     book,
     ...(b.fromCard && typeof b.fromCard.projectId === 'string' ? { fromCard: { projectId: b.fromCard.projectId, name: String(b.fromCard.name ?? '') } } : {}),
+    ...(b.chub && typeof b.chub.path === 'string' && b.chub.path ? { chub: { path: b.chub.path, ...(typeof b.chub.id === 'number' ? { id: b.chub.id } : {}) } } : {}),
     createdAt: typeof b.createdAt === 'number' ? b.createdAt : now,
     updatedAt: now,
   };
