@@ -76,6 +76,9 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   useEffect(ensureLorebooks, []);
   const phone = useMediaQuery(PHONE_QUERY);
   const keyboard = useKeyboard((s) => s.open);
+  // Typing in the settings or the summary: they stay (the header still goes).
+  const typingInPanel = useKeyboard((s) => s.inPanel);
+  const panelsHidden = phone && keyboard && !typingInPanel;
   // With the dock filling the window, the chat keeps to a centred column.
   const dockFull = useUiStore((s) => s.fullPane === 'dock');
   const full = (wide || dockFull) && !phone;
@@ -829,8 +832,8 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
         </div>
       )}
 
-      {showSettings && !(phone && keyboard) && <ChatSettings phone={phone} onClose={() => setShowSettings(false)} />}
-      {showSummary && chat && !(phone && keyboard) && <ChatSummaryPanel summarizer={summarizer} request={summaryRequest} onClose={() => setShowSummary(false)} />}
+      {showSettings && !panelsHidden && <ChatSettings phone={phone} onClose={() => setShowSettings(false)} />}
+      {showSummary && chat && !panelsHidden && <ChatSummaryPanel summarizer={summarizer} request={summaryRequest} onClose={() => setShowSummary(false)} />}
       {!showSettings && !phone && <ConnectionPicker value={chatConnectionId} onChange={setChatConnection} label="Connection" className="flex-shrink-0 border-b border-slate-800 px-2 py-1.5" />}
 
       {search !== null && chat && (
@@ -1752,7 +1755,7 @@ function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void 
   const setChatLorebook = useChatStore((st) => st.setChatLorebook);
   const updatePersona = usePersonaStore((st) => st.update);
   return (
-    <div className="flex max-h-[55%] flex-shrink-0 flex-col gap-3 overflow-y-auto border-b border-slate-800 bg-slate-950 p-3">
+    <div data-keyboard-keep className="flex max-h-[55%] flex-shrink-0 flex-col gap-3 overflow-y-auto border-b border-slate-800 bg-slate-950 p-3 phone:max-h-[85%]">
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold tracking-wide text-slate-400 uppercase">Chat settings</span>
         <IconButton title="Close" onClick={onClose}>

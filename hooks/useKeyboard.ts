@@ -8,8 +8,12 @@ import { create } from 'zustand';
 // field is focused on a touch screen and the visible area is well short of
 // the tallest it's been at this width. layout.tsx asks Chrome to shrink the page to
 // fit above the keyboard (interactive-widget=resizes-content).
+//
+// `inPanel`: the field is in a panel marked data-keyboard-keep (the chat's
+// settings and summary), which stays while you type in it; hiding it would
+// take the field, and the keyboard, away again.
 
-export const useKeyboard = create<{ open: boolean }>(() => ({ open: false }));
+export const useKeyboard = create<{ open: boolean; inPanel: boolean }>(() => ({ open: false, inPanel: false }));
 
 const editable = (el: Element | null): el is HTMLElement =>
   !!el && (el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !['checkbox', 'radio', 'range', 'button', 'submit', 'file', 'color'].includes(el.type)) || (el as HTMLElement).isContentEditable);
@@ -29,7 +33,9 @@ export function watchKeyboard() {
     const full = Math.max(tallest.get(width) ?? 0, height);
     tallest.set(width, full);
     const open = coarse.matches && editable(document.activeElement) && height < full * 0.75;
-    if (open !== useKeyboard.getState().open) useKeyboard.setState({ open });
+    const inPanel = open && !!document.activeElement?.closest('[data-keyboard-keep]');
+    const s = useKeyboard.getState();
+    if (open !== s.open || inPanel !== s.inPanel) useKeyboard.setState({ open, inPanel });
   };
   // Once the keyboard has opened (the viewport has finished shrinking), the
   // field being typed in goes back into view if it ended up under it.
