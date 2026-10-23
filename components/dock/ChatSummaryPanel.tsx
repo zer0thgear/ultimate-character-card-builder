@@ -87,7 +87,7 @@ export function ChatSummaryPanel({ summarizer, request, onClose }: { summarizer:
   const shown = summarizer.running ? summarizer.text : (summary?.text ?? '');
 
   return (
-    <div className="flex max-h-[55%] flex-shrink-0 flex-col gap-2 overflow-y-auto border-b border-slate-800 bg-slate-950 p-3">
+    <div data-keyboard-keep className="flex max-h-[55%] flex-shrink-0 flex-col gap-2 overflow-y-auto border-b border-slate-800 bg-slate-950 p-3 phone:max-h-[85%]">
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold tracking-wide text-slate-400 uppercase">Summary</span>
         <IconButton title="Close" onClick={onClose}>
@@ -100,8 +100,11 @@ export function ChatSummaryPanel({ summarizer, request, onClose }: { summarizer:
         onChange={(e) => setSummary({ text: e.target.value, through: summary?.through ?? null, updatedAt: Date.now() })}
         minRows={3}
         maxRows={12}
+        // A phone can't drag a text box taller: there it grows to the whole summary, and the panel scrolls.
+        fullOnPhone
         placeholder="No summary yet. Write one, or have the model write it."
-        className="text-sm"
+        // Its own height, not squeezed to fit the panel (which scrolls instead).
+        className="shrink-0 text-sm"
       />
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
         {summarizer.running ? (

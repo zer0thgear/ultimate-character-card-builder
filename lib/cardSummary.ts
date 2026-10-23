@@ -18,7 +18,13 @@ export function notesSnippet(notes: string | undefined, length = SNIPPET_LENGTH)
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&(mdash|ndash|hellip|rsquo|lsquo|rdquo|ldquo);/g, (_, n: string) => ({ mdash: '—', ndash: '–', hellip: '…', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“' })[n] ?? '')
+    // Numeric ones (&#8634; &#x1F600;), before the # goes with the Markdown below.
+    .replace(/&#(x[0-9a-f]+|\d+);/gi, (m, n: string) => {
+      const code = n[0].toLowerCase() === 'x' ? parseInt(n.slice(1), 16) : parseInt(n, 10);
+      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : '';
+    })
     .replace(/[*_~`#>]+/g, '')
     .replace(/\s+/g, ' ')
     .trim();

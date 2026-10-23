@@ -8,6 +8,11 @@ describe('notesSnippet', () => {
     expect(notesSnippet('<style>.x{color:red}</style>Hello')).toBe('Hello');
   });
 
+  it('reads numeric and common named entities', () => {
+    expect(notesSnippet('&#8634; Updated &#x2014; v2 &mdash; it&#39;s &hellip; &#x1F600;')).toBe('↺ Updated — v2 — it\'s … 😀');
+    expect(notesSnippet('&#0; &#x110000; ok')).toBe('ok');
+  });
+
   it('cuts long notes short, and has nothing for none', () => {
     const long = 'word '.repeat(100);
     const s = notesSnippet(long, 20);
