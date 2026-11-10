@@ -362,12 +362,24 @@ The card editor is on the left and the dock (Image, Gallery, Library, Test chat,
 
 **The tab's title** shows **⏳** while an image gen or an LLM reply (the chat, the assistant, Brainstorm…) is under way, as NovelAI's does, so you can watch it from another tab; when one finishes while you're away it shows **✅** until you come back.
 
+## Appearance
+
+Settings → **Appearance** changes how the whole app looks, with the settings SillyTavern's UI Theme has. It's kept with your other settings, so every device shares it.
+
+- **Themes**: **UCCB Dark**, **UCCB Light** and **SillyTavern** (its default colours: see-through dark panels, flat messages, portrait avatars) come with the app. **Save as…** keeps the look you've made as a theme of your own, **Save** updates it, **Revert** drops the changes made since. **Import…** reads SillyTavern theme files (its User Settings → UI Theme → Export) as they are, several at once, and **Export** writes one SillyTavern reads. A theme carries the chat's display with it (avatar shape, bubbles or flat, timestamps, message numbers, and the message width) and sets them when picked.
+- **Base**: dark or light (☀ in the header too). A look with a UI background or main text colour of its own decides by how light they are, and the header shows 🎨, which opens these settings.
+- **Colours**, each with how solid it is: main text, italics, underlined text and quotes (the chat's *actions* and "speech"), the UI background (panels, bars and dialogs), the chat's background, your messages' and the characters', text shadow, borders, and an accent (buttons, links and highlights; violet unless set). Leave one empty for the base's. The rest of the app's shades are worked out from the UI background and the main text, so every screen follows.
+- **Sizes**: font scale (the whole app's text), chat width (this device's; the slider in the chat's header), blur strength (behind see-through panels and messages), shadow width (around the chat's text), and a font.
+- **Background**: a picture behind the whole app (PNG, JPEG, WebP, GIF or AVIF; an animated one keeps moving), filling the window, fitting inside it, stretched, or at its own size. It shows where the UI background is see-through (**Make it see-through** does that when it's solid): fully behind the chat, and through the other screens' panels. Dialogs and menus stay nearly solid, so they can be read.
+- **Custom CSS**, applied last, as you type. The chat carries SillyTavern's names for its parts (`#sheld`, `#chat`, `.mes` with `is_user`, `is_system` and `ch_name`, `.mes_block`, `.mes_text`, `.ch_name`, `.name_text`, `.mesAvatarWrapper`, `.avatar`, `.timestamp`, `#form_sheld`, `#send_textarea`, `#send_but`, `#top-bar`) and its variables (`--SmartThemeBodyColor`, `--SmartThemeEmColor`, `--SmartThemeQuoteColor`, `--SmartThemeBlurTintColor`, `--SmartThemeChatTintColor`, `--SmartThemeUserMesBlurTintColor`, `--SmartThemeBotMesBlurTintColor`, `--SmartThemeBorderColor`, `--SmartThemeShadowColor`, `--SmartThemeBlurStrength`, `--fontScale`, `--mainFontSize`, `--sheldWidth`), so the chat parts of a SillyTavern theme's CSS apply here. CSS aimed at SillyTavern's own menus and drawers has nothing to match. A message's HTML page (in its own frame) isn't reached by it.
+- **Reset to UCCB's own look** goes back to plain dark or light; your saved themes stay.
+
 ## On a phone
 
 On a narrow screen (or a phone on its side) UCCB becomes one screen at a time: a bar along the bottom switches between the **Card** and the dock's **Image**, **Gallery**, **Library**, **Chat** and **Ideas** (Brainstorm). Both stay loaded, so a generation or a reply carries on while you look at the other. Anything that opens a dock tab (🎨 or 💬 on a greeting, Img2Img, Inpaint) switches to it.
 
 - ☰ opens the card list as a drawer; picking a card or swiping it left closes it, and **⌂ Home** at its top closes the open card.
-- The header keeps what fits: undo/redo, Export (which gains **⟳ Update** and **Overwrite (from a file or URL)…**) and Settings; the theme switch is in Settings → General.
+- The header keeps what fits: undo/redo, Export (which gains **⟳ Update** and **Overwrite (from a file or URL)…**) and Settings; dark and light are in Settings → Appearance.
 - Controls that otherwise show on hover (deleting a card, message actions, thumbnail actions) are always shown on a touch screen. Drag handles don't scroll the page.
 - **Hold a button to see what it does**: the help text a mouse shows on hover appears in a bubble after about half a second, and letting go doesn't press the button. Text fields keep the phone's own long press (selecting text), and in Gallery a long press still starts selecting pictures.
 - Dialogs, the Edit/Inpaint canvas included, fill the screen; text fields are 16px so iPhone Safari doesn't zoom in.

@@ -23,8 +23,9 @@ export const viewport: Viewport = {
 };
 
 // Set the theme before first paint, so a light-mode user doesn't get a
-// flash of dark.
-const themeScript = `try{var t=JSON.parse(localStorage.getItem('uccb-ui')||'{}').state.theme;if(t)document.documentElement.dataset.theme=t}catch(e){}`;
+// flash of dark; and the look (components/Appearance.tsx keeps its CSS
+// here as it applies it), before the settings it comes from have loaded.
+const themeScript = `try{var d=document.documentElement,t=(JSON.parse(localStorage.getItem('uccb-ui')||'{}').state||{}).theme,l=JSON.parse(localStorage.getItem('uccb-look-css')||'null');if(l&&l.css){var s=document.createElement('style');s.id='uccb-look';s.textContent=l.css;document.head.appendChild(s);d.setAttribute('data-look','');t=l.base||t}if(t)d.dataset.theme=t}catch(e){}`;
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

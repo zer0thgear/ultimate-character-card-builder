@@ -789,7 +789,7 @@ export async function savePackData(id: string, data: unknown): Promise<Record<st
 //   localStorage, kept here so every device (and every address this one is
 //   opened at) shares them. Layout preferences stay in each browser.
 
-export const SETTINGS_SECTIONS = ['gen', 'llm', 'naiKey'] as const;
+export const SETTINGS_SECTIONS = ['gen', 'llm', 'naiKey', 'look'] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 let settingsLock: Promise<unknown> = Promise.resolve();

@@ -324,10 +324,10 @@ export function ChatScreen({ phone }: { phone: boolean }) {
       <div className="min-h-0 min-w-0 flex-1" hidden={view !== 'chat'}>
         <ChatPanel wide />
       </div>
-      <div className="min-h-0 min-w-0 flex-1" hidden={view !== 'story'}>
+      <div className="ui-panel min-h-0 min-w-0 flex-1 bg-slate-950" hidden={view !== 'story'}>
         <StoryPanel />
       </div>
-      <div className="min-h-0 min-w-0 flex-1" hidden={view !== 'adventure'}>
+      <div className="ui-panel min-h-0 min-w-0 flex-1 bg-slate-950" hidden={view !== 'adventure'}>
         <AdventurePanel phone={phone} />
       </div>
       {chatCardOpen &&
@@ -336,7 +336,7 @@ export function ChatScreen({ phone }: { phone: boolean }) {
             <CardDrawer onClose={() => setChatCardOpen(false)} />
           </div>
         ) : (
-          <aside className="flex w-[440px] max-w-[45%] flex-shrink-0 flex-col border-l border-slate-800">
+          <aside className="ui-panel flex w-[440px] max-w-[45%] flex-shrink-0 flex-col border-l border-slate-800 bg-slate-950">
             <CardDrawer onClose={() => setChatCardOpen(false)} />
           </aside>
         ))}
