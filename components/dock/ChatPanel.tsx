@@ -48,6 +48,7 @@ import { CODE_BLOCK_CLASS, CODE_CLASS, HEADING_CLASSES, formatChat, hideComments
 import { ChatLink, ChatMedia, ChatRule } from '@/components/ChatMedia';
 import { HtmlPage, HtmlText, PageBridgeContext, runSlash, type PageBridge } from '@/components/ChatHtml';
 import { useGroupMemory, useMemoryStatus } from '@/components/dock/groupMemory';
+import { useLookStore } from '@/store/lookStore';
 import { directorMessages, memberName, memoryTexts, namedHistory, readDirector, trimGroupReply } from '@/lib/groupChat';
 import { GroupTurnBar } from '@/components/dock/GroupTurnBar';
 import { bankName } from '@/lib/lorebookBank';
@@ -84,7 +85,9 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   const full = (wide || dockFull) && !phone;
   const { chatFullWidth, setChatFullWidth } = useUiStore();
   /** The full-window column: a share of the window, centred. */
-  const column = full ? { className: 'mx-auto w-full', style: { maxWidth: `${Math.round(chatFullWidth * 100)}%` } } : {};
+  // (Laid out as SillyTavern, Chat mode's whole chat is the column: components/chatmode/StLayout.tsx.)
+  const stColumn = useLookStore((s) => s.look.layout === 'st') && wide;
+  const column = full && !stColumn ? { className: 'mx-auto w-full', style: { maxWidth: `${Math.round(chatFullWidth * 100)}%` } } : {};
   const connection = connections.find((c) => c.id === chatConnectionId) ?? null;
   const pending = useBridgeStore((s) => s.chatGreeting);
   const clearPending = useBridgeStore((s) => s.clearChat);
@@ -1758,7 +1761,7 @@ function ContinueTreeDialog({ message, tree, busy, onChoose, onClose }: { messag
 
 // ─── Settings and inspector ──────────────────────────────────────────────────
 
-function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void }) {
+export function ChatSettings({ phone, onClose }: { phone: boolean; onClose: () => void }) {
   const { chatSettings: s, setChatSettings, chatConnectionId, setChatConnection } = useLlmStore();
   const usingPreset = !!s.presetId;
   const personas = usePersonaStore((st) => st.personas);
