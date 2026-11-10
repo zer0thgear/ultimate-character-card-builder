@@ -15,6 +15,7 @@ import { CardEditor } from '@/components/editor/CardEditor';
 import { Dock } from '@/components/dock/Dock';
 import { Lightbox } from '@/components/Lightbox';
 import { TouchTips } from '@/components/TouchTips';
+import { LookApplier, useOwnColours } from '@/components/Appearance';
 import { AssistInspectorHost } from '@/components/llm/AssistTrace';
 import { LibraryPanel } from '@/components/dock/LibraryPanel';
 import { Tabs } from '@/components/ui';
@@ -64,9 +65,8 @@ export function Shell() {
   const keyboard = useKeyboard((s) => s.open);
 
   useEffect(() => {
-    // layout.tsx applies the saved theme before paint; hydration can drop
-    // the attribute again, so it's set from the store once more here.
-    document.documentElement.dataset.theme = useUiStore.getState().theme;
+    // (layout.tsx applies the saved theme and look before paint; LookApplier
+    // sets them again from the stores.)
     watchKeyboard();
     void useConfigStore.getState().load();
     void usePersonaStore.getState().load();
@@ -155,7 +155,8 @@ export function Shell() {
                 <ChatCardList className="w-full" />
               </SidebarFrame>
             )}
-            <div className="flex min-w-0 flex-1">{project ? <ChatScreen phone={phone} /> : group ? <GroupScreen phone={phone} /> : <ChatHome loading={loading} />}</div>
+            {/* The chat itself sits on the background picture, if the look has one (lib/appearance.ts); every other screen on the UI's own background. */}
+            <div className={cx('flex min-w-0 flex-1', !project && !group && 'ui-panel bg-slate-950')}>{project ? <ChatScreen phone={phone} /> : group ? <GroupScreen phone={phone} /> : <ChatHome loading={loading} />}</div>
           </>
         ) : (
           <>
@@ -165,7 +166,7 @@ export function Shell() {
                 <ProjectSidebar className="w-full" />
               </SidebarFrame>
             )}
-            <div ref={workspace} className="flex min-w-0 flex-1">
+            <div ref={workspace} className="ui-panel flex min-w-0 flex-1 bg-slate-950">
               {project && phone ? (
                 // Both stay mounted, so a generation or a reply carries on
                 // while the other screen is showing.
@@ -223,6 +224,7 @@ export function Shell() {
       <AssistInspectorHost />
       <Lightbox />
       <TouchTips />
+      <LookApplier />
       <Toasts />
     </div>
   );
@@ -252,6 +254,7 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
   const appMode = useUiStore((s) => s.appMode);
   const chatMode = appMode === 'chat';
 
+  const ownColours = useOwnColours();
   // From a file or a link (components/ImportUrl.tsx).
   const overwrite = () => overwriteCard();
   // Fetched again from where it came from, if it says.
@@ -259,7 +262,7 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
   const sourceHost = source ? new URL(source).hostname.replace(/^www\./, '') : '';
 
   return (
-    <header className="flex h-11 flex-shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-950 px-2">
+    <header id="top-bar" className="ui-panel flex h-11 flex-shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-950 px-2">
       <IconButton title={phone ? 'Cards' : sidebarOpen ? 'Hide the card list' : 'Show the card list'} onClick={onMenu}>
         ☰
       </IconButton>
@@ -372,8 +375,8 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
           </>
         )}
         {!phone && (
-          <IconButton title={theme === 'dark' ? 'Light mode' : 'Dark mode'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-            {theme === 'dark' ? '☀' : '☾'}
+          <IconButton title={ownColours ? 'This look has its own colours: Appearance settings' : theme === 'dark' ? 'Light mode' : 'Dark mode'} onClick={() => (ownColours ? openSettings('look') : setTheme(theme === 'dark' ? 'light' : 'dark'))}>
+            {ownColours ? '🎨' : theme === 'dark' ? '☀' : '☾'}
           </IconButton>
         )}
         {!phone && (
@@ -447,7 +450,7 @@ function SidebarFrame({ children }: { children: React.ReactNode }) {
     window.addEventListener('pointerup', up);
   };
   return (
-    <div className="relative flex flex-shrink-0" style={{ width }}>
+    <div className="ui-panel relative flex flex-shrink-0" style={{ width }}>
       {children}
       <div
         onPointerDown={startResize}

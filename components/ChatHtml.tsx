@@ -60,7 +60,7 @@ export function HtmlText({ html, className }: { html: string; className?: string
     const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
     root.innerHTML = `<style>${BASE_CSS}</style><div class="m">${clean}</div>`;
   }, [clean]);
-  return <div ref={ref} className={cx('chat-text text-sm leading-relaxed text-slate-200', className)} style={{ contain: 'content' }} />;
+  return <div ref={ref} className={cx('chat-text mes_text text-sm leading-relaxed text-slate-200', className)} style={{ contain: 'content' }} />;
 }
 
 /** What pages in messages can do in the chat they're in (lib/pageBridge.ts). */

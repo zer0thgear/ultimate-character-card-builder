@@ -57,7 +57,8 @@ Everything stays on this machine, under `data/` (which git ignores):
 
 ```
 data/config.json                     output folder, library folders, home-network access
-data/settings.json                   keys, connections, presets, generator and chat settings
+data/settings.json                   keys, connections, presets, generator and chat settings, appearance and themes
+data/background/                     the background picture (Settings → Appearance)
 data/projects/<id>/project.json      the card, its image prompts, notes
 data/projects/<id>/avatar.png        the card's picture
 data/projects/<id>/gallery/          gens kept with the card

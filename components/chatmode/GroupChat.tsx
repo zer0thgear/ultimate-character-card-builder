@@ -144,7 +144,7 @@ export function GroupScreen({ phone }: { phone: boolean }) {
             <GroupDrawer onClose={() => setDrawer(false)} />
           </div>
         ) : (
-          <aside className="flex w-[440px] max-w-[45%] flex-shrink-0 flex-col border-l border-slate-800">
+          <aside className="ui-panel flex w-[440px] max-w-[45%] flex-shrink-0 flex-col border-l border-slate-800 bg-slate-950">
             <GroupDrawer onClose={() => setDrawer(false)} />
           </aside>
         ))}

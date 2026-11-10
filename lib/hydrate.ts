@@ -4,6 +4,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { useLlmStore } from '@/store/llmStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { usePackStore } from '@/store/packStore';
+import { useLookStore } from '@/store/lookStore';
 import { changedElsewhere, loadSettings, readSection } from '@/lib/serverSettings';
 import { migrateImageConnections } from '@/store/imageConnections';
 
@@ -21,7 +22,7 @@ export async function hydrateSettings() {
   // Extension packs come in before the first render too: they change prompts
   // and the choices wizards offer. One that can't be read never stops the app.
   const loadPacks = () => usePackStore.getState().load().catch(() => undefined);
-  await Promise.all([useSettingsStore.persist.rehydrate(), useLlmStore.persist.rehydrate(), loadNaiKey(), loadPacks()]);
+  await Promise.all([useSettingsStore.persist.rehydrate(), useLlmStore.persist.rehydrate(), useLookStore.persist.rehydrate(), loadNaiKey(), loadPacks()]);
   migrateImageConnections();
   // Recent gens come in behind the first render; they're only pictures.
   void useSessionStore.getState().syncStored();
@@ -32,6 +33,7 @@ export async function hydrateSettings() {
     for (const s of await changedElsewhere()) {
       if (s === 'gen') void useSettingsStore.persist.rehydrate();
       else if (s === 'llm') void useLlmStore.persist.rehydrate();
+      else if (s === 'look') void useLookStore.persist.rehydrate();
       else void loadNaiKey();
     }
   };

@@ -11,10 +11,10 @@ import type { StateStorage } from 'zustand/middleware';
 // Nothing is written back until a section has been read, so a store's
 // defaults can't overwrite the saved settings while the page is starting.
 
-export type Section = 'gen' | 'llm' | 'naiKey';
+export type Section = 'gen' | 'llm' | 'naiKey' | 'look';
 
 /** What each section was called in localStorage, to bring it across once. */
-const LEGACY_KEY: Record<Section, string> = { gen: 'uccb-gen-settings', llm: 'uccb-llm', naiKey: 'uccb-nai-key' };
+const LEGACY_KEY: Record<Section, string> = { gen: 'uccb-gen-settings', llm: 'uccb-llm', naiKey: 'uccb-nai-key', look: 'uccb-look' };
 
 let cache: Partial<Record<Section, unknown>> = {};
 let loading: Promise<void> | null = null;

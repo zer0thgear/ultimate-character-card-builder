@@ -21,6 +21,7 @@ import { newCard } from '@/lib/cardSpec';
 import { useModelPrices } from '@/hooks/useModelPrices';
 import { MaxRequestCost } from '@/components/llm/MaxRequestCost';
 import { HeadersEditor } from '@/components/HeadersEditor';
+import { AppearanceTab } from '@/components/Appearance';
 import { formatPrice, isOpenRouter, priceLabel } from '@/lib/modelPricing';
 import { useProjectStore } from '@/store/projectStore';
 import { AccountStatus } from '@/components/AccountStatus';
@@ -33,7 +34,7 @@ import { TextCompletionSettings } from '@/components/llm/TextTemplates';
 import { messagesToText } from '@/lib/textCompletion';
 import { textTemplates } from '@/store/llmStore';
 
-type SettingsTab = 'general' | 'folders' | 'image' | 'llm' | 'chat' | 'assist' | 'personas' | 'extensions';
+type SettingsTab = 'general' | 'look' | 'folders' | 'image' | 'llm' | 'chat' | 'assist' | 'personas' | 'extensions';
 
 const useSettingsDialog = create<{ tab: SettingsTab | null; focus: string | null; set: (t: SettingsTab | null) => void }>((set) => ({ tab: null, focus: null, set: (tab) => set({ tab }) }));
 /** Opens Settings on a tab; `focus` opens one thing there (a connection's id
@@ -58,6 +59,7 @@ export function SettingsDialog() {
           onChange={set}
           tabs={[
             { value: 'general', label: 'General' },
+            { value: 'look', label: 'Appearance' },
             { value: 'folders', label: 'Folders' },
             { value: 'image', label: 'Image' },
             { value: 'llm', label: 'LLM connections' },
@@ -70,6 +72,7 @@ export function SettingsDialog() {
       }
     >
       {tab === 'general' && <GeneralTab />}
+      {tab === 'look' && <AppearanceTab />}
       {tab === 'folders' && <FoldersTab />}
       {tab === 'image' && <ImageConnectionsTab onOpenGeneral={() => set('general')} />}
       {tab === 'llm' && <LlmTab />}
@@ -96,7 +99,7 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
 function GeneralTab() {
   const { apiKey, setApiKey } = useSessionStore();
   const { config, update } = useConfigStore();
-  const { theme, setTheme, exportKeepsMetadata, setExportKeepsMetadata, exportMaxSize, exportCompression, setExportImage, listShowsCreator, listShowsNotes, setCardList } = useUiStore();
+  const { exportKeepsMetadata, setExportKeepsMetadata, exportMaxSize, exportCompression, setExportImage, listShowsCreator, listShowsNotes, setCardList } = useUiStore();
   const [show, setShow] = useState(false);
   return (
     <div className="flex flex-col gap-5">
@@ -124,16 +127,6 @@ function GeneralTab() {
         </Row>
       )}
       <SignInRow />
-      <Row label="Theme">
-        <div className="flex gap-2">
-          <Button size="sm" variant={theme === 'dark' ? 'primary' : 'secondary'} onClick={() => setTheme('dark')}>
-            Dark
-          </Button>
-          <Button size="sm" variant={theme === 'light' ? 'primary' : 'secondary'} onClick={() => setTheme('light')}>
-            Light
-          </Button>
-        </div>
-      </Row>
       <Row label="Card lists" hint="Under each card's name in the card lists (both modes), as SillyTavern shows them.">
         <Toggle checked={listShowsCreator} onChange={(listShowsCreator) => setCardList({ listShowsCreator })} label="Show the card's author" />
         <Toggle checked={listShowsNotes} onChange={(listShowsNotes) => setCardList({ listShowsNotes })} label="Show the start of the creator's notes" />

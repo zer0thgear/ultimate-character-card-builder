@@ -663,7 +663,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
       <span className="animate-pulse text-base leading-none">⏳</span>
     </Button>
   ) : (
-    <Button variant="primary" onClick={() => void send()} title="Send (Enter)" aria-label="Send" className="h-10 w-10 flex-shrink-0">
+    <Button id="send_but" variant="primary" onClick={() => void send()} title="Send (Enter)" aria-label="Send" className="h-10 w-10 flex-shrink-0">
       <span className="text-lg leading-none">➤</span>
     </Button>
   );
@@ -713,6 +713,9 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   return (
     <ChatHostContext.Provider value={host}>
     <div
+      // SillyTavern's names for the chat's parts (#sheld, #chat, .mes…), so
+      // custom CSS written for it applies here (lib/appearance.ts).
+      id={wide ? 'sheld' : undefined}
       className="flex h-full min-h-0 flex-col"
       onKeyDown={(e) => {
         // Ctrl+F inside the chat searches it rather than the page.
@@ -725,7 +728,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
       {/* On a phone: one row (the chats, ⋯ for the rest, ⚙ for who and how),
           gone while you type. */}
       {!(phone && keyboard) && (
-        <div className="flex flex-shrink-0 flex-wrap items-center gap-1.5 border-b border-slate-800 p-2 phone:flex-nowrap">
+        <div className="ui-panel flex flex-shrink-0 flex-wrap items-center gap-1.5 border-b border-slate-800 bg-slate-950 p-2 phone:flex-nowrap">
           <select value={chat?.id ?? ''} onChange={(e) => e.target.value && void openChat(e.target.value)} className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs', !phone && 'min-w-36')}>
             {!chat && <option value="">No chat open</option>}
             {list.map((c) => (
@@ -834,10 +837,10 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
 
       {showSettings && !panelsHidden && <ChatSettings phone={phone} onClose={() => setShowSettings(false)} />}
       {showSummary && chat && !panelsHidden && <ChatSummaryPanel summarizer={summarizer} request={summaryRequest} onClose={() => setShowSummary(false)} />}
-      {!showSettings && !phone && <ConnectionPicker value={chatConnectionId} onChange={setChatConnection} label="Connection" className="flex-shrink-0 border-b border-slate-800 px-2 py-1.5" />}
+      {!showSettings && !phone && <ConnectionPicker value={chatConnectionId} onChange={setChatConnection} label="Connection" className="ui-panel flex-shrink-0 bg-slate-950 border-b border-slate-800 px-2 py-1.5" />}
 
       {search !== null && chat && (
-        <div className="flex flex-shrink-0 items-center gap-1.5 border-b border-slate-800 px-2 py-1.5">
+        <div className="ui-panel flex flex-shrink-0 items-center gap-1.5 border-b border-slate-800 bg-slate-950 px-2 py-1.5">
           <input
             autoFocus
             value={search}
@@ -871,7 +874,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
       <div className="relative min-h-0 flex-1">
         <SearchQuery.Provider value={search ?? ''}>
         <PageBridgeContext.Provider value={pageBridge}>
-        <div ref={scroller} onScroll={onScroll} className="relative h-full overflow-y-auto px-3 py-3">
+        <div ref={scroller} id="chat" onScroll={onScroll} className="relative h-full overflow-y-auto px-3 py-3">
           {!chat ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-slate-500">
               {wide ? `Chat with ${card.name || 'this character'}.` : 'Test how the card plays.'}
@@ -974,7 +977,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
         return m ? <ContinueTreeDialog message={m} tree={treeOf(m)} busy={busy} onChoose={(id) => setTree(m.id, choose(treeOf(m), id))} onClose={() => setTreeFor(null)} /> : null;
       })()}
       {chat && (
-        <div className="flex-shrink-0 border-t border-slate-800 p-2">
+        <div id="form_sheld" className="ui-panel flex-shrink-0 border-t border-slate-800 bg-slate-950 p-2">
           <div className={column.className} style={column.style}>
           {guideOpen && (
             <div className="mb-1.5 flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1">
@@ -1034,6 +1037,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
           <div className="flex items-start gap-1.5">
             <AutoTextarea
               data-chat-input
+              id="send_textarea"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
@@ -1155,7 +1159,7 @@ function Formatted({ text }: { text: string }) {
     ) : p.kind === 'html' ? (
       <HtmlText key={key} html={p.html} />
     ) : (
-      <div key={key} className="chat-text text-sm leading-relaxed whitespace-pre-wrap text-slate-200">
+      <div key={key} className="chat-text mes_text text-sm leading-relaxed whitespace-pre-wrap text-slate-200">
         {renderNodes(p.nodes)}
       </div>
     );
@@ -1232,7 +1236,7 @@ function Avatar({ role, persona, speaker }: { role: 'user' | 'assistant' | 'syst
     role === 'user' ? (
       <PersonaAvatar persona={persona} shape={shape} />
     ) : (
-      <div className={cx('flex-shrink-0 overflow-hidden bg-slate-800', frame.className)} style={frame.style}>
+      <div className={cx('avatar flex-shrink-0 overflow-hidden bg-slate-800', frame.className)} style={frame.style}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {url && <img src={url} alt="" className="h-full w-full object-cover object-top" />}
       </div>
@@ -1264,7 +1268,7 @@ function MessageAside({ role, persona, id, tokens, gen, speaker }: { role: 'user
   const cost = `${sent}${gen?.cost ? `\nCost: ${costLine(gen.cost)}${gen.cost.estimated ? ', from the model\'s prices' : ''}` : ''}`;
   if ((s.avatarShape ?? 'circle') === 'none' && !any) return null;
   return (
-    <div className="flex w-10 flex-shrink-0 flex-col items-center gap-0.5 text-[10px] leading-tight whitespace-nowrap text-slate-600 tabular-nums">
+    <div className="mesAvatarWrapper flex w-10 flex-shrink-0 flex-col items-center gap-0.5 text-[10px] leading-tight whitespace-nowrap text-slate-600 tabular-nums">
       <Avatar role={role} persona={persona} speaker={speaker} />
       {id !== undefined && <MessageId id={id} />}
       {time && (
@@ -1358,12 +1362,12 @@ function MessageTime({ time, className, inline }: { time: number; className?: st
   // Flat chats show it beside the name, as SillyTavern does.
   if (inline)
     return (
-      <span className={cx('flex-shrink-0 text-[10px] whitespace-nowrap text-slate-600 tabular-nums', className)} title={new Date(time).toLocaleString()}>
+      <span className={cx('timestamp flex-shrink-0 text-[10px] whitespace-nowrap text-slate-600 tabular-nums', className)} title={new Date(time).toLocaleString()}>
         {formatMessageTime(time)}
       </span>
     );
   return (
-    <div className={cx('-mt-1 mb-1 text-[10px] text-slate-600 tabular-nums', className)} title={new Date(time).toLocaleString()}>
+    <div className={cx('timestamp -mt-1 mb-1 text-[10px] text-slate-600 tabular-nums', className)} title={new Date(time).toLocaleString()}>
       {formatMessageTime(time)}
     </div>
   );
@@ -1442,11 +1446,11 @@ function GreetingBubble({
     if (await confirmDialog({ title: "Use the card's greeting again?", body: "This chat's wording of the greeting is let go, and the card's (as it is now) shows in its place.", confirmLabel: "Use the card's" })) onEdit(undefined);
   };
   return (
-    <div ref={box} className={cx('group flex gap-2', right && 'flex-row-reverse', flat && 'border-b border-slate-800/70 pb-3')}>
+    <div ref={box} {...stMes('assistant', card.nickname || card.name || 'Character', 'first')} className={cx('mes group flex gap-2', right && 'flex-row-reverse', flat && 'border-b border-slate-800/70 pb-3')}>
       <MessageAside role="assistant" id={showId ? 0 : undefined} tokens={shown ? tokens : undefined} />
-      <div className={cx('min-w-0 flex-1', flat ? 'px-1' : 'rounded-lg bg-slate-900 px-3 py-2')} {...swipe.props} style={swipe.style}>
-        <div className={cx('mb-1 flex min-w-0 items-center gap-2 text-xs', right && !flat && 'flex-row-reverse')}>
-          <span className="max-w-[50%] flex-shrink-0 truncate font-semibold text-slate-200">{card.nickname || card.name || 'Character'}</span>
+      <div className={cx('mes_block min-w-0 flex-1', flat ? 'px-1' : 'rounded-lg bg-slate-900 px-3 py-2')} {...swipe.props} style={swipe.style}>
+        <div className={cx('ch_name mb-1 flex min-w-0 items-center gap-2 text-xs', right && !flat && 'flex-row-reverse')}>
+          <span className="name_text max-w-[50%] flex-shrink-0 truncate font-semibold text-slate-200">{card.nickname || card.name || 'Character'}</span>
           {edited !== undefined ? (
             <span className="min-w-0 truncate text-amber-400/80" title="Edited in this chat: changes to the card's greeting don't show here until you go back to the card's">
               greeting · this chat&apos;s wording
@@ -1576,11 +1580,11 @@ function Bubble({
   const box = useRef<HTMLDivElement>(null);
   useArrowSwipe(box, next, prev);
   return (
-    <div ref={box} className={cx('group flex gap-2', right && 'flex-row-reverse', flat && 'border-b border-slate-800/70 pb-3')}>
+    <div ref={box} {...stMes(m.hidden ? 'system' : m.role, isUser ? userName || 'User' : card.nickname || card.name || 'Character', isLast ? 'last' : undefined)} className={cx('mes group flex gap-2', right && 'flex-row-reverse', flat && 'border-b border-slate-800/70 pb-3')}>
       <MessageAside role={m.role} persona={persona} id={messageId} tokens={text ? tokens : undefined} gen={streaming ? undefined : m.gen?.[m.swipe]} speaker={m.speaker} />
-      <div className={cx('min-w-0 flex-1', flat ? 'px-1' : cx('rounded-lg px-3 py-2', isUser ? 'bg-sky-500/10' : 'bg-slate-900'), m.hidden && 'rounded-lg border border-dashed border-slate-700 opacity-60')} {...swipe.props} style={swipe.style}>
-        <div className={cx('mb-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs', mirror && 'flex-row-reverse')}>
-          <span className="min-w-0 truncate font-semibold text-slate-200">{isUser ? userName || 'User' : card.nickname || card.name || 'Character'}</span>
+      <div className={cx('mes_block min-w-0 flex-1', flat ? 'px-1' : cx('rounded-lg px-3 py-2', isUser ? 'bg-sky-500/10' : 'bg-slate-900'), m.hidden && 'rounded-lg border border-dashed border-slate-700 opacity-60')} {...swipe.props} style={swipe.style}>
+        <div className={cx('ch_name mb-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs', mirror && 'flex-row-reverse')}>
+          <span className="name_text min-w-0 truncate font-semibold text-slate-200">{isUser ? userName || 'User' : card.nickname || card.name || 'Character'}</span>
           {flat && showTime && <MessageTime time={swipeDate(m)} inline />}
           {m.hidden && (
             <button type="button" className="rounded bg-slate-700/60 px-1.5 text-[10px] text-slate-300 hover:bg-slate-600" title="Left out of the prompt: the model doesn't see it. Click to put it back." onClick={() => onChange({ hidden: undefined })}>
@@ -1694,6 +1698,15 @@ function Bubble({
       </div>
     </div>
   );
+}
+
+/**
+ * SillyTavern's attributes on a message (.mes), which its themes' CSS picks
+ * messages by: whose it is, and who wrote it. The greeting is message 0,
+ * as there; the last message says so (SillyTavern's .last_mes).
+ */
+function stMes(role: 'user' | 'assistant' | 'system', name: string, where?: 'first' | 'last'): Record<string, string> {
+  return { is_user: String(role === 'user'), is_system: String(role === 'system'), ch_name: name, ...(where === 'first' ? { mesid: '0' } : where === 'last' ? { 'data-last-mes': 'true' } : {}) };
 }
 
 /** 🌿 Every continue of a reply's swipe, as a tree: the chosen path is
