@@ -49,6 +49,7 @@ import { ChatLink, ChatMedia, ChatRule } from '@/components/ChatMedia';
 import { HtmlPage, HtmlText, PageBridgeContext, runSlash, type PageBridge } from '@/components/ChatHtml';
 import { useGroupMemory, useMemoryStatus } from '@/components/dock/groupMemory';
 import { useLookStore } from '@/store/lookStore';
+import { useStLayout } from '@/components/chatmode/drawerStore';
 import { directorMessages, memberName, memoryTexts, namedHistory, readDirector, trimGroupReply } from '@/lib/groupChat';
 import { GroupTurnBar } from '@/components/dock/GroupTurnBar';
 import { bankName } from '@/lib/lorebookBank';
@@ -89,6 +90,9 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   const stColumn = useLookStore((s) => s.look.layout === 'st') && wide;
   // Its bars become the ☰ menu beside the message box (once a chat's open, which is where that is).
   const stMenu = stColumn && !!chat;
+  // A phone hasn't the height for the chat's bars in either layout: its chat
+  // row and its rarer buttons are in ☰ too (↻ and → stay under the box).
+  const menu = stMenu || (phone && !!chat);
   const column = full && !stColumn ? { className: 'mx-auto w-full', style: { maxWidth: `${Math.round(chatFullWidth * 100)}%` } } : {};
   const connection = connections.find((c) => c.id === chatConnectionId) ?? null;
   const pending = useBridgeStore((s) => s.chatGreeting);
@@ -673,6 +677,8 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
         ...(!phone && connections.length > 0 ? [{ id: 'compare', label: '⚖ Compare', hint: 'A reply written by two connections or presets at once, side by side', off: busy }] : []),
         { id: 'summary', label: '📜 Summary', hint: "The chat's summary, sent with every prompt" },
         { id: 'settings', label: '🔧 Chat settings', hint: 'Connection, persona, preset, lorebooks, what the chat shows' },
+        // (The SillyTavern layout has these two in its top bar.)
+        ...(!stMenu ? [{ id: 'preset', label: '🎚 The chat preset…', hint: 'Its prompts and samplers' }, { id: 'api', label: '🔌 Connections…', hint: 'The API and model' }] : []),
         { id: 'search', label: '🔎 Search this chat', hint: 'Ctrl+F' },
         { id: 'next', label: '🔍 The next prompt', hint: 'What the next reply would send' },
         ...(lastPrompt ? [{ id: 'last', label: `🔍 The last prompt · ${lastPrompt.lore.active.length} lore`, hint: 'What the last reply sent' }] : []),
@@ -696,6 +702,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
     else if (id === 'compare') setComparing(true);
     else if (id === 'summary') setShowSummary(!showSummary);
     else if (id === 'settings') setShowSettings(!showSettings);
+    else if (id === 'preset' || id === 'api') useStLayout.getState().open(id);
     else if (id === 'search') setSearch('');
     else if (id === 'next') preview();
     else if (id === 'last') setInspect(lastPrompt);
@@ -778,9 +785,9 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
         }
       }}
     >
-      {/* On a phone: one row (the chats, ⋯ for the rest, ⚙ for who and how),
-          gone while you type. */}
-      {!(phone && keyboard) && !stMenu && (
+      {/* The chat's row. With a chat open, a phone (and the SillyTavern
+          layout) has it in ☰ beside the message box instead. */}
+      {!(phone && keyboard) && !menu && (
         <div className="ui-panel flex flex-shrink-0 flex-wrap items-center gap-1.5 border-b border-slate-800 bg-slate-950 p-2 phone:flex-nowrap">
           <select value={chat?.id ?? ''} onChange={(e) => e.target.value && void openChat(e.target.value)} className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs', !phone && 'min-w-36')}>
             {!chat && <option value="">No chat open</option>}
@@ -795,32 +802,20 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
           </Button>
           {chat && (
             <div className="relative flex items-center">
-              {!phone && (
-                <IconButton title="Rename" onClick={() => void renameChat()}>
-                  ✎
-                </IconButton>
-              )}
-              <IconButton title={phone ? 'More: rename, export, import, delete, the prompt' : 'Export this chat for SillyTavern or Chub, or import one'} onClick={() => setExportOpen(!exportOpen)}>
-                {phone ? '⋯' : '⬇'}
+              <IconButton title="Rename" onClick={() => void renameChat()}>
+                ✎
+              </IconButton>
+              <IconButton title="Export this chat for SillyTavern or Chub, or import one" onClick={() => setExportOpen(!exportOpen)}>
+                ⬇
               </IconButton>
               {exportOpen && (
                 <div className="absolute top-full right-0 z-30 mt-1 w-64 rounded-md border border-slate-700 bg-slate-900 p-1 shadow-xl" onMouseLeave={() => setExportOpen(false)}>
                   {[
-                    ...(phone ? [{ label: '✎ Rename', hint: '', run: renameChat }] : []),
                     { label: '⬇ SillyTavern / Chub (.jsonl)', hint: 'Import it in SillyTavern (Manage chat files → Import) or Chub', run: () => downloadBlob(chatToStJsonl(chat, card, me.name, speakerName), `${chatFileName(chat, card)}.jsonl`, 'application/jsonl') },
                     { label: '⬇ Plain text (.txt)', hint: 'For reading or sharing', run: () => downloadBlob(chatToText(chat, card, me.name, speakerName), `${chatFileName(chat, card)}.txt`, 'text/plain') },
                     { label: '⬆ Import a chat…', hint: g ? 'A group chat saved by SillyTavern (.jsonl), as a new chat of this group (messages go to the characters of the same names)' : 'A chat saved by SillyTavern or exported from Chub (.jsonl), as a new chat with this card', run: () => void importChatFile() },
                     ...(host.projectId && !g
                       ? [{ label: '👥 Make a group chat from this…', hint: 'A new group with this character and others you pick, starting with a copy of this chat (this chat stays as it is)', run: () => openNewGroup({ projectId: host.projectId!, chat, name: card.nickname || card.name || 'Character' }) }]
-                      : []),
-                    ...(phone
-                      ? [
-                          { label: '🔎 Search this chat', hint: '', run: () => setSearch('') },
-                          { label: '📜 Summary', hint: "The chat's summary, sent with every prompt", run: () => setShowSummary(!showSummary) },
-                          { label: '🔍 The next prompt', hint: 'What the next reply would send', run: preview },
-                          ...(lastPrompt ? [{ label: `🔍 The last prompt · ${lastPrompt.lore.active.length} lore`, hint: 'What the last reply sent', run: () => setInspect(lastPrompt) }] : []),
-                          { label: '🗑 Delete this chat', hint: '', run: deleteThisChat },
-                        ]
                       : []),
                   ].map((o) => (
                     <button
@@ -839,16 +834,12 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
                   ))}
                 </div>
               )}
-              {!phone && (
-                <IconButton title="Search this chat (Ctrl+F)" onClick={() => setSearch(search === null ? '' : null)}>
-                  🔎
-                </IconButton>
-              )}
-              {!phone && (
-                <IconButton title="Delete this chat" tone="danger" onClick={deleteThisChat}>
-                  🗑
-                </IconButton>
-              )}
+              <IconButton title="Search this chat (Ctrl+F)" onClick={() => setSearch(search === null ? '' : null)}>
+                🔎
+              </IconButton>
+              <IconButton title="Delete this chat" tone="danger" onClick={deleteThisChat}>
+                🗑
+              </IconButton>
             </div>
           )}
           {phone ? (
@@ -1088,7 +1079,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
           <ScriptApprovals pending={scripts.pending} presetName={scriptPreset?.name} cardName={card.name || 'This character'} />
           <ScriptButtons buttons={scripts.buttons} onClick={scripts.clickButton} />
           <div className="flex items-start gap-1.5">
-            {stMenu && (
+            {menu && (
               <div className="relative flex-shrink-0">
                 <Button id="options_button" variant={optionsOpen ? 'primary' : 'secondary'} onClick={() => setOptionsOpen(!optionsOpen)} title="Chat options: this card's chats, regenerate, continue, the summary, export…" aria-label="Chat options" aria-expanded={optionsOpen} className="h-10 w-10">
                   <span className="text-lg leading-none">☰</span>
@@ -1156,54 +1147,56 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
             />
             {sendButton}
           </div>
-          {/* One row on a phone too: the actions as icons (hold one for its
-              name). Laid out as SillyTavern, they're in ☰ instead. */}
-          <div className={cx('mt-1.5 flex items-center gap-1.5', phone ? 'flex-nowrap' : 'flex-wrap', stMenu && 'hidden')}>
-            <Button size="sm" disabled={busy} onClick={() => void regenerate()} title={phone ? 'Regenerate: another version of the last reply' : 'Another version of the last reply'}>
-              {phone ? <span className="px-1 text-base leading-none">↻</span> : '↻ Regenerate'}
+          {/* Laid out as SillyTavern, they're all in ☰ instead; on a phone,
+              all but the two used every few messages. */}
+          <div className={cx('mt-1.5 flex flex-wrap items-center gap-1.5', stMenu && 'hidden')}>
+            <Button size="sm" disabled={busy} onClick={() => void regenerate()} title="Another version of the last reply">
+              ↻ Regenerate
             </Button>
             <Button size="sm" disabled={busy} onClick={() => void continueLast()} title="Continue the last reply">
-              {phone ? <span className="px-1 text-base leading-none">→</span> : '→ Continue'}
+              → Continue
             </Button>
-            <Button size="sm" disabled={busy} onClick={() => void impersonate()} title={phone ? 'Impersonate: write your next message for you (it lands in the box to edit)' : 'Write your next message for you (it lands in the box to edit)'}>
-              {phone ? <span className="px-0.5 text-base leading-none">🎭</span> : '🎭 Impersonate'}
-            </Button>
-            <Button
-              size="sm"
-              variant={guide.trim() ? 'primary' : 'secondary'}
-              onClick={() => setGuideOpen(!guideOpen)}
-              title="Guide: steer the next reply, swipe, continue or impersonation with an instruction the model sees just before it writes"
-            >
-              <span className={cx(phone && 'px-0.5 text-base leading-none')}>🧭</span>
-              {guide.trim() ? (phone ? (guidePinned ? '📌' : '') : guidePinned ? ' Guided 📌' : ' Guided') : ''}
-            </Button>
-            <Button
-              size="sm"
-              variant={chat.authorsNote?.prompt.trim() ? 'primary' : 'secondary'}
-              onClick={() => setNoteOpen(true)}
-              title="Author's note: an instruction kept with this chat and sent every reply (or every few), placed as SillyTavern places it"
-            >
-              <span className={cx(phone && 'px-0.5 text-base leading-none')}>📝</span>
-              {chat.authorsNote?.prompt.trim() && !phone ? " Author's note" : ''}
-            </Button>
-            {!phone && connections.length > 0 && (
-              <Button size="sm" disabled={busy} onClick={() => setComparing(true)} title={compareTarget ? 'Compare: the last reply written by two connections or presets at once, side by side, to keep either or both' : 'Compare: the next reply written by two connections or presets at once, side by side, to keep either or both'}>
-                ⚖ Compare
-              </Button>
-            )}
-            {/* Chat pictures draw with the card's Image tab, so a card's chat only. */}
-            {wide && host.projectId && (
-              <DrawButton
-                phone={phone}
-                disabled={!!pictures.pending && !pictures.pending.error}
-                onMoment={() => void pictures.drawMoment(card, chatGreeting(card, chat), chat.messages, me.name)}
-                onDescribe={() => setDescribing({ spec: { scene: '', characters: pictures.formCharacters() } })}
-              />
-            )}
-            {lastPrompt && !phone && (
-              <button type="button" className="ml-auto text-[11px] text-slate-500 hover:text-slate-300" onClick={() => setInspect(lastPrompt)}>
-                Last prompt · {lastPrompt.lore.active.length} lore
-              </button>
+            {!menu && (
+              <>
+                <Button size="sm" disabled={busy} onClick={() => void impersonate()} title="Write your next message for you (it lands in the box to edit)">
+                  🎭 Impersonate
+                </Button>
+                <Button
+                  size="sm"
+                  variant={guide.trim() ? 'primary' : 'secondary'}
+                  onClick={() => setGuideOpen(!guideOpen)}
+                  title="Guide: steer the next reply, swipe, continue or impersonation with an instruction the model sees just before it writes"
+                >
+                  🧭{guide.trim() ? (guidePinned ? ' Guided 📌' : ' Guided') : ''}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={chat.authorsNote?.prompt.trim() ? 'primary' : 'secondary'}
+                  onClick={() => setNoteOpen(true)}
+                  title="Author's note: an instruction kept with this chat and sent every reply (or every few), placed as SillyTavern places it"
+                >
+                  📝{chat.authorsNote?.prompt.trim() ? " Author's note" : ''}
+                </Button>
+                {connections.length > 0 && (
+                  <Button size="sm" disabled={busy} onClick={() => setComparing(true)} title={compareTarget ? 'Compare: the last reply written by two connections or presets at once, side by side, to keep either or both' : 'Compare: the next reply written by two connections or presets at once, side by side, to keep either or both'}>
+                    ⚖ Compare
+                  </Button>
+                )}
+                {/* Chat pictures draw with the card's Image tab, so a card's chat only. */}
+                {wide && host.projectId && (
+                  <DrawButton
+                    phone={false}
+                    disabled={!!pictures.pending && !pictures.pending.error}
+                    onMoment={() => void pictures.drawMoment(card, chatGreeting(card, chat), chat.messages, me.name)}
+                    onDescribe={() => setDescribing({ spec: { scene: '', characters: pictures.formCharacters() } })}
+                  />
+                )}
+                {lastPrompt && (
+                  <button type="button" className="ml-auto text-[11px] text-slate-500 hover:text-slate-300" onClick={() => setInspect(lastPrompt)}>
+                    Last prompt · {lastPrompt.lore.active.length} lore
+                  </button>
+                )}
+              </>
             )}
           </div>
           </div>

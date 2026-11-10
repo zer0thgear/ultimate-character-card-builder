@@ -16,7 +16,7 @@ import { Dock } from '@/components/dock/Dock';
 import { Lightbox } from '@/components/Lightbox';
 import { TouchTips } from '@/components/TouchTips';
 import { LookApplier, useOwnColours } from '@/components/Appearance';
-import { StTopBar, useStChat, useStLayout } from '@/components/chatmode/StLayout';
+import { Drawers, StTopBar, useStChat, useStLayout } from '@/components/chatmode/StLayout';
 import { useAdventureStore } from '@/store/adventureStore';
 import { useGroupUi } from '@/components/chatmode/groupUi';
 import { AssistInspectorHost } from '@/components/llm/AssistTrace';
@@ -70,6 +70,8 @@ export function Shell() {
   // its bar of drawers on top, the chat a column in the middle.
   const stChat = useStChat();
   const uccbBar = useStLayout((s) => s.uccbBar);
+  // (A drawer being typed in keeps its bar, which holds it.)
+  const barsHidden = useStLayout((s) => !s.drawer) && phone && keyboard;
   const chatWidth = useUiStore((s) => s.chatFullWidth);
   const chatView = useAdventureStore((s) => s.view);
   const cardDrawer = useUiStore((s) => s.chatCardOpen);
@@ -160,8 +162,14 @@ export function Shell() {
       onDrop={(e) => void onDrop(e)}
     >
       {/* Typing on a phone, the header and bottom bar make way for the text. */}
-      {!(phone && keyboard) && stChat && <StTopBar phone={phone} />}
-      {!(phone && keyboard) && (!stChat || uccbBar) && <Header phone={phone} onMenu={() => (stChat ? useStLayout.getState().open('chars') : phone ? setDrawer(true) : setSidebarOpen(!sidebarOpen))} />}
+      {!barsHidden && stChat && <StTopBar phone={phone} />}
+      {!barsHidden && (!stChat || uccbBar) && (
+        // (The drawers its 🎚 and 🔌, and the chat's ☰ on a phone, open: under it, over the page.)
+        <div className="relative z-30 flex-shrink-0">
+          <Header phone={phone} onMenu={() => (stChat ? useStLayout.getState().open('chars') : phone ? setDrawer(true) : setSidebarOpen(!sidebarOpen))} />
+          {!stChat && <Drawers phone={phone} />}
+        </div>
+      )}
       <div className="flex min-h-0 flex-1">
         {stChat ? (
           <div className="flex min-w-0 flex-1 justify-center">
@@ -394,6 +402,17 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
                 </div>
               )}
             </div>
+          </>
+        )}
+        {/* Beside the chat rather than over it, as SillyTavern's are (its layout has them in its own bar). */}
+        {!phone && chatMode && !stChat && (
+          <>
+            <IconButton title="The chat preset: its prompts and samplers, with the chat still in view" onClick={() => useStLayout.getState().toggle('preset')}>
+              🎚
+            </IconButton>
+            <IconButton title="Connections: the API and model, with the chat still in view" onClick={() => useStLayout.getState().toggle('api')}>
+              🔌
+            </IconButton>
           </>
         )}
         {!phone && (
