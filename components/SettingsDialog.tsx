@@ -322,7 +322,7 @@ function FoldersTab() {
 
 const KIND_LABELS: Record<ProviderKind, string> = { novelai: 'NovelAI', openai: 'OpenAI-compatible', anthropic: 'Anthropic (Claude)' };
 
-function LlmTab() {
+export function LlmTab() {
   const { connections, addConnection, chatConnectionId, assistConnectionId, visionConnectionId, setChatConnection, setAssistConnection, setVisionConnection, priceUnit, setPriceUnit } = useLlmStore();
   const focus = useSettingsDialog((s) => s.focus);
   const [openId, setOpenId] = useState<string | null>(focus && connections.some((c) => c.id === focus) ? focus : (connections[0]?.id ?? null));
@@ -757,7 +757,7 @@ function AssistPromptPreview() {
 }
 
 /** Extension packs, and the local extensions' settings when there are any. */
-function ExtensionsTab() {
+export function ExtensionsTab() {
   return (
     <div className="flex flex-col gap-5">
       <ExtensionPacks />

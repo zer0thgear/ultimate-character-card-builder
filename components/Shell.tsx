@@ -16,6 +16,9 @@ import { Dock } from '@/components/dock/Dock';
 import { Lightbox } from '@/components/Lightbox';
 import { TouchTips } from '@/components/TouchTips';
 import { LookApplier, useOwnColours } from '@/components/Appearance';
+import { StTopBar, useStChat, useStLayout } from '@/components/chatmode/StLayout';
+import { useAdventureStore } from '@/store/adventureStore';
+import { useGroupUi } from '@/components/chatmode/groupUi';
 import { AssistInspectorHost } from '@/components/llm/AssistTrace';
 import { LibraryPanel } from '@/components/dock/LibraryPanel';
 import { Tabs } from '@/components/ui';
@@ -63,6 +66,17 @@ export function Shell() {
   const phone = useMediaQuery(PHONE_QUERY);
   const [drawer, setDrawer] = useState(false);
   const keyboard = useKeyboard((s) => s.open);
+  // Chat mode as SillyTavern lays it out (components/chatmode/StLayout.tsx):
+  // its bar of drawers on top, the chat a column in the middle.
+  const stChat = useStChat();
+  const uccbBar = useStLayout((s) => s.uccbBar);
+  const chatWidth = useUiStore((s) => s.chatFullWidth);
+  const chatView = useAdventureStore((s) => s.view);
+  const cardDrawer = useUiStore((s) => s.chatCardOpen);
+  const groupDrawer = useGroupUi((s) => s.drawer);
+  // The column is for the chat (and the home screen); a story, an adventure
+  // or a drawer beside the chat takes the whole width.
+  const stColumn = !phone && (project ? chatView === 'chat' && !cardDrawer : group ? !groupDrawer : true);
 
   useEffect(() => {
     // (layout.tsx applies the saved theme and look before paint; LookApplier
@@ -90,8 +104,8 @@ export function Shell() {
   // Card-level undo/redo when focus isn't in a text box (which has its own).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement;
-      if (el.closest('input, textarea, select, [contenteditable]')) return;
+      const el = e.target as Partial<HTMLElement> | null;
+      if (el?.closest?.('input, textarea, select, [contenteditable]')) return;
       if (!(e.ctrlKey || e.metaKey)) return;
       if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
         e.preventDefault();
@@ -146,9 +160,16 @@ export function Shell() {
       onDrop={(e) => void onDrop(e)}
     >
       {/* Typing on a phone, the header and bottom bar make way for the text. */}
-      {!(phone && keyboard) && <Header phone={phone} onMenu={() => (phone ? setDrawer(true) : setSidebarOpen(!sidebarOpen))} />}
+      {!(phone && keyboard) && stChat && <StTopBar phone={phone} />}
+      {!(phone && keyboard) && (!stChat || uccbBar) && <Header phone={phone} onMenu={() => (stChat ? useStLayout.getState().open('chars') : phone ? setDrawer(true) : setSidebarOpen(!sidebarOpen))} />}
       <div className="flex min-h-0 flex-1">
-        {chatMode ? (
+        {stChat ? (
+          <div className="flex min-w-0 flex-1 justify-center">
+            <div className={cx('flex min-w-0', stColumn && 'border-x border-slate-800', !project && !group && 'ui-panel bg-slate-950')} style={{ width: stColumn ? `${Math.round(chatWidth * 100)}%` : '100%' }}>
+              {project ? <ChatScreen phone={phone} /> : group ? <GroupScreen phone={phone} /> : <ChatHome loading={loading} />}
+            </div>
+          </div>
+        ) : chatMode ? (
           <>
             {!phone && sidebarOpen && (
               <SidebarFrame>
@@ -255,6 +276,7 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
   const chatMode = appMode === 'chat';
 
   const ownColours = useOwnColours();
+  const stChat = useStChat();
   // From a file or a link (components/ImportUrl.tsx).
   const overwrite = () => overwriteCard();
   // Fetched again from where it came from, if it says.
@@ -262,7 +284,7 @@ function Header({ phone, onMenu }: { phone: boolean; onMenu: () => void }) {
   const sourceHost = source ? new URL(source).hostname.replace(/^www\./, '') : '';
 
   return (
-    <header id="top-bar" className="ui-panel flex h-11 flex-shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-950 px-2">
+    <header id={stChat ? undefined : 'top-bar'} className="ui-panel flex h-11 flex-shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-950 px-2">
       <IconButton title={phone ? 'Cards' : sidebarOpen ? 'Hide the card list' : 'Show the card list'} onClick={onMenu}>
         ☰
       </IconButton>

@@ -55,7 +55,7 @@ export const useLookStore = create<LookState>()(
       setLook: (patch) => set((s) => ({ look: { ...s.look, ...patch } })),
       applyTheme: (theme) => {
         const { base, avatar_style, chat_display, chat_width, timestamps_enabled, mesIDDisplay_enabled } = theme;
-        set((s) => ({ look: { ...lookOf(theme), background: s.look.background } }));
+        set((s) => ({ look: { ...lookOf(theme), background: s.look.background, layout: s.look.layout } }));
         const ui = useUiStore.getState();
         const wanted = base ?? lookBase(theme, ui.theme);
         if (wanted !== ui.theme) ui.setTheme(wanted);

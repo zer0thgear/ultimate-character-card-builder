@@ -84,6 +84,10 @@ describe('appearance', () => {
 
   it('reads saved looks back soundly, and knows a changed one', () => {
     expect(cleanLook(undefined)).toEqual(DEFAULT_LOOK);
+    // Chat mode's layout is the look's, not a theme's.
+    expect(cleanLook({ layout: 'st' }).layout).toBe('st');
+    expect(cleanLook({ layout: 'sideways' }).layout).toBe('uccb');
+    expect(lookOf(cleanLook({ layout: 'st' }))).not.toHaveProperty('layout');
     const saved = cleanLook({ name: 'Mine', quote_text_color: '#ff0', font_scale: 9, blur_strength: 'lots', background: { version: 5, fit: 'tile' } });
     expect(saved).toMatchObject({ name: 'Mine', quote_text_color: '#ff0', font_scale: 1.5, blur_strength: 0, background: { version: 5, fit: 'cover' } });
     const mine = look(lookOf(st));

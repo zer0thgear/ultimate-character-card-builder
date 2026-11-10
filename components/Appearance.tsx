@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BUILT_IN_THEMES, COLOR_FIELDS, DEFAULT_LOOK, formatColor, lookBase, lookCss, matchesTheme, parseColor, parseTheme, themeFile, toHex, type BackgroundFit, type ColorField, type Look } from '@/lib/appearance';
+import { BUILT_IN_THEMES, COLOR_FIELDS, DEFAULT_LOOK, formatColor, isPlain, lookBase, lookCss, matchesTheme, parseColor, parseTheme, themeFile, toHex, type BackgroundFit, type ColorField, type Look } from '@/lib/appearance';
 import type { AvatarShape, ChatStyle } from '@/lib/chatPrompt';
 import { allThemes, chatDisplayNow, useLookStore } from '@/store/lookStore';
 import { useLlmStore } from '@/store/llmStore';
 import { toast, useUiStore } from '@/store/uiStore';
-import { AutoTextarea, Button, IconButton, Select, confirmDialog, cx, downloadBlob, inputClass, pickFiles, textDialog } from '@/components/ui';
+import { AutoTextarea, Button, IconButton, Select, choiceDialog, confirmDialog, cx, downloadBlob, inputClass, pickFiles, textDialog } from '@/components/ui';
 
 // Appearance (lib/appearance.ts): LookApplier puts the look on the page,
 // and AppearanceTab (Settings → Appearance) is where it's changed: themes
@@ -205,6 +205,21 @@ export function AppearanceTab() {
     void fetch('/api/background', { method: 'DELETE' }).catch(() => {});
   };
   const seeThrough = (parseColor(look.blur_tint_color)?.a ?? 1) < 1;
+  /** SillyTavern's layout; with its colours too, if the look is still UCCB's plain one and you say so. */
+  const stLayout = async () => {
+    setLook({ layout: 'st' });
+    const st = BUILT_IN_THEMES.find((t) => t.name === 'SillyTavern');
+    if (!st || !isPlain(look)) return;
+    const answer = await choiceDialog({
+      title: "Use SillyTavern's colours too?",
+      body: 'The SillyTavern theme has its dark see-through panels, flat messages and portrait avatars. You can pick it (or any other) under Theme later.',
+      choices: [
+        { value: 'yes', label: 'Yes, the theme too' },
+        { value: 'no', label: 'Just the layout' },
+      ],
+    });
+    if (answer === 'yes') applyTheme(st);
+  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -258,6 +273,17 @@ export function AppearanceTab() {
             Light
           </Button>
           {ownColours && <span className="text-xs text-slate-500">Set by this look&apos;s colours ({lookBase(look, base)}).</span>}
+        </div>
+      </Row>
+
+      <Row label="Layout" hint="Chat mode's. SillyTavern's has its top bar of icons, each opening a drawer (the preset, connections, chat settings, lorebooks, appearance, extensions, personas, and your characters at the right), with the chat as a column in the middle. Builder stays as it is.">
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant={look.layout === 'uccb' ? 'primary' : 'secondary'} onClick={() => setLook({ layout: 'uccb' })}>
+            UCCB&apos;s
+          </Button>
+          <Button size="sm" variant={look.layout === 'st' ? 'primary' : 'secondary'} onClick={() => void stLayout()}>
+            SillyTavern&apos;s
+          </Button>
         </div>
       </Row>
 
@@ -343,7 +369,7 @@ export function AppearanceTab() {
           variant="ghost"
           onClick={async () => {
             if (await confirmDialog({ title: 'Back to the plain look?', body: "Colours, sizes, the font and custom CSS go back to UCCB's own; themes you've saved stay, and so does the background picture's file until you remove it.", confirmLabel: 'Reset' })) {
-              setLook({ ...DEFAULT_LOOK, name: base === 'light' ? 'UCCB Light' : 'UCCB Dark', background: null });
+              setLook({ ...DEFAULT_LOOK, name: base === 'light' ? 'UCCB Light' : 'UCCB Dark', background: null, layout: look.layout });
             }
           }}
         >

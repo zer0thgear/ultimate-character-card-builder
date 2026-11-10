@@ -8,6 +8,8 @@
 
 export type LookBase = 'dark' | 'light';
 export type BackgroundFit = 'cover' | 'contain' | 'stretch' | 'center';
+/** How Chat mode is laid out: UCCB's own way, or as SillyTavern (components/chatmode/StLayout.tsx). */
+export type ChatLayout = 'uccb' | 'st';
 
 /** SillyTavern's numbers for them. */
 export const AVATAR_STYLES = { round: 0, rectangular: 1, square: 2, rounded: 3 } as const;
@@ -42,10 +44,12 @@ export interface Look {
   custom_css: string;
   /** The picture behind everything (not part of a theme, as in SillyTavern). */
   background: { version: number; fit: BackgroundFit } | null;
+  /** Chat mode's layout (not part of a theme either). */
+  layout: ChatLayout;
 }
 
 /** A saved look: SillyTavern's theme file, with the chat's display settings it carries. */
-export interface Theme extends Omit<Look, 'background'> {
+export interface Theme extends Omit<Look, 'background' | 'layout'> {
   /** The palette it sits on; worked out from its colours when it has them. */
   base?: LookBase;
   avatar_style?: number;
@@ -58,7 +62,7 @@ export interface Theme extends Omit<Look, 'background'> {
   builtIn?: boolean;
 }
 
-const BLANK: Omit<Look, 'name' | 'background'> = {
+const BLANK: Omit<Look, 'name' | 'background' | 'layout'> = {
   main_text_color: '',
   italics_text_color: '',
   underline_text_color: '',
@@ -77,7 +81,7 @@ const BLANK: Omit<Look, 'name' | 'background'> = {
   custom_css: '',
 };
 
-export const DEFAULT_LOOK: Look = { name: 'UCCB Dark', ...BLANK, background: null };
+export const DEFAULT_LOOK: Look = { name: 'UCCB Dark', ...BLANK, background: null, layout: 'uccb' };
 
 /** UCCB's own looks, and one in SillyTavern's default colours. */
 export const BUILT_IN_THEMES: Theme[] = [
@@ -345,8 +349,8 @@ export function parseTheme(raw: unknown, fallbackName = 'Imported theme'): Theme
 const LOOK_KEYS = ['name', ...COLOR_FIELDS.map(([k]) => k), 'blur_strength', 'shadow_width', 'font_scale', 'font_family', 'custom_css'] as const;
 
 /** A theme's (or a look's) own look: without its background, or the chat display it carries. */
-export function lookOf(from: Theme | Look): Omit<Look, 'background'> {
-  return Object.fromEntries(LOOK_KEYS.map((k) => [k, from[k]])) as Omit<Look, 'background'>;
+export function lookOf(from: Theme | Look): Omit<Look, 'background' | 'layout'> {
+  return Object.fromEntries(LOOK_KEYS.map((k) => [k, from[k]])) as Omit<Look, 'background' | 'layout'>;
 }
 
 /** A saved look, made sound (settings read back, or anything else). */
@@ -355,7 +359,7 @@ export function cleanLook(raw: unknown): Look {
   const theme: Theme = parseTheme({ font_scale: 1, ...o }, DEFAULT_LOOK.name) ?? { ...DEFAULT_LOOK };
   const b = o.background as { version?: unknown; fit?: unknown } | null | undefined;
   const fit = (['cover', 'contain', 'stretch', 'center'] as const).find((f) => f === b?.fit) ?? 'cover';
-  return { ...lookOf(theme), background: b && typeof b.version === 'number' ? { version: b.version, fit } : null };
+  return { ...lookOf(theme), background: b && typeof b.version === 'number' ? { version: b.version, fit } : null, layout: o.layout === 'st' ? 'st' : 'uccb' };
 }
 
 /** The look as a theme file (SillyTavern reads it; UCCB's own fields ride along). */
