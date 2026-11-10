@@ -96,8 +96,8 @@ export function StTopBar({ phone }: { phone: boolean }) {
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">{project && !phone && <ChatCardActions phone />}</div>
       </div>
-      {/* A phone's bar has room for the icons only: what's open gets a row of its own. */}
-      {phone && (project || group) && (
+      {/* A phone's bar has room for the icons only: what's open gets a row of its own (UCCB's bar, when it's showing, has the same). */}
+      {phone && !uccbBar && (project || group) && (
         <div className="ui-panel flex h-10 items-center gap-1.5 border-b border-slate-800 bg-slate-950 px-2">
           {project ? (
             <>

@@ -278,12 +278,13 @@ export function lookCss(look: Look, base: LookBase, backgroundUrl?: string): str
   }
 
   // What floats over the rest (dialogs, menus, tips: they carry a shadow)
-  // stays readable over a see-through UI: nearly solid, and blurred behind.
+  // stays readable over a see-through UI: solid. (Blur can't do it: inside
+  // a blurred panel, a menu's own blur doesn't reach what's outside it.)
   if (bg && bg.a < 1) {
     const f = fg ?? BASE_FG[base];
-    const floating = formatColor(mix({ ...bg, a: 1 }, f, 0.05, Math.max(bg.a, 0.94)));
+    const floating = formatColor(mix({ ...bg, a: 1 }, f, 0.05, 1));
     out.push(
-      `${SELECTOR} :is([role="dialog"], .shadow-lg, .shadow-xl, .shadow-2xl):is([class*="bg-slate-9"], [class*="bg-slate-8"]) { background-color: ${floating}; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }`,
+      `${SELECTOR} :is([role="dialog"], .shadow-lg, .shadow-xl, .shadow-2xl):is([class*="bg-slate-9"], [class*="bg-slate-8"]) { background-color: ${floating}; }`,
     );
   }
 

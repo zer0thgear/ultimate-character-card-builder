@@ -87,6 +87,8 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   /** The full-window column: a share of the window, centred. */
   // (Laid out as SillyTavern, Chat mode's whole chat is the column: components/chatmode/StLayout.tsx.)
   const stColumn = useLookStore((s) => s.look.layout === 'st') && wide;
+  // Its bars become the ☰ menu beside the message box (once a chat's open, which is where that is).
+  const stMenu = stColumn && !!chat;
   const column = full && !stColumn ? { className: 'mx-auto w-full', style: { maxWidth: `${Math.round(chatFullWidth * 100)}%` } } : {};
   const connection = connections.find((c) => c.id === chatConnectionId) ?? null;
   const pending = useBridgeStore((s) => s.chatGreeting);
@@ -146,6 +148,9 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
   const [describing, setDescribing] = useState<{ spec: DrawSpec; replacing?: ChatImage } | null>(null);
   const [treeFor, setTreeFor] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  // Laid out as SillyTavern: the chat's own bars are a ☰ menu beside the
+  // message box, as its options menu is.
+  const [optionsOpen, setOptionsOpen] = useState(false);
   // 📜 The chat's summary.
   const summarizer = useChatSummary();
   // While the summary's being written, the chat waits for it: many
@@ -657,6 +662,51 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
 
   // Beside the message box, level with its top (where it stays as the box
   // grows), as SillyTavern's is: an icon, to leave the box the width.
+  // The ☰ options menu (the SillyTavern layout): what it lists, and what each does.
+  const optionItems: { id: string; label: string; hint: string; off?: boolean }[] = chat
+    ? [
+        { id: 'regenerate', label: '↻ Regenerate', hint: 'Another version of the last reply', off: busy },
+        { id: 'continue', label: '→ Continue', hint: 'Continue the last reply', off: busy },
+        { id: 'impersonate', label: '🎭 Impersonate', hint: 'Write your next message for you (it lands in the box to edit)', off: busy },
+        { id: 'guide', label: `🧭 Guide${guide.trim() ? (guidePinned ? ' · on 📌' : ' · on') : ''}`, hint: 'Steer the next reply, swipe, continue or impersonation with an instruction the model sees just before it writes' },
+        { id: 'note', label: `📝 Author's note${chat.authorsNote?.prompt.trim() ? ' · on' : ''}`, hint: 'An instruction kept with this chat and sent every reply (or every few)' },
+        ...(!phone && connections.length > 0 ? [{ id: 'compare', label: '⚖ Compare', hint: 'A reply written by two connections or presets at once, side by side', off: busy }] : []),
+        { id: 'summary', label: '📜 Summary', hint: "The chat's summary, sent with every prompt" },
+        { id: 'settings', label: '🔧 Chat settings', hint: 'Connection, persona, preset, lorebooks, what the chat shows' },
+        { id: 'search', label: '🔎 Search this chat', hint: 'Ctrl+F' },
+        { id: 'next', label: '🔍 The next prompt', hint: 'What the next reply would send' },
+        ...(lastPrompt ? [{ id: 'last', label: `🔍 The last prompt · ${lastPrompt.lore.active.length} lore`, hint: 'What the last reply sent' }] : []),
+        { id: 'rename', label: '✎ Rename this chat', hint: '' },
+        { id: 'jsonl', label: '⬇ SillyTavern / Chub (.jsonl)', hint: 'Import it in SillyTavern (Manage chat files → Import) or Chub' },
+        { id: 'txt', label: '⬇ Plain text (.txt)', hint: 'For reading or sharing' },
+        { id: 'import', label: '⬆ Import a chat…', hint: 'A chat saved by SillyTavern or exported from Chub (.jsonl), as a new chat here' },
+        ...(host.projectId && !g ? [{ id: 'group', label: '👥 Make a group chat from this…', hint: 'A new group with this character and others you pick, starting with a copy of this chat' }] : []),
+        { id: 'delete', label: '🗑 Delete this chat', hint: '' },
+      ]
+    : [];
+  const runOption = async (id: string) => {
+    setOptionsOpen(false);
+    if (!chat) return;
+    await useChatStore.getState().flush();
+    if (id === 'regenerate') void regenerate();
+    else if (id === 'continue') void continueLast();
+    else if (id === 'impersonate') void impersonate();
+    else if (id === 'guide') setGuideOpen(!guideOpen);
+    else if (id === 'note') setNoteOpen(true);
+    else if (id === 'compare') setComparing(true);
+    else if (id === 'summary') setShowSummary(!showSummary);
+    else if (id === 'settings') setShowSettings(!showSettings);
+    else if (id === 'search') setSearch('');
+    else if (id === 'next') preview();
+    else if (id === 'last') setInspect(lastPrompt);
+    else if (id === 'rename') void renameChat();
+    else if (id === 'jsonl') downloadBlob(chatToStJsonl(chat, card, me.name, speakerName), `${chatFileName(chat, card)}.jsonl`, 'application/jsonl');
+    else if (id === 'txt') downloadBlob(chatToText(chat, card, me.name, speakerName), `${chatFileName(chat, card)}.txt`, 'text/plain');
+    else if (id === 'import') void importChatFile();
+    else if (id === 'group' && host.projectId) openNewGroup({ projectId: host.projectId, chat, name: card.nickname || card.name || 'Character' });
+    else if (id === 'delete') void deleteThisChat();
+  };
+
   const sendButton = running ? (
     <Button variant="danger" onClick={stop} title="Stop" aria-label="Stop" className="h-10 w-10 flex-shrink-0">
       <span className="text-base leading-none">■</span>
@@ -730,7 +780,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
     >
       {/* On a phone: one row (the chats, ⋯ for the rest, ⚙ for who and how),
           gone while you type. */}
-      {!(phone && keyboard) && (
+      {!(phone && keyboard) && !stMenu && (
         <div className="ui-panel flex flex-shrink-0 flex-wrap items-center gap-1.5 border-b border-slate-800 bg-slate-950 p-2 phone:flex-nowrap">
           <select value={chat?.id ?? ''} onChange={(e) => e.target.value && void openChat(e.target.value)} className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs', !phone && 'min-w-36')}>
             {!chat && <option value="">No chat open</option>}
@@ -840,7 +890,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
 
       {showSettings && !panelsHidden && <ChatSettings phone={phone} onClose={() => setShowSettings(false)} />}
       {showSummary && chat && !panelsHidden && <ChatSummaryPanel summarizer={summarizer} request={summaryRequest} onClose={() => setShowSummary(false)} />}
-      {!showSettings && !phone && <ConnectionPicker value={chatConnectionId} onChange={setChatConnection} label="Connection" className="ui-panel flex-shrink-0 bg-slate-950 border-b border-slate-800 px-2 py-1.5" />}
+      {!showSettings && !phone && !stMenu && <ConnectionPicker value={chatConnectionId} onChange={setChatConnection} label="Connection" className="ui-panel flex-shrink-0 bg-slate-950 border-b border-slate-800 px-2 py-1.5" />}
 
       {search !== null && chat && (
         <div className="ui-panel flex flex-shrink-0 items-center gap-1.5 border-b border-slate-800 bg-slate-950 px-2 py-1.5">
@@ -1038,6 +1088,56 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
           <ScriptApprovals pending={scripts.pending} presetName={scriptPreset?.name} cardName={card.name || 'This character'} />
           <ScriptButtons buttons={scripts.buttons} onClick={scripts.clickButton} />
           <div className="flex items-start gap-1.5">
+            {stMenu && (
+              <div className="relative flex-shrink-0">
+                <Button id="options_button" variant={optionsOpen ? 'primary' : 'secondary'} onClick={() => setOptionsOpen(!optionsOpen)} title="Chat options: this card's chats, regenerate, continue, the summary, export…" aria-label="Chat options" aria-expanded={optionsOpen} className="h-10 w-10">
+                  <span className="text-lg leading-none">☰</span>
+                </Button>
+                {optionsOpen && (
+                  <>
+                    <div className="fixed inset-0 z-20" onClick={() => setOptionsOpen(false)} />
+                    <div id="options" className="absolute bottom-full left-0 z-30 mb-1 flex max-h-[min(70dvh,34rem)] w-[min(20rem,calc(100vw-1rem))] flex-col gap-0.5 overflow-y-auto rounded-md border border-slate-700 bg-slate-900 p-1 shadow-xl">
+                      <div className="flex items-center gap-1 p-1">
+                        <select value={chat.id} onChange={(e) => e.target.value && (setOptionsOpen(false), void openChat(e.target.value))} className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs')} aria-label="This card's chats">
+                          {list.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name} ({c.messageCount})
+                            </option>
+                          ))}
+                        </select>
+                        <Button size="sm" variant="primary" onClick={() => (setOptionsOpen(false), startChat())}>
+                          + New
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 px-1 pb-1">
+                        <PersonaPicker onManage={() => (setOptionsOpen(false), openSettings('personas'))} />
+                        <ChatPresetSelect />
+                        {wide && host.projectId && (
+                          <DrawButton
+                            phone
+                            disabled={!!pictures.pending && !pictures.pending.error}
+                            onMoment={() => (setOptionsOpen(false), void pictures.drawMoment(card, chatGreeting(card, chat), chat.messages, me.name))}
+                            onDescribe={() => (setOptionsOpen(false), setDescribing({ spec: { scene: '', characters: pictures.formCharacters() } }))}
+                          />
+                        )}
+                      </div>
+                      {optionItems.map((o) => (
+                        <button
+                          key={o.id}
+                          type="button"
+                          title={o.hint}
+                          disabled={o.off}
+                          className="block w-full rounded px-3 py-1.5 text-left text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+                          onClick={() => void runOption(o.id)}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
             <AutoTextarea
               data-chat-input
               id="send_textarea"
@@ -1057,8 +1157,8 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
             {sendButton}
           </div>
           {/* One row on a phone too: the actions as icons (hold one for its
-              name). */}
-          <div className={cx('mt-1.5 flex items-center gap-1.5', phone ? 'flex-nowrap' : 'flex-wrap')}>
+              name). Laid out as SillyTavern, they're in ☰ instead. */}
+          <div className={cx('mt-1.5 flex items-center gap-1.5', phone ? 'flex-nowrap' : 'flex-wrap', stMenu && 'hidden')}>
             <Button size="sm" disabled={busy} onClick={() => void regenerate()} title={phone ? 'Regenerate: another version of the last reply' : 'Another version of the last reply'}>
               {phone ? <span className="px-1 text-base leading-none">↻</span> : '↻ Regenerate'}
             </Button>

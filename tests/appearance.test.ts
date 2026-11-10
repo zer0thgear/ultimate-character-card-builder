@@ -38,8 +38,8 @@ describe('appearance', () => {
     expect(css).toContain('.mes[is_user="true"] .mes_block { background-color: var(--SmartThemeUserMesBlurTintColor); }');
     expect(css).toContain('#chat { background-color: var(--SmartThemeChatTintColor); }');
     expect(css).toContain('backdrop-filter: blur(var(--SmartThemeBlurStrength))');
-    // Dialogs stay nearly solid over a see-through UI.
-    expect(css).toMatch(/\[role="dialog"\][^{]*\{ background-color: rgba\(\d+, \d+, \d+, 0\.94\)/);
+    // Dialogs and menus are solid over a see-through UI.
+    expect(css).toMatch(/\[role="dialog"\][^{]*\{ background-color: rgba\(\d+, \d+, \d+, 1\)/);
   });
 
   it('puts the accent, the font, the background and your CSS in', () => {
