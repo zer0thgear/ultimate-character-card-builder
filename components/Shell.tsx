@@ -16,7 +16,7 @@ import { Dock } from '@/components/dock/Dock';
 import { Lightbox } from '@/components/Lightbox';
 import { TouchTips } from '@/components/TouchTips';
 import { LookApplier, useOwnColours } from '@/components/Appearance';
-import { Drawers, StTopBar, useStChat, useStLayout } from '@/components/chatmode/StLayout';
+import { Drawers, StTopBar, drawerSide, useStChat, useStLayout } from '@/components/chatmode/StLayout';
 import { useAdventureStore } from '@/store/adventureStore';
 import { useGroupUi } from '@/components/chatmode/groupUi';
 import { AssistInspectorHost } from '@/components/llm/AssistTrace';
@@ -72,6 +72,10 @@ export function Shell() {
   const uccbBar = useStLayout((s) => s.uccbBar);
   // (A drawer being typed in keeps its bar, which holds it.)
   const barsHidden = useStLayout((s) => !s.drawer) && phone && keyboard;
+  // A panel down a side (the chat preset, the cards) has the room beside the
+  // chat rather than lying over it, where the window's wide enough for both.
+  const side = useStLayout((s) => drawerSide(s.drawer));
+  const makeWay = chatMode && !phone && side ? (side === 'left' ? 'lg:pl-[26rem]' : 'lg:pr-[26rem]') : '';
   const chatWidth = useUiStore((s) => s.chatFullWidth);
   const chatView = useAdventureStore((s) => s.view);
   const cardDrawer = useUiStore((s) => s.chatCardOpen);
@@ -170,7 +174,7 @@ export function Shell() {
           {!stChat && <Drawers phone={phone} />}
         </div>
       )}
-      <div className="flex min-h-0 flex-1">
+      <div className={cx('flex min-h-0 flex-1', makeWay)}>
         {stChat ? (
           <div className="flex min-w-0 flex-1 justify-center">
             <div className={cx('flex min-w-0', stColumn && 'border-x border-slate-800', !project && !group && 'ui-panel bg-slate-950')} style={{ width: stColumn ? `${Math.round(chatWidth * 100)}%` : '100%' }}>
