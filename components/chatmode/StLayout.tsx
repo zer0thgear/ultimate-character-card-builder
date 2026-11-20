@@ -42,6 +42,12 @@ const ICONS: { id: DrawerId | 'lore'; icon: string; title: string; side?: 'left'
   { id: 'chars', icon: '👥', title: 'Character management: your cards and groups', side: 'right' },
 ];
 
+/** The side a drawer opens at, for one that's a panel down a side of the window. */
+export const drawerSide = (d: DrawerId | null) => ICONS.find((i) => i.id === d)?.side;
+
+/** The room a side panel takes (lg: and up, the chat makes way for it, components/Shell.tsx). */
+export const SIDE_PANEL = 'w-[min(100vw,26rem)]';
+
 export function StTopBar({ phone }: { phone: boolean }) {
   const { drawer, open, uccbBar, setUccbBar } = useStLayout();
   const project = useProjectStore((s) => s.project);
@@ -116,7 +122,7 @@ export function Drawers({ phone }: { phone: boolean }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [drawer]);
   if (!drawer) return null;
-  const side = ICONS.find((i) => i.id === drawer)?.side;
+  const side = drawerSide(drawer);
   return (
     <>
       {/* A click anywhere else closes it. */}
@@ -126,7 +132,7 @@ export function Drawers({ phone }: { phone: boolean }) {
           // Under the icons (over the phone's second row).
           'drawer-content ui-panel absolute top-11 flex flex-col overflow-y-auto border border-t-0 border-slate-700 bg-slate-950 shadow-2xl',
           side
-            ? cx('h-[calc(100dvh-2.75rem)] w-[min(100vw,26rem)]', side === 'left' ? 'left-0' : 'right-0')
+            ? cx('h-[calc(100dvh-2.75rem)]', SIDE_PANEL, side === 'left' ? 'left-0' : 'right-0')
             : 'left-1/2 max-h-[min(85dvh,calc(100dvh-3.5rem))] w-[min(100vw,52rem)] -translate-x-1/2 rounded-b-lg',
         )}
       >

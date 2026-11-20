@@ -112,13 +112,14 @@ export function ChatPresetTab() {
   const edit = (tab: EditorTab, id = preset?.id) => id && setEditing({ id, tab });
 
   return (
-    <div className="flex flex-col gap-4">
+    // Two columns when it has the room (Settings), one in a narrow drawer (components/chatmode/StLayout.tsx).
+    <div className="@container flex flex-col gap-4">
       <p className="text-xs text-slate-500">
         The SillyTavern chat-completion preset the test chat builds its prompt from. It applies to every chat on every card, and stays picked until you change it. The same picker is in the chat&apos;s toolbar and its 🔧 panel.
       </p>
       <PresetPicker onEdit={(tab, id) => edit(tab, id)} />
       {preset ? (
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+        <div className="grid gap-3 @xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
           <OverviewBox title="Prompts, in order" action={<Button size="sm" variant="ghost" onClick={() => edit('prompts')}>Edit…</Button>}>
             <PromptOrderGlance preset={preset} onToggle={(i, enabled) => updatePreset(preset.id, { order: preset.order.map((o, j) => (j === i ? { ...o, enabled } : o)) })} onOpen={() => edit('prompts')} />
           </OverviewBox>
