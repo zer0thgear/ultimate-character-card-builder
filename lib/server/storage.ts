@@ -652,10 +652,15 @@ export async function listPersonas(): Promise<Persona[]> {
   return (await readJson<Persona[]>(path.join(PERSONAS, 'personas.json'))) ?? [];
 }
 
+const personaLinks = (links: unknown) => {
+  const clean = Array.isArray(links) ? [...new Set(links.filter((l): l is string => typeof l === 'string' && /^(card|group):[\w-]{1,64}$/.test(l)))] : [];
+  return clean.length ? { links: clean } : {};
+};
+
 export async function savePersonas(list: Persona[]): Promise<Persona[]> {
   const clean = list
     .filter((p) => ID_RE.test(p.id))
-    .map((p) => ({ id: p.id, name: String(p.name ?? ''), description: String(p.description ?? ''), avatar: p.avatar, ...(typeof p.lorebookId === 'string' && p.lorebookId ? { lorebookId: p.lorebookId } : {}) }));
+    .map((p) => ({ id: p.id, name: String(p.name ?? ''), description: String(p.description ?? ''), avatar: p.avatar, ...(typeof p.lorebookId === 'string' && p.lorebookId ? { lorebookId: p.lorebookId } : {}), ...personaLinks(p.links) }));
   await writeFileAtomic(path.join(PERSONAS, 'personas.json'), JSON.stringify(clean, null, 2));
   return clean;
 }

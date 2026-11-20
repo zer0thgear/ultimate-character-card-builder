@@ -22,6 +22,9 @@ interface PersonaState {
   remove: (id: string) => Promise<void>;
   setAvatar: (id: string, image: Blob) => Promise<void>;
   clearAvatar: (id: string) => Promise<void>;
+  /** Links a persona to a card or group (`card:<id>`, `group:<id>`), the
+   *  one persona linked to it; null unlinks whichever is. */
+  link: (owner: string, id: string | null) => void;
 }
 
 export const usePersonaStore = create<PersonaState>((set, get) => {
@@ -46,7 +49,9 @@ export const usePersonaStore = create<PersonaState>((set, get) => {
     remove: async (id) => {
       if (get().personas.find((p) => p.id === id)?.avatar) await api.clearPersonaAvatar(id).catch(() => {});
       set((s) => ({ personas: s.personas.filter((p) => p.id !== id) }));
-      if (useLlmStore.getState().chatSettings.personaId === id) useLlmStore.getState().setChatSettings({ personaId: null });
+      const settings = useLlmStore.getState().chatSettings;
+      if (settings.personaId === id) useLlmStore.getState().setChatSettings({ personaId: null });
+      if (settings.defaultPersonaId === id) useLlmStore.getState().setChatSettings({ defaultPersonaId: null });
       if (timer) clearTimeout(timer);
       await api.savePersonas(get().personas);
     },
@@ -56,6 +61,16 @@ export const usePersonaStore = create<PersonaState>((set, get) => {
       await api.savePersonas(get().personas);
       const avatar = await api.setPersonaAvatar(id, image);
       set((s) => ({ personas: s.personas.map((p) => (p.id === id ? { ...p, avatar } : p)) }));
+    },
+    link: (owner, id) => {
+      set((s) => ({
+        personas: s.personas.map((p) => {
+          const links = (p.links ?? []).filter((l) => l !== owner);
+          if (p.id === id) links.push(owner);
+          return links.length === (p.links?.length ?? 0) && links.every((l, i) => l === p.links?.[i]) ? p : { ...p, links: links.length ? links : undefined };
+        }),
+      }));
+      save();
     },
     clearAvatar: async (id) => {
       await api.clearPersonaAvatar(id);
@@ -81,6 +96,12 @@ export function resolvePersona(personas: Persona[], settings: { personaId: strin
   const p = lockedTo ?? (settings.personaId ? personas.find((x) => x.id === settings.personaId) : undefined);
   if (!p) return { persona: null, name: settings.userName || 'User', description: settings.persona, avatarUrl: null, locked: false };
   return { persona: p, name: p.name || 'User', description: p.description, avatarUrl: api.personaAvatarUrl(p), locked: !!lockedTo };
+}
+
+/** The persona a card's or group's chats switch to: the one linked to it,
+ *  else the default one (null: keep whichever is active). */
+export function personaFor(personas: Persona[], owner: string, defaultId?: string | null): Persona | null {
+  return personas.find((p) => p.links?.includes(owner)) ?? (defaultId ? (personas.find((p) => p.id === defaultId) ?? null) : null);
 }
 
 /** Personas in the chosen order. They're kept in the order they were
