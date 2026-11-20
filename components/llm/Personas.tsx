@@ -6,7 +6,9 @@ import { sortPersonas, usePersonaStore } from '@/store/personaStore';
 import { toast, useUiStore, type PersonaSort } from '@/store/uiStore';
 import { useLlmStore } from '@/store/llmStore';
 import { useChatStore } from '@/store/chatStore';
-import { api } from '@/lib/api';
+import { useProjectStore } from '@/store/projectStore';
+import { useGroupStore } from '@/store/groupStore';
+import { api, ownerKey } from '@/lib/api';
 import type { Persona } from '@/types/project';
 import type { AvatarShape } from '@/lib/chatPrompt';
 import { AutoTextarea, Button, IconButton, TokenBadge, confirmDialog, cx, inputClass, pickFiles } from '@/components/ui';
@@ -107,7 +109,8 @@ export function PersonaAvatar({ persona, size = 36, shape = 'circle' }: { person
 }
 
 export function PersonaManager() {
-  const { personas, loaded, load, update, remove, setAvatar, clearAvatar } = usePersonaStore();
+  const { personas, loaded, load, update, remove, setAvatar, clearAvatar, link } = usePersonaStore();
+  const linkName = useLinkName();
   const { chatSettings, setChatSettings } = useLlmStore();
   const { personaSort, setPersonaSort } = useUiStore();
   const [filter, setFilter] = useState('');
@@ -133,7 +136,9 @@ export function PersonaManager() {
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-slate-500">
-        Who you are in test chats: the name {'{{user}}'} becomes, a description sent as your persona, and a picture for your messages. The active one is used by every chat unless a chat has its own pinned (📌 in the chat toolbar), and by the writing assistant.
+        Who you are in test chats: the name {'{{user}}'} becomes, a description sent as your persona, and a picture for your messages. The active one is used by every chat unless a chat has its own pinned (📌 beside the persona picker), and by the writing assistant. As in SillyTavern, it switches by itself as chats open: to the persona linked to that character (🔗 beside the picker), else to the ⭐ default, if you&apos;ve set one.</p>
+      <p className="-mt-1 text-xs text-slate-500">
+        Which applies: 📌 pinned to the chat, then 🔗 linked to the character or group, then ⭐ the default, then whichever was active.
       </p>
       <div className="flex flex-wrap gap-2">
         <Button
@@ -167,6 +172,7 @@ export function PersonaManager() {
       {q && shown.length === 0 && <p className="text-xs text-slate-500">No persona matches “{filter}”.</p>}
       {shown.map((p) => {
         const active = chatSettings.personaId === p.id;
+        const isDefault = chatSettings.defaultPersonaId === p.id;
         return (
           <div key={p.id} className={cx('flex gap-3 rounded-md border p-3', active ? 'border-violet-500/50 bg-violet-500/5' : 'border-slate-800')}>
             <div className="flex flex-col items-center gap-1">
@@ -200,6 +206,14 @@ export function PersonaManager() {
                   {active ? '✓ Active' : 'Use'}
                 </Button>
                 <IconButton
+                  title={isDefault ? 'The default persona: chats switch to it as they open, unless one is linked to their character or pinned to them. Click to stop.' : 'Make this the default persona: chats switch to it as they open, unless one is linked to their character or pinned to them'}
+                  tone={isDefault ? 'accent' : 'default'}
+                  className={isDefault ? undefined : 'opacity-50'}
+                  onClick={() => setChatSettings({ defaultPersonaId: isDefault ? null : p.id })}
+                >
+                  ⭐
+                </IconButton>
+                <IconButton
                   title="Delete persona"
                   tone="danger"
                   onClick={async () => {
@@ -217,6 +231,19 @@ export function PersonaManager() {
                 Lorebook
                 <LorebookSelect value={p.lorebookId} onChange={(id) => update(p.id, { lorebookId: id })} className="w-56" />
               </label>
+              {!!p.links?.length && (
+                <div className="flex flex-wrap items-center gap-1 text-xs text-slate-400" title="Opening these characters' (or groups') chats switches to this persona. Link one with 🔗 beside the chat's persona picker.">
+                  🔗 Linked to
+                  {p.links.map((l) => (
+                    <span key={l} className="flex items-center gap-0.5 rounded bg-slate-800 py-0.5 pr-0.5 pl-1.5 text-slate-200">
+                      {linkName(l)}
+                      <button type="button" className="px-1 text-slate-500 hover:text-red-400" title="Unlink" aria-label={`Unlink ${linkName(l)}`} onClick={() => link(l, null)}>
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         );
@@ -244,12 +271,25 @@ function PersonaSortSelect({ value, onChange, className }: { value: PersonaSort;
   );
 }
 
-/** The chat toolbar's persona picker, with the per-chat lock. */
+/** A link's name: the card's or group's, as the lists have it. */
+function useLinkName() {
+  const cards = useProjectStore((s) => s.summaries);
+  const groups = useGroupStore((s) => s.summaries);
+  return (link: string) => {
+    const [kind, id] = link.split(':');
+    const name = kind === 'group' ? groups.find((g) => g.id === id)?.name : cards.find((c) => c.id === id)?.name;
+    return name || (kind === 'group' ? 'A group' : 'A card') + (name === undefined ? ' (gone)' : '');
+  };
+}
+
+/** The chat toolbar's persona picker, with the per-chat lock and the link to the character. */
 export function PersonaPicker({ onManage }: { onManage: () => void }) {
   const { personas, loaded, load } = usePersonaStore();
   const { chatSettings, setChatSettings } = useLlmStore();
   const chat = useChatStore((s) => s.chat);
   const setPersonaLock = useChatStore((s) => s.setPersonaLock);
+  const owner = useChatStore((s) => (s.owner ? ownerKey(s.owner) : null));
+  const link = usePersonaStore((s) => s.link);
   const personaSort = useUiStore((s) => s.personaSort);
   useEffect(() => {
     if (!loaded) void load();
@@ -262,6 +302,8 @@ export function PersonaPicker({ onManage }: { onManage: () => void }) {
     else setChatSettings({ personaId: id || null });
   };
   const persona = personas.find((p) => p.id === current) ?? null;
+  const linked = owner ? personas.find((p) => p.links?.includes(owner)) : undefined;
+  const who = owner?.startsWith('group:') ? 'this group' : 'this character';
 
   return (
     <div className="flex items-center gap-1">
@@ -282,6 +324,8 @@ export function PersonaPicker({ onManage }: { onManage: () => void }) {
         {sortPersonas(personas, personaSort).map((p) => (
           <option key={p.id} value={p.id}>
             {p.name || 'Unnamed'}
+            {p.id === chatSettings.defaultPersonaId ? ' ⭐' : ''}
+            {p.id === linked?.id ? ' 🔗' : ''}
           </option>
         ))}
         <option value="__new">+ New persona…</option>
@@ -296,6 +340,23 @@ export function PersonaPicker({ onManage }: { onManage: () => void }) {
           className={locked ? undefined : 'opacity-60'}
         >
           📌
+        </IconButton>
+      )}
+      {owner && (
+        <IconButton
+          title={
+            linked && linked.id === current
+              ? `Linked to ${who}: its chats switch to this persona as they open. Click to unlink.`
+              : linked
+                ? `${linked.name || 'Unnamed'} is linked to ${who}. Click to link this persona instead.`
+                : `Link this persona to ${who}: its chats switch to it as they open (as SillyTavern's persona connections)`
+          }
+          tone={linked && linked.id === current ? 'accent' : 'default'}
+          disabled={!current}
+          onClick={() => link(owner, linked && linked.id === current ? null : current)}
+          className={linked && linked.id === current ? undefined : 'opacity-60'}
+        >
+          🔗
         </IconButton>
       )}
     </div>

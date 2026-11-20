@@ -48,6 +48,10 @@ export interface ChatPromptSettings {
   /** The active persona (see store/personaStore.ts); null uses userName
    *  and persona above. */
   personaId: string | null;
+  /** The persona chats switch to when they open, unless one is linked to
+   *  their card or pinned to them (store/personaSwitch.ts); null keeps
+   *  whichever is active, as SillyTavern does without a default. */
+  defaultPersonaId?: string | null;
   /** A SillyTavern preset to build the prompt from instead, or null. */
   presetId: string | null;
   /** Use the preset's samplers (temperature and so on) over the connection's. */

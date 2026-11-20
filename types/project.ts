@@ -361,6 +361,10 @@ export interface Persona {
   /** A lorebook from the Lorebooks bank that comes along with this persona
    *  in chats (SillyTavern's persona lorebook: one per persona). */
   lorebookId?: string;
+  /** The cards and groups it's linked to (`card:<id>`, `group:<id>`, as
+   *  lib/api.ts's ownerKey): opening their chats makes it the active
+   *  persona, as SillyTavern's persona connections do (store/personaSwitch.ts). */
+  links?: string[];
 }
 
 /** A lorebook in the Lorebooks bank (data/lorebooks/<id>.json), as

@@ -5,7 +5,7 @@ import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Persona } from '@/types/project';
 import { useLlmStore } from '@/store/llmStore';
-import { usePersonaStore } from '@/store/personaStore';
+import { personaFor, usePersonaStore } from '@/store/personaStore';
 import { routeFetch, routeLog } from './helpers/routes';
 
 // Personas, saving through the real routes onto a temp data folder.
@@ -73,5 +73,37 @@ describe('persona store', { timeout: 30_000 }, () => {
     expect(onDisk()).toEqual([]);
     expect(existsSync(path.join(dir, 'personas', `${p.id}.png`))).toBe(false);
     expect(useLlmStore.getState().chatSettings.personaId).toBeNull();
+  });
+
+  it('links a persona to a character, one per character, and saves the links', async () => {
+    const a = store().add({ name: 'Ann' });
+    const b = store().add({ name: 'Bo' });
+    store().link('card:c1', a.id);
+    store().link('group:g1', a.id);
+    // Linking another to the same character takes it from the first.
+    store().link('card:c1', b.id);
+    await vi.advanceTimersByTimeAsync(600);
+    await vi.waitFor(() => expect(onDisk().map((p) => p.links)).toEqual([['group:g1'], ['card:c1']]));
+    store().link('card:c1', null);
+    await vi.advanceTimersByTimeAsync(600);
+    await vi.waitFor(() => expect(onDisk()[1]).not.toHaveProperty('links'));
+  });
+
+  it('picks the linked persona, else the default', () => {
+    const list: Persona[] = [
+      { id: 'a', name: 'Ann', description: '', links: ['card:c1'] },
+      { id: 'b', name: 'Bo', description: '' },
+    ];
+    expect(personaFor(list, 'card:c1', 'b')?.id).toBe('a');
+    expect(personaFor(list, 'card:c2', 'b')?.id).toBe('b');
+    expect(personaFor(list, 'card:c2', null)).toBeNull();
+    expect(personaFor(list, 'card:c2', 'gone')).toBeNull();
+  });
+
+  it('stops being the default when deleted', async () => {
+    const p = store().add({ name: 'Cy' });
+    useLlmStore.getState().setChatSettings({ defaultPersonaId: p.id });
+    await store().remove(p.id);
+    expect(useLlmStore.getState().chatSettings.defaultPersonaId).toBeNull();
   });
 });

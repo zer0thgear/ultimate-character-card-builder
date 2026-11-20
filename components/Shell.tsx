@@ -46,6 +46,7 @@ import { TrashDialog, duplicateCard, openTrash } from '@/components/TrashDialog'
 import { LorebooksDialog, openLorebooks } from '@/components/LorebookBank';
 import { ensureLorebooks } from '@/store/lorebookStore';
 import { installLorebookSync } from '@/store/lorebookSync';
+import { installPersonaSwitch } from '@/store/personaSwitch';
 import { LoreWizardHost } from '@/components/loreWizard/LoreWizard';
 import { VersionsDialog, openVersions } from '@/components/VersionsDialog';
 import { TitleStatus } from '@/components/TitleStatus';
@@ -93,6 +94,8 @@ export function Shell() {
     // Cards' lorebooks synced with their copies in 📖 Lorebooks.
     ensureLorebooks();
     installLorebookSync();
+    // The persona linked to a card, or the default one, as its chats open.
+    installPersonaSwitch();
     const store = useProjectStore.getState();
     void store.refreshList().then(() => {
       // The card this mode had open last time (a Chat-mode card only in Chat).
