@@ -52,6 +52,11 @@ export interface ChatPromptSettings {
    *  their card or pinned to them (store/personaSwitch.ts); null keeps
    *  whichever is active, as SillyTavern does without a default. */
   defaultPersonaId?: string | null;
+  /** Pin the persona to a chat by itself, as SillyTavern's "Auto-lock a
+   *  chosen persona to the chat": picking one in a chat pins it there, and
+   *  a chat written in pins the persona it was written as
+   *  (store/personaSwitch.ts). */
+  autoLockPersona?: boolean;
   /** A SillyTavern preset to build the prompt from instead, or null. */
   presetId: string | null;
   /** Use the preset's samplers (temperature and so on) over the connection's. */

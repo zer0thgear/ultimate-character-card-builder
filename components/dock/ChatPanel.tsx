@@ -50,6 +50,7 @@ import { HtmlPage, HtmlText, PageBridgeContext, runSlash, type PageBridge } from
 import { useGroupMemory, useMemoryStatus } from '@/components/dock/groupMemory';
 import { useLookStore } from '@/store/lookStore';
 import { useStLayout } from '@/components/chatmode/drawerStore';
+import { autoLockChat } from '@/store/personaSwitch';
 import { directorMessages, memberName, memoryTexts, namedHistory, readDirector, trimGroupReply } from '@/lib/groupChat';
 import { GroupTurnBar } from '@/components/dock/GroupTurnBar';
 import { bankName } from '@/lib/lorebookBank';
@@ -374,6 +375,8 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
 
   /** Streams a completion for `built`, calling `onText` with the reply so far. */
   const complete = async (built: BuiltPrompt, onText: (full: string) => void) => {
+    // Written in: with auto-lock on, the chat keeps this persona from now on.
+    autoLockChat();
     setLastPrompt(built);
     const prompt = built.prefill !== undefined ? [...built.messages, { role: 'assistant' as const, content: built.prefill }] : built.messages;
     // Tavern Helper scripts put their prompts in and go over it last (only
@@ -523,6 +526,7 @@ export function ChatPanel({ wide = false, host: given }: { wide?: boolean; host?
     const text = (typed ?? input).trim();
     const messages = text ? [...chat.messages, newMessage('user', text)] : chat.messages;
     if (text) {
+      autoLockChat();
       setMessages(() => messages);
       setInput('');
       sentToScripts(messages.at(-1)!.id);
