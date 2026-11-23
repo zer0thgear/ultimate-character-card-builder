@@ -144,7 +144,7 @@ export function PersonaManager() {
         checked={!!chatSettings.autoLockPersona}
         onChange={(autoLockPersona) => setChatSettings({ autoLockPersona })}
         label="Pin the persona to each chat by itself"
-        title="As SillyTavern's auto-lock: picking a persona in a chat pins it to that chat (📌), and a chat pins the persona it was written as the first time you write in it, so it keeps that one whatever the active persona becomes"
+        title="As SillyTavern's auto-lock: picking a persona in a chat pins it to that chat (📌), a new chat starts pinned to the persona you're on, and an older chat pins the persona it was written as the first time you write in it, so it keeps that one whatever the active persona becomes"
       />
       <div className="flex flex-wrap gap-2">
         <Button

@@ -104,6 +104,15 @@ export function personaFor(personas: Persona[], owner: string, defaultId?: strin
   return personas.find((p) => p.links?.includes(owner)) ?? (defaultId ? (personas.find((p) => p.id === defaultId) ?? null) : null);
 }
 
+/** With auto-lock on (Settings → Personas), a new chat (started, branched
+ *  or imported) with no persona of its own starts pinned to the active one. */
+export function withAutoLock<T extends Pick<ChatSession, 'personaId'>>(chat: T): T {
+  if (chat.personaId) return chat;
+  const { autoLockPersona, personaId } = useLlmStore.getState().chatSettings;
+  if (!autoLockPersona || !personaId || !usePersonaStore.getState().personas.some((p) => p.id === personaId)) return chat;
+  return { ...chat, personaId };
+}
+
 /** Personas in the chosen order. They're kept in the order they were
  *  added, which is what "newest" and "oldest" go by. */
 export function sortPersonas(list: Persona[], sort: 'name' | 'name-desc' | 'newest' | 'oldest'): Persona[] {
