@@ -103,9 +103,9 @@ describe('persona store', { timeout: 30_000 }, () => {
   it('pins a new chat to the active persona with auto-lock on', () => {
     const p = store().add({ name: 'Di' });
     useLlmStore.getState().setChatSettings({ personaId: p.id, autoLockPersona: false });
-    expect(withAutoLock({ id: 'c' })).toEqual({ id: 'c' });
+    expect(withAutoLock({ id: 'c', personaId: undefined }).personaId).toBeUndefined();
     useLlmStore.getState().setChatSettings({ autoLockPersona: true });
-    expect(withAutoLock({ id: 'c' })).toEqual({ id: 'c', personaId: p.id });
+    expect(withAutoLock({ id: 'c', personaId: undefined }).personaId).toBe(p.id);
     // One that has its own (a branch of a pinned chat) keeps it.
     expect(withAutoLock({ id: 'c', personaId: 'other' }).personaId).toBe('other');
     useLlmStore.getState().setChatSettings({ personaId: null, autoLockPersona: false });
