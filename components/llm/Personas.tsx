@@ -11,7 +11,7 @@ import { useGroupStore } from '@/store/groupStore';
 import { api, ownerKey } from '@/lib/api';
 import type { Persona } from '@/types/project';
 import type { AvatarShape } from '@/lib/chatPrompt';
-import { AutoTextarea, Button, IconButton, TokenBadge, confirmDialog, cx, inputClass, pickFiles } from '@/components/ui';
+import { AutoTextarea, Button, IconButton, Toggle, TokenBadge, confirmDialog, cx, inputClass, pickFiles } from '@/components/ui';
 import { parseStPersonas, samePersona, PersonaImportError } from '@/lib/stPersonas';
 import { LorebookSelect } from '@/components/LorebookBank';
 
@@ -140,6 +140,12 @@ export function PersonaManager() {
       <p className="-mt-1 text-xs text-slate-500">
         Which applies: 📌 pinned to the chat, then 🔗 linked to the character or group, then ⭐ the default, then whichever was active.
       </p>
+      <Toggle
+        checked={!!chatSettings.autoLockPersona}
+        onChange={(autoLockPersona) => setChatSettings({ autoLockPersona })}
+        label="Pin the persona to each chat by itself"
+        title="As SillyTavern's auto-lock: picking a persona in a chat pins it to that chat (📌), a new chat starts pinned to the persona you're on, and an older chat pins the persona it was written as the first time you write in it, so it keeps that one whatever the active persona becomes"
+      />
       <div className="flex flex-wrap gap-2">
         <Button
           variant="primary"
@@ -300,6 +306,11 @@ export function PersonaPicker({ onManage }: { onManage: () => void }) {
   const choose = (id: string) => {
     if (locked) setPersonaLock(id || undefined);
     else setChatSettings({ personaId: id || null });
+    // Auto-lock: chosen in a chat, it's this chat's (and the active one).
+    if (chatSettings.autoLockPersona && chat) {
+      if (locked) setChatSettings({ personaId: id || null });
+      else if (id) setPersonaLock(id);
+    }
   };
   const persona = personas.find((p) => p.id === current) ?? null;
   const linked = owner ? personas.find((p) => p.links?.includes(owner)) : undefined;

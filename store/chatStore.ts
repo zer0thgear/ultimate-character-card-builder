@@ -5,6 +5,7 @@ import type { AuthorsNote, CharacterMemory, ChatImage, ChatMessage, ChatSession,
 import { chatApi, ownerKey, type ChatOwner } from '@/lib/api';
 import { uuid } from '@/lib/uuid';
 import { useProjectStore } from '@/store/projectStore';
+import { withAutoLock } from '@/store/personaStore';
 import { sumTallies, tallyChat } from '@/lib/chatStats';
 import { countTextNow, textCounterLoaded } from '@/lib/textTokens';
 
@@ -159,7 +160,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       await get().flush();
       const now = Date.now();
       const chat: ChatSession = { id: uuid(), name: `Chat ${new Date(now).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}`, greeting, messages, createdAt: now, updatedAt: now };
-      const saved = await s.save(chat);
+      const saved = await s.save(withAutoLock(chat));
       set((st) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: saved.messages.length, ...tallyChat(saved.messages, countMemo) }, ...st.list] }));
     },
 
@@ -261,14 +262,14 @@ export const useChatStore = create<ChatState>((set, get) => {
           /* a picture that can't be copied is left out */
         }
       }
-      const saved = await s.save({ ...branch, images });
+      const saved = await s.save(withAutoLock({ ...branch, images }));
       set((st) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: saved.messages.length, ...tallyChat(saved.messages, countMemo) }, ...st.list] }));
     },
     importChat: async (chat) => {
       const s = store();
       if (!s) return;
       await get().flush();
-      const saved = await s.save(chat);
+      const saved = await s.save(withAutoLock(chat));
       set((st) => ({ chat: saved, list: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, updatedAt: saved.updatedAt, messageCount: saved.messages.length, ...tallyChat(saved.messages, countMemo) }, ...st.list] }));
     },
     removeImage: (id) =>

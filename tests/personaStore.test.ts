@@ -5,7 +5,7 @@ import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Persona } from '@/types/project';
 import { useLlmStore } from '@/store/llmStore';
-import { personaFor, usePersonaStore } from '@/store/personaStore';
+import { personaFor, usePersonaStore, withAutoLock } from '@/store/personaStore';
 import { routeFetch, routeLog } from './helpers/routes';
 
 // Personas, saving through the real routes onto a temp data folder.
@@ -98,6 +98,17 @@ describe('persona store', { timeout: 30_000 }, () => {
     expect(personaFor(list, 'card:c2', 'b')?.id).toBe('b');
     expect(personaFor(list, 'card:c2', null)).toBeNull();
     expect(personaFor(list, 'card:c2', 'gone')).toBeNull();
+  });
+
+  it('pins a new chat to the active persona with auto-lock on', () => {
+    const p = store().add({ name: 'Di' });
+    useLlmStore.getState().setChatSettings({ personaId: p.id, autoLockPersona: false });
+    expect(withAutoLock({ id: 'c', personaId: undefined }).personaId).toBeUndefined();
+    useLlmStore.getState().setChatSettings({ autoLockPersona: true });
+    expect(withAutoLock({ id: 'c', personaId: undefined }).personaId).toBe(p.id);
+    // One that has its own (a branch of a pinned chat) keeps it.
+    expect(withAutoLock({ id: 'c', personaId: 'other' }).personaId).toBe('other');
+    useLlmStore.getState().setChatSettings({ personaId: null, autoLockPersona: false });
   });
 
   it('stops being the default when deleted', async () => {
